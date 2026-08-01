@@ -1,0 +1,14 @@
+# binaries
+bin/
+
+# captured profiles (committed intentionally go in testdata/ with explicit git add)
+testdata/*.pprof
+*.pgo
+
+# editor
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
