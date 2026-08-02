@@ -2,6 +2,9 @@ name: Profile Collect
 # Spins up Prometheus in kind, drives load, captures a 30s CPU pprof,
 # validates it with pgoctl, and uploads as a workflow artifact.
 # Run manually (workflow_dispatch) to produce testdata/prometheus_cpu.pprof.
+#
+# NOTE: workflow_dispatch only fires from the DEFAULT branch, so this
+# workflow goes live for dispatch only after it is merged to main.
 
 on:
   workflow_dispatch:
@@ -32,7 +35,13 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
 
-      - name: Deploy Prometheus with pprof enabled
+      # Prometheus exposes /debug/pprof BY DEFAULT (web.enable-pprof=true),
+      # so no additionalArgs are needed. We also disable grafana and
+      # alertmanager: the profile is captured from the prometheus server
+      # itself, and trimming the stack reduces OOM risk on the 2-core/7GB
+      # Actions runner (the previous run died because prometheus was killed
+      # by resource pressure right after `helm --wait` returned).
+      - name: Deploy Prometheus (pprof on by default)
         run: |
           helm repo add prometheus-community \
             https://prometheus-community.github.io/helm-charts
@@ -41,16 +50,45 @@ jobs:
           helm upgrade --install prometheus \
             prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
-            --set 'prometheus.prometheusSpec.additionalArgs[0].name=web.enable-pprof' \
-            --set 'prometheus.prometheusSpec.additionalArgs[0].value=' \
+            --set grafana.enabled=false \
+            --set alertmanager.enabled=false \
             --wait --timeout 5m
+
+      # Real readiness gate before port-forward: `helm --wait` only proves
+      # the deployment was Ready at install time, not that the prometheus
+      # container is still serving when we connect. Wait for the operator-
+      # managed statefulset pod (selector matches the chart's pod labels).
+      - name: Wait for Prometheus pod Ready
+        run: |
+          kubectl wait \
+            --for=condition=Ready \
+            pod \
+            -n monitoring \
+            -l app.kubernetes.io/name=prometheus \
+            --timeout=300s
+
+      - name: Dump diagnostics (only if readiness wait failed)
+        if: failure()
+        run: |
+          echo "::group::All monitoring pods"
+          kubectl get pods -n monitoring -o wide || true
+          echo "::endgroup::"
+          echo "::group::Prometheus pod describe"
+          kubectl describe pod -n monitoring \
+            -l app.kubernetes.io/name=prometheus || true
+          echo "::endgroup::"
+          echo "::group::Prometheus pod logs"
+          kubectl logs -n monitoring \
+            -l app.kubernetes.io/name=prometheus --tail=200 || true
+          echo "::endgroup::"
 
       - name: Port-forward Prometheus
         run: |
           kubectl port-forward -n monitoring \
             svc/prometheus-kube-prometheus-prometheus 9090:9090 &
-          # wait for port-forward to be ready
-          timeout 30 bash -c 'until curl -sf http://localhost:9090/-/ready; do sleep 1; done'
+          # wait for port-forward to be ready (retry transient conn refused)
+          timeout 60 bash -c \
+            'until curl -sf --retry 5 --retry-connrefused http://localhost:9090/-/ready; do sleep 2; done'
 
       - name: Drive load (60s)
         run: |
