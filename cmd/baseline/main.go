@@ -1,5 +1,10 @@
 // baseline captures a CPU pprof profile from any net/http/pprof endpoint.
 // Used in D1 to record a pre-PGO baseline from Prometheus running in kind.
+//
+// The capture is considered successful only if the resulting profile parses
+// AND passes the sample-count gate (--min-samples). A truncated download
+// (server died mid-capture, connection reset, short read) produces a thin
+// profile, which here is a hard failure — never silently saved.
 package main
 
 import (
@@ -11,13 +16,16 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/Better-Go-Labs/pgoctl/internal/validate"
 )
 
 func main() {
 	var (
-		url     = flag.String("url", "http://localhost:9090/debug/pprof/profile", "pprof CPU profile endpoint")
-		seconds = flag.Int("seconds", 30, "CPU profiling duration in seconds")
-		out     = flag.String("out", "", "output file (default: testdata/cpu_<timestamp>.pprof)")
+		url        = flag.String("url", "http://localhost:9090/debug/pprof/profile", "pprof CPU profile endpoint")
+		seconds    = flag.Int("seconds", 30, "CPU profiling duration in seconds")
+		out        = flag.String("out", "", "output file (default: testdata/cpu_<timestamp>.pprof)")
+		minSamples = flag.Int("min-samples", 1000, "minimum sample count; capture fails loudly below this")
 	)
 	flag.Parse()
 
@@ -43,7 +51,9 @@ func main() {
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatalf("read body: %v", err)
+		// Includes connection reset / unexpected EOF: the server died
+		// mid-capture. Do not save a partial profile.
+		log.Fatalf("read body (capture truncated?): %v", err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(*out), 0o755); err != nil {
@@ -53,6 +63,19 @@ func main() {
 		log.Fatalf("write: %v", err)
 	}
 
-	log.Printf("saved %d bytes → %s", len(data), *out)
+	// Gate the result before declaring success: parse + sample-count check.
+	// Uses the same validation pipeline as `pgoctl validate`.
+	report, err := validate.ValidateFile(*out, validate.Options{MinSamples: int64(*minSamples)})
+	if err != nil {
+		os.Remove(*out) // never leave a broken artifact behind
+		log.Fatalf("validate captured profile: %v", err)
+	}
+	if len(report.Errors) > 0 {
+		os.Remove(*out)
+		log.Fatalf("captured profile rejected (%d bytes): %v", len(data), report.Errors)
+	}
+
+	log.Printf("saved %d bytes → %s (%d samples, %d unique stacks, score %.3f)",
+		len(data), *out, report.Samples, report.UniqueStacks, report.QualityScore)
 	log.Printf("next: pgoctl validate %s", *out)
 }
