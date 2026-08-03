@@ -69,13 +69,13 @@ jobs:
             --namespace monitoring \
             --set grafana.enabled=false \
             --set alertmanager.enabled=false \
-            --set 'server.extraArgs.web.enable-remote-write-receiver=' \
+            --set 'prometheus.prometheusSpec.additionalArgs[0].name=web.enable-remote-write-receiver' \
+            --set 'prometheus.prometheusSpec.additionalArgs[0].value=' \
             --wait --timeout 5m
 
       # DIAGNOSTIC 1: Verify the remote-write flag actually reached the pod.
-      # Hypothesis: --set prometheus.prometheusSpec.enableRemoteWriteReceiver=true
-      # is silently ignored by the operator CRD mapper, so --web.enable-remote-write-receiver
-      # is never passed to the prometheus binary.
+      # Hypothesis: server.extraArgs doesn\'t work with kube-prometheus-stack (uses Prometheus Operator CRD).
+      # Fix: Use prometheus.prometheusSpec.additionalArgs instead.
       - name: Verify remote-write flag reached the pod
         run: |
           echo "::group::Helm rendered values (remote-write relevant)"
