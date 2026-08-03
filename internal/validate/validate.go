@@ -60,7 +60,7 @@ func ParsePackageShareGates(values []string) ([]PackageShareGate, error) {
 //	github.com/prometheus/prometheus/tsdb/wlog.(*Watcher).run -> .../tsdb/wlog
 //	github.com/prometheus/prometheus/promql.(*Engine).exec  -> .../promql
 //	runtime.main                                          -> runtime
-func PackageFromFunction(name string) string {
+func packageFromFunction(name string) string {
 	slash := strings.LastIndex(name, "/")
 	start := slash + 1
 	rest := name[start:]
@@ -99,7 +99,7 @@ func cpuSampleIndex(p *profile.Profile) (int, bool) {
 // ComputePackageShares returns each package's flat CPU share (percent of
 // total CPU sample value), attributed to the leaf (innermost) function of
 // each sample. Returns an error when the profile has no CPU sample type.
-func ComputePackageShares(p *profile.Profile) (map[string]float64, error) {
+func computePackageShares(p *profile.Profile) (map[string]float64, error) {
 	idx, ok := cpuSampleIndex(p)
 	if !ok {
 		return nil, fmt.Errorf("%w", errors.ErrNoCPUSampleType)
@@ -132,7 +132,7 @@ func ComputePackageShares(p *profile.Profile) (map[string]float64, error) {
 		return shares, nil
 	}
 	for fn, val := range funcTotal {
-		pkg := PackageFromFunction(fn)
+		pkg := packageFromFunction(fn)
 		shares[pkg] += 100.0 * float64(val) / float64(total)
 	}
 	// Round to 2 decimals for stable output.
@@ -144,7 +144,7 @@ func ComputePackageShares(p *profile.Profile) (map[string]float64, error) {
 
 // gatePackageShare returns the combined share for a package prefix across
 // all packages under it (prefix match on the package path).
-func GatePackageShare(shares map[string]float64, prefix string) float64 {
+func gatePackageShare(shares map[string]float64, prefix string) float64 {
 	var combined float64
 	for pkg, share := range shares {
 		if pkg == prefix || strings.HasPrefix(pkg, prefix+"/") {
@@ -281,13 +281,13 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 
 	// Package-share gates (coverage of specific hot paths, e.g. tsdb).
 	if len(opts.PackageShareGates) > 0 {
-		shares, err := ComputePackageShares(p)
+		shares, err := computePackageShares(p)
 		if err != nil {
 			report.Errors = append(report.Errors, err.Error())
 		} else {
 			report.PackageShares = make(map[string]float64)
 			for _, gate := range opts.PackageShareGates {
-				combined := GatePackageShare(shares, gate.Prefix)
+				combined := gatePackageShare(shares, gate.Prefix)
 				report.PackageShares[gate.Prefix] = combined
 				if combined < gate.MinPercent {
 					report.Errors = append(report.Errors, fmt.Sprintf(
