@@ -1,3 +1,4 @@
+# Trigger-refresh v2
 name: Profile Collect
 # Spins up Prometheus in kind, drives a REAL load mix DURING the pprof
 # capture window, captures a 60s CPU pprof, validates it with pgoctl
@@ -19,6 +20,9 @@ name: Profile Collect
 # workflow goes live for dispatch only after it is merged to main.
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       duration:
@@ -65,8 +69,22 @@ jobs:
             --namespace monitoring \
             --set grafana.enabled=false \
             --set alertmanager.enabled=false \
-            --set prometheus.prometheusSpec.config.remoteWriteReceiver.enabled=true \
+            --set 'server.extraArgs.web.enable-remote-write-receiver=' \
             --wait --timeout 5m
+
+      # DIAGNOSTIC 1: Verify the remote-write flag actually reached the pod.
+      # Hypothesis: --set prometheus.prometheusSpec.enableRemoteWriteReceiver=true
+      # is silently ignored by the operator CRD mapper, so --web.enable-remote-write-receiver
+      # is never passed to the prometheus binary.
+      - name: Verify remote-write flag reached the pod
+        run: |
+          echo "::group::Helm rendered values (remote-write relevant)"
+          helm get values prometheus -n monitoring | grep -A 5 -i "remote" || echo "no remote-write values found"
+          echo "::endgroup::"
+          echo "::group::Pod args (look for web.enable-remote-write-receiver)"
+          kubectl exec -n monitoring -l app.kubernetes.io/name=prometheus -- \
+            sh -c "ps aux | grep prometheus | grep -v grep" || true
+          echo "::endgroup::"
 
       # Real readiness gate before port-forward: `helm --wait` only proves
       # the deployment was Ready at install time, not that the prometheus
@@ -102,6 +120,19 @@ jobs:
           # wait for port-forward to be ready (retry transient conn refused)
           timeout 60 bash -c \
             'until curl -sf --retry 5 --retry-connrefused http://localhost:9090/-/ready; do sleep 2; done'
+
+      # DIAGNOSTIC 2: Verify the remote-write endpoint accepts data.
+      # Hypothesis: /api/v1/write returns 404 or 503 because the operator
+      # didn't wire up the remote-write receiver, so loadgen data never hits Prometheus.
+      - name: Verify remote-write endpoint
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9090/api/v1/write)
+          echo "Remote-write endpoint HTTP status: $HTTP_CODE (expect 200 or 400-with-body, NOT 404/503)"
+          BODY=$(curl -s http://localhost:9090/api/v1/write)
+          echo "Response body: $BODY"
+          if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "503" ]; then
+            echo "::error::Remote-write endpoint is NOT available ($HTTP_CODE) — loadgen data will be silently dropped"
+          fi
 
       # Load must overlap the capture window: a profile of an idle server is
       # a meaningless PGO baseline. Three background loaders run 75s while
@@ -140,6 +171,34 @@ jobs:
             'http://localhost:9090/api/v1/query?query=up' \
             > /tmp/hey-q.log 2>&1 &
           echo "hey instant started (pid $!)"
+
+      # DIAGNOSTIC 3: After load, check evidence of actual data ingestion.
+      # Hypothesis: Prometheus received data but didn't ingested it (remote-write rejected).
+      # Hypothesis: hey queries returned empty result lists.
+      - name: Check loadgen and query results
+        run: |
+          echo "::group::Loadgen exit code + last 20 lines of log"
+          wait || true
+          echo "loadgen exit code: $?"
+          tail -20 /tmp/loadgen.log || echo "no loadgen log"
+          echo "::endgroup::"
+          echo "::group::Hey query response summary (first 30 lines each)"
+          for f in /tmp/hey-qr1.log /tmp/hey-qr2.log /tmp/hey-q.log; do
+            echo "--- $f ---"
+            if [ -f "$f" ]; then
+              head -30 "$f"
+            fi
+          done
+          echo "::endgroup::"
+          echo "::group::Prometheus head samples ingested"
+          curl -s http://localhost:9090/metrics | grep prometheus_tsdb_head_samples_appended_total || echo "metric not found"
+          echo "::endgroup::"
+          echo "::group::Prometheus active series count"
+          curl -s http://localhost:9090/api/v1/query?query=count%28up%29 | python3 -m json.tool 2>/dev/null || echo "query failed"
+          echo "::endgroup::"
+          echo "::group::Prometheus scrape targets summary"
+          curl -s http://localhost:9090/api/v1/targets | python3 -c 'import json,sys;d=json.load(sys.stdin);t=d.get("data",{}).get("activeTargets",[]);p=d.get("data",{}).get("scrapePools",[]);print("Targets: %d, Scrape pools: %d" % (len(t),len(p)))' 2>/dev/null || echo "targets query failed"
+          echo "::endgroup::"
 
       # Capture with retry: baseline itself fails loudly on truncated reads,
       # failed validation, or sample count < 1000 (never saves a thin profile).
@@ -180,6 +239,13 @@ jobs:
             --json testdata/prometheus_cpu.pprof \
             | python3 -c "import json,sys; print(json.load(sys.stdin)['samples'])" 2>/dev/null || echo 0)
           echo "captured profile samples: ${SAMPLES}"
+
+      # DIAGNOSTIC 4: Detailed coverage breakdown for debugging 0% coverage.
+      - name: Show full coverage report
+        run: |
+          echo "::group::Full pgoctl validate output (no --json for readable breakdown)"
+          go run ./cmd/pgoctl validate testdata/prometheus_cpu.pprof || true
+          echo "::endgroup::"
 
       - name: Validate profile with pgoctl
         run: |
