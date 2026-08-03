@@ -18,9 +18,10 @@ permissions:
 jobs:
   bench:
     runs-on: ubuntu-latest
-    # Hard tripwire: the optimized run should land ~15-20 min. If it approaches
-    # 60, something regressed — flag it, don't silently extend.
-    timeout-minutes: 60
+    # Hard tripwire: the optimized run at 5 rounds lands ~13 min; at 20 rounds
+    # ~50-60 min. If it approaches 120, something regressed — flag it, don't
+    # silently extend.
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
@@ -86,7 +87,7 @@ jobs:
         working-directory: _prometheus
         run: go mod download
 
-      - name: Run 5 interleaved benchmark rounds (baseline vs PGO)
+      - name: Run 20 interleaved benchmark rounds (baseline vs PGO)
         if: steps.profile.outputs.found == 'true'
         working-directory: _prometheus
         env:
@@ -105,9 +106,9 @@ jobs:
           echo "Profile: $PGO_PROFILE"
           echo "Benchmarks: $BENCH_REGEX"
           echo ""
-          echo "Running 5 interleaved rounds: baseline THEN pgo on the same runner..."
-          for i in $(seq 1 5); do
-            echo "=== round $i/5 ==="
+          echo "Running 20 interleaved rounds: baseline THEN pgo on the same runner..."
+          for i in $(seq 1 20); do
+            echo "=== round $i/20 ==="
             # baseline arm — no profile (stderr visible; || true keeps job alive)
             go test -bench="$BENCH_REGEX" -benchtime=500ms -benchmem \
               -run=^$ -count=1 \
@@ -137,7 +138,7 @@ jobs:
           |---|---|
           | Target | 8 curated `prometheus/prometheus ./tsdb/...` benchmarks (hot paths) |
           | Profile | `testdata/prometheus_cpu.pprof` |
-          | Rounds | 5 interleaved pairs, same runner |
+          | Rounds | 20 interleaved pairs, same runner |
           | Toolchain | pinned `GOTOOLCHAIN=local` |
           | Method | `go test -bench=<curated regex> -pgo=<profile>` vs no-pgo baseline |
 
@@ -158,6 +159,8 @@ jobs:
           REPORT2
           echo "$COMPARE_OUT" >> /tmp/bench-report.md
           printf '```\n' >> /tmp/bench-report.md
+
+          echo "> Sign convention: benchstat 'vs base': negative = faster = good. pgoctl compare summary: positive = improvement. (Opposite signs, both correct.)" >> /tmp/bench-report.md
 
           cat /tmp/bench-report.md >> $GITHUB_STEP_SUMMARY
 
