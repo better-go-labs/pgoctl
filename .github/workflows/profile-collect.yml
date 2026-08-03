@@ -65,7 +65,7 @@ jobs:
             --namespace monitoring \
             --set grafana.enabled=false \
             --set alertmanager.enabled=false \
-            --set prometheus.prometheusSpec.enableRemoteWriteReceiver=true \
+            --set prometheus.prometheusSpec.config.remoteWriteReceiver.enabled=true \
             --wait --timeout 5m
 
       # Real readiness gate before port-forward: `helm --wait` only proves
