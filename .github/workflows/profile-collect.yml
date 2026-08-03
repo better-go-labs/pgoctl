@@ -1,8 +1,19 @@
 name: Profile Collect
-# Spins up Prometheus in kind, drives load DURING the pprof capture window,
-# captures a 60s CPU pprof, validates it with pgoctl, and uploads as a
-# workflow artifact. Run manually (workflow_dispatch) to produce
-# testdata/prometheus_cpu.pprof.
+# Spins up Prometheus in kind, drives a REAL load mix DURING the pprof
+# capture window, captures a 60s CPU pprof, validates it with pgoctl
+# (including package-share coverage gates for the bench hot paths), and
+# uploads as a workflow artifact. Run manually (workflow_dispatch) to
+# produce testdata/prometheus_cpu.pprof.
+#
+# Load mix (all backgrounded, all overlapping the full capture window):
+#   - hack/loadgen: continuous remote-write of high-cardinality, churning
+#     series -> hammers head append + WAL (tsdb hot paths).
+#   - hey query_range loops: rate/count aggregations over those series ->
+#     chunk iteration, postings (label matchers), promql eval.
+#
+# Coverage gate: validate requires combined flat CPU share of the tsdb
+# family >= 5% and promql >= 1.5% (--min-package-share). A capture that
+# doesn't cover the bench routes fails loudly and leaves no artifact.
 #
 # NOTE: workflow_dispatch only fires from the DEFAULT branch, so this
 # workflow goes live for dispatch only after it is merged to main.
@@ -54,6 +65,7 @@ jobs:
             --namespace monitoring \
             --set grafana.enabled=false \
             --set alertmanager.enabled=false \
+            --set prometheus.prometheusSpec.enableRemoteWriteReceiver=true \
             --wait --timeout 5m
 
       # Real readiness gate before port-forward: `helm --wait` only proves
@@ -92,15 +104,42 @@ jobs:
             'until curl -sf --retry 5 --retry-connrefused http://localhost:9090/-/ready; do sleep 2; done'
 
       # Load must overlap the capture window: a profile of an idle server is
-      # a meaningless PGO baseline. hey runs 75s in the background while the
-      # 60s capture happens, so the server is hammered for the whole window.
-      - name: Drive load during capture
+      # a meaningless PGO baseline. Three background loaders run 75s while
+      # the 60s capture happens:
+      #   1. hack/loadgen — remote-write of ~4000 churning series (10%/s
+      #      identity churn) -> head appends + WAL.
+      #   2. hey query_range (rate by job, count) over those series ->
+      #      chunk iteration + postings + promql eval.
+      #   3. hey instant query (baseline liveness signal).
+      # The loadgen binary is compiled foreground FIRST so load actually
+      # starts before the capture begins (go run would compile in the
+      # background and miss the window).
+      - name: Drive load during capture (remote-write + queries)
         run: |
           go install github.com/rakyll/hey@latest
-          nohup hey -z 75s -c 20 \
+          go build -o /tmp/loadgen ./hack/loadgen
+          nohup /tmp/loadgen \
+            --url http://localhost:9090/api/v1/write \
+            --duration 75 \
+            --series 4000 \
+            --batch 500 \
+            --churn 0.1 \
+            > /tmp/loadgen.log 2>&1 &
+          echo "loadgen started in background (pid $!)"
+          START=$(date -d '75 seconds ago' +%s)
+          END=$(date +%s)
+          nohup hey -z 75s -c 10 \
+            "http://localhost:9090/api/v1/query_range?query=sum%28rate%28loadgen_metric_a%5B1m%5D%29%29%20by%20%28job%29&start=${START}&end=${END}&step=15s" \
+            > /tmp/hey-qr1.log 2>&1 &
+          echo "hey query_range (rate by job) started (pid $!)"
+          nohup hey -z 75s -c 10 \
+            "http://localhost:9090/api/v1/query_range?query=count%28loadgen_metric_a%29&start=${START}&end=${END}&step=15s" \
+            > /tmp/hey-qr2.log 2>&1 &
+          echo "hey query_range (count) started (pid $!)"
+          nohup hey -z 75s -c 5 \
             'http://localhost:9090/api/v1/query?query=up' \
-            > /tmp/hey.log 2>&1 &
-          echo "hey started in background (pid $!)"
+            > /tmp/hey-q.log 2>&1 &
+          echo "hey instant started (pid $!)"
 
       # Capture with retry: baseline itself fails loudly on truncated reads,
       # failed validation, or sample count < 1000 (never saves a thin profile).
@@ -129,13 +168,16 @@ jobs:
 
       - name: Stop load
         run: |
+          pkill -f '/tmp/loadgen' || true
           pkill -f 'hey -z' || true
           wait || true
 
       - name: Report sample count
         run: |
           SAMPLES=$(go run ./cmd/pgoctl validate \
-            --min-samples 1000 --json testdata/prometheus_cpu.pprof \
+            --min-samples 1000 \
+            --min-package-share github.com/prometheus/prometheus/tsdb:5.0 \
+            --json testdata/prometheus_cpu.pprof \
             | python3 -c "import json,sys; print(json.load(sys.stdin)['samples'])" 2>/dev/null || echo 0)
           echo "captured profile samples: ${SAMPLES}"
 
@@ -144,6 +186,8 @@ jobs:
           go run ./cmd/pgoctl validate \
             --min-samples 1000 \
             --min-score 0.3 \
+            --min-package-share github.com/prometheus/prometheus/tsdb:5.0 \
+            --min-package-share github.com/prometheus/prometheus/promql:1.5 \
             --json \
             testdata/prometheus_cpu.pprof
 
