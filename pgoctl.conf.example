@@ -1,0 +1,39 @@
+# pgoctl configuration file (optional, YAML).
+#
+# Copy to one of these locations to apply it:
+#   ./pgoctl.conf                      (current directory)
+#   ~/.config/pgoctl/pgoctl.conf
+#   /etc/pgoctl/pgoctl.conf
+# (pgoctl.yaml is accepted as an alternative name in the same locations.)
+#
+# Precedence (highest first):
+#   1. explicit CLI flag      e.g. pgoctl validate --min-score 0.9 cpu.pprof
+#   2. environment variable   PGOCTL_MIN_SCORE=0.9
+#   3. this config file
+#   4. built-in flag default
+#
+# Every `pgoctl validate` flag can be set here. merge/compare flags will
+# adopt the same mechanism in a later change.
+
+# --- validate command ---
+min-samples: 1000
+min-duration: 10.0
+min-score: 0.3
+target-samples: 50000
+target-duration: 30.0
+min-stack-depth: 2.0
+
+# scoring weights (must sum to 1.0 for the score to be comparable)
+weight-density: 0.40
+weight-richness: 0.30
+weight-coverage: 0.20
+weight-depth: 0.10
+richness-factor: 0.02
+
+# min combined flat CPU % per package prefix (subpackages included).
+# Equivalent to repeating --min-package-share <prefix>:<percent>.
+min-package-share:
+  - github.com/prometheus/prometheus/tsdb:5.0
+  - github.com/prometheus/prometheus/promql:1.5
+
+# json: true   # emit JSON output (same as --json)

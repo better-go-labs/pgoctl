@@ -37,6 +37,35 @@ make collect-baseline
 go build -o bin/pgoctl ./cmd/pgoctl
 ```
 
+## Configuration
+
+All `pgoctl validate` flags can also be set from a config file or environment
+variable instead of the command line — handy for keeping the growing flag set
+(e.g. repeated `--min-package-share` gates) in one place.
+
+| Source | Example |
+|---|---|
+| CLI flag | `pgoctl validate --min-score 0.9 cpu.pprof` |
+| Env var | `PGOCTL_MIN_SCORE=0.9 pgoctl validate cpu.pprof` |
+| Config file | `pgoctl.conf` (YAML) — see [pgoctl.conf.example](pgoctl.conf.example) |
+
+Precedence: **CLI flag > env var > config file > built-in default**.
+
+The config file is discovered as `pgoctl.conf` (or `pgoctl.yaml`) in the
+current directory, then `~/.config/pgoctl/`, then `/etc/pgoctl/`; the first
+match wins and a missing file is not an error. Env vars use the
+`PGOCTL_<FLAG>` prefix with dashes as underscores
+(e.g. `PGOCTL_MIN_PACKAGE_SHARE="tsdb:5,promql:1.5"`).
+
+```yaml
+# pgoctl.conf (example)
+min-samples: 1000
+min-score: 0.3
+min-package-share:
+  - github.com/prometheus/prometheus/tsdb:5.0
+  - github.com/prometheus/prometheus/promql:1.5
+```
+
 ## Requirements
 
 - Go 1.23+
