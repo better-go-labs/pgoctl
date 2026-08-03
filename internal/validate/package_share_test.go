@@ -105,7 +105,7 @@ func TestComputePackageShares(t *testing.T) {
 		"github.com/prometheus/prometheus/tsdb.(*Head).Append":      600,
 		"github.com/prometheus/prometheus/tsdb/wlog.(*Watcher).run": 200,
 		"github.com/prometheus/prometheus/promql.(*Engine).exec":    100,
-		"runtime.main":                                              100,
+		"runtime.main": 100,
 	})
 	shares, err := validate.ComputePackageShares(p)
 	require.NoError(t, err)
@@ -132,12 +132,12 @@ func TestComputePackageShares_NoCPUSampleType(t *testing.T) {
 
 func TestGatePackageShare_SubpackagesIncluded(t *testing.T) {
 	shares := map[string]float64{
-		"github.com/prometheus/prometheus/tsdb":               40.0,
-		"github.com/prometheus/prometheus/tsdb/wlog":         7.0,
-		"github.com/prometheus/prometheus/tsdb/chunkenc":     2.0,
-		"github.com/prometheus/prometheus/promql":            15.0,
-		"github.com/prometheus/prometheus/model/labels":      1.0,
-		"runtime":                                            35.0,
+		"github.com/prometheus/prometheus/tsdb":          40.0,
+		"github.com/prometheus/prometheus/tsdb/wlog":     7.0,
+		"github.com/prometheus/prometheus/tsdb/chunkenc": 2.0,
+		"github.com/prometheus/prometheus/promql":        15.0,
+		"github.com/prometheus/prometheus/model/labels":  1.0,
+		"runtime": 35.0,
 	}
 	assert.Equal(t, 49.0, validate.GatePackageShare(shares, "github.com/prometheus/prometheus/tsdb"))
 	assert.Equal(t, 15.0, validate.GatePackageShare(shares, "github.com/prometheus/prometheus/promql"))
