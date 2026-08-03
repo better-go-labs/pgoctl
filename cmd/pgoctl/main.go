@@ -46,12 +46,18 @@ func newValidateCmd() *cobra.Command {
 	var targetDuration float64
 	var minStackDepth float64
 	var weightDensity, weightRichness, weightCoverage, weightDepth, richnessFactor float64
+	var minPackageShare []string
 
 	cmd := &cobra.Command{
 		Use:   "validate <path>",
 		Short: "Score a CPU pprof for quality before merging",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			gates, err := validate.ParsePackageShareGates(minPackageShare)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %s\n", err)
+				os.Exit(2)
+			}
 			opts := validate.Options{
 				MinSamples:         minSamples,
 				MinDurationSeconds: minDuration,
@@ -64,6 +70,7 @@ func newValidateCmd() *cobra.Command {
 				WeightCoverage:     weightCoverage,
 				WeightDepth:        weightDepth,
 				RichnessFactor:     richnessFactor,
+				PackageShareGates:  gates,
 			}
 			report, err := validate.ValidateFile(args[0], opts)
 			if err != nil {
@@ -94,6 +101,7 @@ func newValidateCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&weightCoverage, "weight-coverage", 0.20, "coverage score weight")
 	cmd.Flags().Float64Var(&weightDepth, "weight-depth", 0.10, "depth score weight")
 	cmd.Flags().Float64Var(&richnessFactor, "richness-factor", 0.02, "richness scaling factor")
+	cmd.Flags().StringArrayVar(&minPackageShare, "min-package-share", nil, "min combined flat CPU %% for a package prefix, e.g. github.com/prometheus/prometheus/tsdb:5 (repeatable or comma-separated; subpackages included)")
 	return cmd
 }
 
@@ -253,6 +261,9 @@ func printQualityReport(report *profiletypes.QualityReport, jsonOutput bool) {
 		fmt.Fprintf(w, "quality_score\t%.3f\n", report.QualityScore)
 		fmt.Fprintf(w, "samples\t%d\n", report.Samples)
 		fmt.Fprintf(w, "unique_stacks\t%d\n", report.UniqueStacks)
+		for prefix, share := range report.PackageShares {
+			fmt.Fprintf(w, "package_share\t%s\t%.2f%%\n", prefix, share)
+		}
 		for _, e := range report.Errors {
 			fmt.Fprintf(w, "error\t%s\n", e)
 		}
