@@ -126,13 +126,38 @@ jobs:
       # didn't wire up the remote-write receiver, so loadgen data never hits Prometheus.
       - name: Verify remote-write endpoint
         run: |
+          echo "========================================"
+          echo "HYPOTHESIS 2: Does /api/v1/write accept data?"
+          echo "========================================"
+          echo ""
+          echo "Step 2a: Check endpoint availability"
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9090/api/v1/write)
-          echo "Remote-write endpoint HTTP status: $HTTP_CODE (expect 200 or 400-with-body, NOT 404/503)"
           BODY=$(curl -s http://localhost:9090/api/v1/write)
+          echo "HTTP status: $HTTP_CODE"
           echo "Response body: $BODY"
-          if [ "$HTTP_CODE" = "404" ] || [ "$HTTP_CODE" = "503" ]; then
-            echo "::error::Remote-write endpoint is NOT available ($HTTP_CODE) — loadgen data will be silently dropped"
+          
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "[CHECK] /api/v1/write returns 404: FAIL"
+            echo "  -> Prometheus is NOT listening for remote-write"
+            echo "  -> Root cause: --web.enable-remote-write-receiver flag missing"
+          elif [ "$HTTP_CODE" = "405" ]; then
+            echo "[CHECK] /api/v1/write returns 405: FAIL (Method Not Allowed)"
+            echo "  -> Prometheus IS running but remote-write receiver is DISABLED"
+            echo "  -> Confirms the flag didn't make it into the binary"
+          elif [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
+            echo "[CHECK] /api/v1/write accepts requests: PASS"
+            echo "  -> Remote-write receiver is active"
+          else
+            echo "[CHECK] Unexpected HTTP status $HTTP_CODE"
           fi
+          
+          echo ""
+          echo "Step 2b: Quick write test + verify sample landed"
+          sleep 1
+          curl -s "http://localhost:9090/api/v1/query?query=count(diagnostic_test)" | python3 -m json.tool 2>/dev/null
+          
+          echo ""
+          echo "========================================
 
       # Load must overlap the capture window: a profile of an idle server is
       # a meaningless PGO baseline. Three background loaders run 75s while
@@ -177,28 +202,64 @@ jobs:
       # Hypothesis: hey queries returned empty result lists.
       - name: Check loadgen and query results
         run: |
-          echo "::group::Loadgen exit code + last 20 lines of log"
+          echo "========================================"
+          echo "HYPOTHESIS 3: Did loadgen data actually land in Prometheus?"
+          echo "========================================"
+          echo ""
+          
+          # Wait for all background processes
           wait || true
-          echo "loadgen exit code: $?"
-          tail -20 /tmp/loadgen.log || echo "no loadgen log"
-          echo "::endgroup::"
-          echo "::group::Hey query response summary (first 30 lines each)"
+          
+          echo "Step 3a: Loadgen result"
+          echo "Loadgen exit code: $?"
+          if [ -f /tmp/loadgen.log ]; then
+            echo "Last 30 lines of loadgen log:"
+            tail -30 /tmp/loadgen.log
+          else
+            echo "ERROR: /tmp/loadgen.log does not exist"
+          fi
+          
+          echo ""
+          echo "Step 3b: Hey query results (what each client actually saw)"
           for f in /tmp/hey-qr1.log /tmp/hey-qr2.log /tmp/hey-q.log; do
-            echo "--- $f ---"
+            LABEL=$(basename "$f" .log)
+            echo "--- $LABEL ($f) ---"
             if [ -f "$f" ]; then
-              head -30 "$f"
+              # Show the HTTP response summary + first 10 lines of response body
+              head -20 "$f"
+            else
+              echo "FILE NOT FOUND"
             fi
+            echo ""
           done
-          echo "::endgroup::"
-          echo "::group::Prometheus head samples ingested"
-          curl -s http://localhost:9090/metrics | grep prometheus_tsdb_head_samples_appended_total || echo "metric not found"
-          echo "::endgroup::"
-          echo "::group::Prometheus active series count"
-          curl -s http://localhost:9090/api/v1/query?query=count%28up%29 | python3 -m json.tool 2>/dev/null || echo "query failed"
-          echo "::endgroup::"
-          echo "::group::Prometheus scrape targets summary"
-          curl -s http://localhost:9090/api/v1/targets | python3 -c 'import json,sys;d=json.load(sys.stdin);t=d.get("data",{}).get("activeTargets",[]);p=d.get("data",{}).get("scrapePools",[]);print("Targets: %d, Scrape pools: %d" % (len(t),len(p)))' 2>/dev/null || echo "targets query failed"
-          echo "::endgroup::"
+          
+          echo "Step 3c: Prometheus metrics - did samples arrive?"
+          METRICS=$(curl -s http://localhost:9090/metrics)
+          echo "$METRICS" | grep "prometheus_tsdb_head_samples_appended_total" || echo "  SAMPLE METRIC NOT FOUND"
+          echo "$METRICS" | grep "prometheus_tsdb_head_series" || echo "  SERIES METRIC NOT FOUND"
+          SAMPLES_APPENDED=$(echo "$METRICS" | grep "prometheus_tsdb_head_samples_appended_total" | grep "float" | awk "{print \$2}" || echo "UNKNOWN")
+          echo "  Total samples appended (float): $SAMPLES_APPENDED"
+          
+          if [ "$SAMPLES_APPENDED" = "UNKNOWN" ]; then
+            echo "[CHECK] No head samples metric: FAIL"
+          elif [ "$SAMPLES_APPENDED" = "0" ]; then
+            echo "[CHECK] 0 samples appended: FAIL - remote-write rejected or not enabled"
+          elif [ "$SAMPLES_APPENDED" -gt 1000 ] 2>/dev/null; then
+            echo "[CHECK] $SAMPLES_APPENDED samples appended: PASS - data landed in Prometheus"
+          fi
+          
+          echo ""
+          echo "Step 3d: Query data validation"
+          INSTANT_RESULT=$(curl -s "http://localhost:9090/api/v1/query?query=count%28up%29")
+          echo "Instant query (count(up)):"
+          echo "$INSTANT_RESULT" | python3 -m json.tool 2>/dev/null || echo "  PARSE FAILED"
+          
+          echo ""
+          echo "Step 3e: Scrape targets summary"
+          curl -s http://localhost:9090/api/v1/targets | python3 -c 'import json,sys;d=json.load(sys.stdin);t=d.get("data",{}).get("activeTargets",[]);p=d.get("data",{}).get("scrapePools",[]);print("Targets: %d, Scrape pools: %d" % (len(t),len(p)))' 2>/dev/null || echo "  TARGETS QUERY FAILED"
+          
+          echo ""
+          echo "========================================
 
       # Capture with retry: baseline itself fails loudly on truncated reads,
       # failed validation, or sample count < 1000 (never saves a thin profile).
