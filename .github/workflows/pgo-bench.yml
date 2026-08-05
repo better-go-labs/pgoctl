@@ -51,13 +51,18 @@ jobs:
       - name: Validate + generate default.pgo
         if: steps.profile.outputs.found == 'true'
         run: |
-          go run ./cmd/pgoctl validate \
+          /tmp/pgoctl validate \
             --min-samples 1000 --min-score 0.3 \
             testdata/prometheus_cpu.pprof
-          go run ./cmd/pgoctl merge \
+          /tmp/pgoctl merge \
             --strategy weighted --out /tmp/default.pgo \
             testdata/prometheus_cpu.pprof
           echo "Generated /tmp/default.pgo"
+
+      - name: Build pgoctl binary
+        if: steps.profile.outputs.found == 'true'
+        run: |
+          go build -o /tmp/pgoctl ./cmd/pgoctl
 
       - name: Checkout Prometheus
         if: steps.profile.outputs.found == 'true'
@@ -92,20 +97,19 @@ jobs:
           GOTOOLCHAIN: local
         shell: bash
         run: |
-          mkdir -p /tmp/bench
-          # Use -o with a directory so go test -c emits a properly-named binary.
-          # Target ./tsdb (single package) — NOT ./tsdb/... which expands to
-          # multiple packages and breaks with -o <single-file>.
+          mkdir -p /tmp/bench/baseline /tmp/bench/pgo
+          # Pre-build test binaries for ALL tsdb sub-packages.
+          # -o must be a directory when compiling multiple packages (./tsdb/... expands).
           # Baseline binary — no PGO, compiled once
-          go test -c -o /tmp/bench/baseline.test ./tsdb && echo "baseline binary ready"
+          go test -c -o /tmp/bench/baseline/ ./tsdb/... && echo "baseline binary ready"
           # PGO binary — compile once with profile, then reuse
-          go test -c -pgo="$PGO_PROFILE" -o /tmp/bench/pgo.test ./tsdb && echo "pgo binary ready"
+          go test -c -pgo="$PGO_PROFILE" -o /tmp/bench/pgo/ ./tsdb/... && echo "pgo binary ready"
 
       - name: Run 10 interleaved benchmark rounds (baseline vs PGO)
         if: steps.profile.outputs.found == 'true'
         working-directory: _prometheus
         env:
-          GOGC: 200
+          GOTOOLCHAIN: local
         run: |
           export GOMAXPROCS=4
           echo "Go version: $(go version)"
@@ -114,14 +118,18 @@ jobs:
           echo "Running 10 interleaved rounds: baseline THEN pgo on the same runner..."
           for i in $(seq 1 10); do
             echo "=== round $i/10 ==="
-            # baseline arm — pre-compiled binary, no PGO
-            /tmp/bench/baseline.test \
-              -test.bench=. -test.benchtime=500ms -test.benchmem \
-              -test.run=^$ -test.v=1 >> /tmp/bench/baseline.txt 2>/dev/null || true
-            # pgo arm — pre-compiled binary with PGO profile baked in
-            /tmp/bench/pgo.test \
-              -test.bench=. -test.benchtime=500ms -test.benchmem \
-              -test.run=^$ -test.v=1 >> /tmp/bench/pgo.txt 2>/dev/null || true
+            # baseline arm — pre-compiled binaries, no PGO
+            for bin in /tmp/bench/baseline/*.test; do
+              "$bin" \
+                -test.bench=. -test.benchtime=500ms -test.benchmem \
+                -test.run=^$ -test.v=1 >> /tmp/bench/baseline.txt 2>/dev/null || true
+            done
+            # pgo arm — pre-compiled binaries with PGO profile baked in
+            for bin in /tmp/bench/pgo/*.test; do
+              "$bin" \
+                -test.bench=. -test.benchtime=500ms -test.benchmem \
+                -test.run=^$ -test.v=1 >> /tmp/bench/pgo.txt 2>/dev/null || true
+            done
           done
           echo "Benchmark rounds complete."
 
@@ -132,7 +140,7 @@ jobs:
           BENCHSTAT_OUT=$(benchstat /tmp/bench/baseline.txt /tmp/bench/pgo.txt 2>&1 \
             || echo "(benchstat: no matching benchmarks or insufficient data)")
 
-          COMPARE_OUT=$(go run ./cmd/pgoctl compare --json \
+          COMPARE_OUT=$(/tmp/pgoctl compare --json \
             testdata/prometheus_cpu.pprof testdata/prometheus_cpu.pprof 2>&1 || true)
 
           cat > /tmp/bench-report.md << 'REPORT'
