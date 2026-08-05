@@ -259,9 +259,13 @@ jobs:
           pkill -f 'hey -z' || true
           wait || true
 
+      - name: Build pgoctl binary
+        run: |
+          go build -o /tmp/pgoctl ./cmd/pgoctl
+
       - name: Report sample count
         run: |
-          SAMPLES=$(go run ./cmd/pgoctl validate \
+          SAMPLES=$(/tmp/pgoctl validate \
             --min-samples 1000 \
             --min-package-share github.com/prometheus/prometheus/tsdb:5.0 \
             --json testdata/prometheus_cpu.pprof \
@@ -272,12 +276,12 @@ jobs:
       - name: Show full coverage report
         run: |
           echo "::group::Full pgoctl validate output (no --json for readable breakdown)"
-          go run ./cmd/pgoctl validate testdata/prometheus_cpu.pprof || true
+          /tmp/pgoctl validate testdata/prometheus_cpu.pprof || true
           echo "::endgroup::"
 
       - name: Validate profile with pgoctl
         run: |
-          go run ./cmd/pgoctl validate \
+          /tmp/pgoctl validate \
             --min-samples 1000 \
             --min-score 0.3 \
             --min-package-share github.com/prometheus/prometheus/tsdb:5.0 \
