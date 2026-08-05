@@ -141,34 +141,37 @@ jobs:
             exit 1
           fi
 
-      # v5: fast smoke-test scale.
-      #
-      # Loadgen: 1k series / batch 100 / churn 0.2 / 60s. Enough to produce
-      # tsdb/WAL CPU signal; completes in ~2 min total including profile capture.
-      # Hey: 1× query_range c5 10s + 1× instant c3 5s → ~1 min total.
-      #
-      # Timing: SAMPLES_BEFORE captured before writes. Loadgen starts immediately.
-      # 5s warmup, then hey launches. Profile capture (next step) runs during the
-      # remaining ~55s of active loadgen. SAMPLES_AFTER delta in "Check loadgen"
-      # step proves ingestion happened.
-      - name: Drive load during capture (remote-write + queries)
+      # Build load tools ahead of the load window so compilation time does not
+      # eat into the 90s loadgen + profile capture window.
+      - name: Build load tools
         run: |
           go install github.com/rakyll/hey@latest
           go build -o /tmp/loadgen ./hack/loadgen
           go build -o /tmp/baseline ./cmd/baseline
 
+      # v5: fast smoke-test scale.
+      #
+      # Loadgen: 1k series / batch 100 / churn 0.2 / 90s. Enough to produce
+      # tsdb/WAL CPU signal; completes in ~2 min total including profile capture.
+      # Hey: 1× query_range c5 10s + 1× instant c3 5s → ~1 min total.
+      #
+      # Timing: SAMPLES_BEFORE captured before writes. Loadgen starts immediately.
+      # 5s warmup, then hey launches. Profile capture (next step) runs during the
+      # remaining ~85s of active loadgen. SAMPLES_AFTER delta in "Check loadgen"
+      # step proves ingestion happened.
+      - name: Drive load during capture (remote-write + queries)
+        run: |
           # Capture baseline sample count before any writes land
           SAMPLES_BEFORE=$(curl -s http://localhost:9090/metrics \
-            | grep 'prometheus_tsdb_head_samples_appended_total' \
-            | grep 'type="float"' \
-            | awk '{print $2}')
+            | grep '^prometheus_tsdb_head_samples_appended_total' \
+            | awk 'BEGIN{s=0} {s+=$NF} END{print s}')
           echo "Head samples before load: ${SAMPLES_BEFORE:-0}"
           echo "SAMPLES_BEFORE=${SAMPLES_BEFORE:-0}" >> "$GITHUB_ENV"
 
-          # Start loadgen: 60s / 1k series / batch 100 / 20% churn
+          # Start loadgen: 90s / 1k series / batch 100 / 20% churn
           nohup /tmp/loadgen \
             --url http://localhost:9090/api/v1/write \
-            --duration 60 \
+            --duration 90 \
             --series 1000 \
             --batch 100 \
             --churn 0.2 \
@@ -236,9 +239,8 @@ jobs:
           echo "::endgroup::"
           echo "::group::Head samples delta (remote-write ingestion proof)"
           SAMPLES_AFTER=$(curl -s http://localhost:9090/metrics \
-            | grep 'prometheus_tsdb_head_samples_appended_total' \
-            | grep 'type="float"' \
-            | awk '{print $2}')
+            | grep '^prometheus_tsdb_head_samples_appended_total' \
+            | awk 'BEGIN{s=0} {s+=$NF} END{print s}')
           echo "Before load: ${SAMPLES_BEFORE:-0}"
           echo "After load:  ${SAMPLES_AFTER:-0}"
           DELTA=$(python3 -c "print(int(float('${SAMPLES_AFTER:-0}') - float('${SAMPLES_BEFORE:-0}')))" 2>/dev/null || echo "unknown")
