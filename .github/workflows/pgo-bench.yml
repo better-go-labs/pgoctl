@@ -51,13 +51,18 @@ jobs:
       - name: Validate + generate default.pgo
         if: steps.profile.outputs.found == 'true'
         run: |
-          go run ./cmd/pgoctl validate \
+          /tmp/pgoctl validate \
             --min-samples 1000 --min-score 0.3 \
             testdata/prometheus_cpu.pprof
-          go run ./cmd/pgoctl merge \
+          /tmp/pgoctl merge \
             --strategy weighted --out /tmp/default.pgo \
             testdata/prometheus_cpu.pprof
           echo "Generated /tmp/default.pgo"
+
+      - name: Build pgoctl binary
+        if: steps.profile.outputs.found == 'true'
+        run: |
+          go build -o /tmp/pgoctl ./cmd/pgoctl
 
       - name: Checkout Prometheus
         if: steps.profile.outputs.found == 'true'
@@ -96,18 +101,23 @@ jobs:
           echo "Go version: $(go version)"
           echo "Profile: $PGO_PROFILE"
           echo ""
+          echo "Pre-building test binaries (avoids recompile in loop)"
+          # Pre-build test binaries so the loop only executes, not compiles
+          go test -c -o /tmp/bench/tsdb-baseline.test ./tsdb/...
+          go test -c -pgo="$PGO_PROFILE" -o /tmp/bench/tsdb-pgo.test ./tsdb/...
+          echo "Test binaries built."
+          echo ""
           echo "Running 10 interleaved rounds: baseline THEN pgo on the same runner..."
           for i in $(seq 1 10); do
             echo "=== round $i/10 ==="
-            # baseline arm — no profile
-            go test -bench=. -benchtime=500ms -benchmem \
-              -run=^$ -count=1 \
-              ./tsdb/... 2>/dev/null >> /tmp/bench/baseline.txt || true
+            # baseline arm — pre-built binary, no profile
+            /tmp/bench/tsdb-baseline.test \
+              -test.bench=. -test.benchtime=500ms -test.benchmem \
+              -test.run=^$ -test.v=1 >> /tmp/bench/baseline.txt 2>/dev/null || true
             # pgo arm — same runner, same scheduler state
-            go test -bench=. -benchtime=500ms -benchmem \
-              -run=^$ -count=1 \
-              -pgo="$PGO_PROFILE" \
-              ./tsdb/... 2>/dev/null >> /tmp/bench/pgo.txt || true
+            /tmp/bench/tsdb-pgo.test \
+              -test.bench=. -test.benchtime=500ms -test.benchmem \
+              -test.run=^$ -test.v=1 >> /tmp/bench/pgo.txt 2>/dev/null || true
           done
           echo "Benchmark rounds complete."
 
@@ -118,7 +128,7 @@ jobs:
           BENCHSTAT_OUT=$(benchstat /tmp/bench/baseline.txt /tmp/bench/pgo.txt 2>&1 \
             || echo "(benchstat: no matching benchmarks or insufficient data)")
 
-          COMPARE_OUT=$(go run ./cmd/pgoctl compare --json \
+          COMPARE_OUT=$(/tmp/pgoctl compare --json \
             testdata/prometheus_cpu.pprof testdata/prometheus_cpu.pprof 2>&1 || true)
 
           cat > /tmp/bench-report.md << 'REPORT'
