@@ -93,17 +93,21 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/bench
+          # Use -o with a directory so go test -c emits a properly-named binary.
+          # Target ./tsdb (single package) — NOT ./tsdb/... which expands to
+          # multiple packages and breaks with -o <single-file>.
           # Baseline binary — no PGO, compiled once
-          go test -c -o /tmp/bench/baseline.test ./tsdb/... && echo "baseline binary ready"
+          go test -c -o /tmp/bench/baseline.test ./tsdb && echo "baseline binary ready"
           # PGO binary — compile once with profile, then reuse
-          go test -c -pgo="$PGO_PROFILE" -o /tmp/bench/pgo.test ./tsdb/... && echo "pgo binary ready"
+          go test -c -pgo="$PGO_PROFILE" -o /tmp/bench/pgo.test ./tsdb && echo "pgo binary ready"
 
       - name: Run 10 interleaved benchmark rounds (baseline vs PGO)
         if: steps.profile.outputs.found == 'true'
         working-directory: _prometheus
         env:
-          GOTOOLCHAIN: local
+          GOGC: 200
         run: |
+          export GOMAXPROCS=4
           echo "Go version: $(go version)"
           echo "Profile: /tmp/default.pgo"
           echo ""
@@ -136,11 +140,11 @@ jobs:
 
           | | |
           |---|---|
-          | Target | `prometheus/prometheus ./tsdb/...` |
+          | Target | `prometheus/prometheus ./tsdb` |
           | Profile | `testdata/prometheus_cpu.pprof` |
           | Rounds | 10 interleaved pairs, same runner |
           | Toolchain | pinned `GOTOOLCHAIN=local` |
-          | Method | `go test -c -pgo=<profile>` then run pre-compiled binaries |
+          | Method | `go test -c` once per arm, then run .test binary |
 
           ### benchstat (geomean + p-value)
 
