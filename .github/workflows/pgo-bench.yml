@@ -48,6 +48,13 @@ jobs:
           echo "No \`testdata/prometheus_cpu.pprof\` present. Run the *Profile Collect* workflow, " \
                "then commit the artifact to \`testdata/\` and re-trigger." >> $GITHUB_STEP_SUMMARY
 
+
+
+      - name: Build pgoctl binary
+        if: steps.profile.outputs.found == 'true'
+        run: |
+          go build -o /tmp/pgoctl ./cmd/pgoctl
+
       - name: Validate + generate default.pgo
         if: steps.profile.outputs.found == 'true'
         run: |
@@ -58,11 +65,6 @@ jobs:
             --strategy weighted --out /tmp/default.pgo \
             testdata/prometheus_cpu.pprof
           echo "Generated /tmp/default.pgo"
-
-      - name: Build pgoctl binary
-        if: steps.profile.outputs.found == 'true'
-        run: |
-          go build -o /tmp/pgoctl ./cmd/pgoctl
 
       - name: Checkout Prometheus
         if: steps.profile.outputs.found == 'true'
