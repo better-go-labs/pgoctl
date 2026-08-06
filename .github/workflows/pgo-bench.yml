@@ -97,10 +97,10 @@ jobs:
           GOTOOLCHAIN: local
         run: |
           mkdir -p /tmp/bench
-          # Compile baseline (no PGO) — ./tsdb/chunkenc has 7 real benchmarks
+          # Baseline binary — no PGO, compiled once
           go test -c -o /tmp/bench/baseline.test ./tsdb/chunkenc
           echo "baseline binary: $(ls -lh /tmp/bench/baseline.test)"
-          # Compile PGO arm — same package, profile baked in at compile time
+          # PGO binary — same package, profile baked in at compile time
           go test -c -pgo="$PGO_PROFILE" -o /tmp/bench/pgo.test ./tsdb/chunkenc
           echo "pgo binary: $(ls -lh /tmp/bench/pgo.test)"
 
@@ -135,20 +135,21 @@ jobs:
           echo "baseline lines: $(wc -l < /tmp/bench/baseline.txt)"
           echo "pgo lines: $(wc -l < /tmp/bench/pgo.txt)"
 
-      - name: Collect post-PGO CPU profile for pgoctl compare
+      - name: Collect CPU profiles from same workload (chunkenc benchmark)
         if: steps.profile.outputs.found == 'true'
         run: |
-          # Run PGO binary briefly to collect a fresh CPU profile from the PGO-compiled code.
-          # This gives pgoctl compare two genuinely different profiles to diff.
+          # Both profiles must come from the same workload (chunkenc benchmark)
+          # so pgoctl compare sees apples-to-apples hot function deltas.
+          # baseline arm — no PGO, 2s warmup for a stable profile
+          /tmp/bench/baseline.test \
+            -test.bench=. -test.benchtime=2s -test.benchmem \
+            -test.run=^$ -test.cpuprofile=/tmp/baseline-bench.pprof 2>/dev/null || true
+          # pgo arm — PGO compiled, same workload
           /tmp/bench/pgo.test \
             -test.bench=. -test.benchtime=2s -test.benchmem \
-            -test.run=^$ -test.cpuprofile=/tmp/pgo-collected.pprof 2>/dev/null || true
-          if [ -f /tmp/pgo-collected.pprof ]; then
-            echo "post-PGO profile collected: $(ls -lh /tmp/pgo-collected.pprof)"
-          else
-            echo "::warning::Could not collect post-PGO profile; pgoctl compare will use original profile"
-            cp testdata/prometheus_cpu.pprof /tmp/pgo-collected.pprof
-          fi
+            -test.run=^$ -test.cpuprofile=/tmp/pgo-bench.pprof 2>/dev/null || true
+          echo "baseline profile: $(ls -lh /tmp/baseline-bench.pprof 2>/dev/null || echo 'MISSING')"
+          echo "pgo profile:      $(ls -lh /tmp/pgo-bench.pprof 2>/dev/null || echo 'MISSING')"
 
       - name: benchstat comparison + pgoctl compare verdict
         if: steps.profile.outputs.found == 'true'
@@ -157,9 +158,10 @@ jobs:
           BENCHSTAT_OUT=$(benchstat /tmp/bench/baseline.txt /tmp/bench/pgo.txt 2>&1 \
             || echo "(benchstat: no matching benchmarks or insufficient data)")
 
-          # Compare pre-PGO profile (original collected) vs post-PGO profile (collected from PGO binary)
+          # Compare baseline chunkenc profile vs PGO chunkenc profile — same workload, different binary.
+          # This shows how hot functions shift when PGO inlines/optimises the chunkenc hot path.
           COMPARE_OUT=$(/tmp/pgoctl compare --json \
-            testdata/prometheus_cpu.pprof /tmp/pgo-collected.pprof 2>&1 || true)
+            /tmp/baseline-bench.pprof /tmp/pgo-bench.pprof 2>&1 || true)
 
           cat > /tmp/bench-report.md << 'REPORT'
           ## D4/D5 PGO Signal — Prometheus Benchmark
@@ -167,7 +169,7 @@ jobs:
           | | |
           |---|---|
           | Target | `prometheus/prometheus ./tsdb/chunkenc` |
-          | Profile | `testdata/prometheus_cpu.pprof` |
+          | Profile (PGO input) | `testdata/prometheus_cpu.pprof` |
           | Rounds | 10 interleaved pairs, same runner |
           | Toolchain | pinned `GOTOOLCHAIN=local` |
           | Method | `go test -c` once per arm, then run .test binary |
@@ -183,7 +185,7 @@ jobs:
           > Threshold: ≥3% geomean improvement (p < 0.05) to promote.
           > p-value interpretation: p < 0.05 = statistically significant.
 
-          ### pgoctl compare verdict (pre-PGO profile → post-PGO profile)
+          ### pgoctl compare verdict (baseline chunkenc profile → PGO chunkenc profile)
 
           ```
           REPORT2
