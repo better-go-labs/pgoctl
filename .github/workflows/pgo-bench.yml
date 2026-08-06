@@ -48,8 +48,6 @@ jobs:
           echo "No \`testdata/prometheus_cpu.pprof\` present. Run the *Profile Collect* workflow, " \
                "then commit the artifact to \`testdata/\` and re-trigger." >> $GITHUB_STEP_SUMMARY
 
-
-
       - name: Build pgoctl binary
         if: steps.profile.outputs.found == 'true'
         run: |
@@ -97,19 +95,25 @@ jobs:
         env:
           PGO_PROFILE: /tmp/default.pgo
           GOTOOLCHAIN: local
-        shell: bash
         run: |
-          mkdir -p /tmp/bench/baseline /tmp/bench/pgo
-          # Pre-build test binaries for ALL tsdb sub-packages.
-          # -o must be a directory when compiling multiple packages (./tsdb/... expands).
-          # Baseline binary — no PGO, compiled once
-          go test -c -o /tmp/bench/baseline/ ./tsdb/... && echo "baseline binary ready"
-          # PGO binary — compile once with profile, then reuse
-          go test -c -pgo="$PGO_PROFILE" -o /tmp/bench/pgo/ ./tsdb/... && echo "pgo binary ready"
+          mkdir -p /tmp/bench
+          # Compile baseline (no PGO) — ./tsdb/chunkenc has 7 real benchmarks
+          go test -c -o /tmp/bench/baseline.test ./tsdb/chunkenc
+          echo "baseline binary: $(ls -lh /tmp/bench/baseline.test)"
+          # Compile PGO arm — same package, profile baked in at compile time
+          go test -c -pgo="$PGO_PROFILE" -o /tmp/bench/pgo.test ./tsdb/chunkenc
+          echo "pgo binary: $(ls -lh /tmp/bench/pgo.test)"
+
+      - name: Verify benchmarks exist in compiled binaries
+        if: steps.profile.outputs.found == 'true'
+        run: |
+          echo "=== Benchmarks in baseline binary ==="
+          /tmp/bench/baseline.test -test.list='^Benchmark' || true
+          echo "=== Benchmarks in pgo binary ==="
+          /tmp/bench/pgo.test -test.list='^Benchmark' || true
 
       - name: Run 10 interleaved benchmark rounds (baseline vs PGO)
         if: steps.profile.outputs.found == 'true'
-        working-directory: _prometheus
         env:
           GOTOOLCHAIN: local
         run: |
@@ -120,20 +124,31 @@ jobs:
           echo "Running 10 interleaved rounds: baseline THEN pgo on the same runner..."
           for i in $(seq 1 10); do
             echo "=== round $i/10 ==="
-            # baseline arm — pre-compiled binaries, no PGO
-            for bin in /tmp/bench/baseline/*.test; do
-              "$bin" \
-                -test.bench=. -test.benchtime=500ms -test.benchmem \
-                -test.run=^$ -test.v=1 >> /tmp/bench/baseline.txt 2>/dev/null || true
-            done
-            # pgo arm — pre-compiled binaries with PGO profile baked in
-            for bin in /tmp/bench/pgo/*.test; do
-              "$bin" \
-                -test.bench=. -test.benchtime=500ms -test.benchmem \
-                -test.run=^$ -test.v=1 >> /tmp/bench/pgo.txt 2>/dev/null || true
-            done
+            /tmp/bench/baseline.test \
+              -test.bench=. -test.benchtime=500ms -test.benchmem \
+              -test.run=^$ >> /tmp/bench/baseline.txt 2>/dev/null || true
+            /tmp/bench/pgo.test \
+              -test.bench=. -test.benchtime=500ms -test.benchmem \
+              -test.run=^$ >> /tmp/bench/pgo.txt 2>/dev/null || true
           done
           echo "Benchmark rounds complete."
+          echo "baseline lines: $(wc -l < /tmp/bench/baseline.txt)"
+          echo "pgo lines: $(wc -l < /tmp/bench/pgo.txt)"
+
+      - name: Collect post-PGO CPU profile for pgoctl compare
+        if: steps.profile.outputs.found == 'true'
+        run: |
+          # Run PGO binary briefly to collect a fresh CPU profile from the PGO-compiled code.
+          # This gives pgoctl compare two genuinely different profiles to diff.
+          /tmp/bench/pgo.test \
+            -test.bench=. -test.benchtime=2s -test.benchmem \
+            -test.run=^$ -test.cpuprofile=/tmp/pgo-collected.pprof 2>/dev/null || true
+          if [ -f /tmp/pgo-collected.pprof ]; then
+            echo "post-PGO profile collected: $(ls -lh /tmp/pgo-collected.pprof)"
+          else
+            echo "::warning::Could not collect post-PGO profile; pgoctl compare will use original profile"
+            cp testdata/prometheus_cpu.pprof /tmp/pgo-collected.pprof
+          fi
 
       - name: benchstat comparison + pgoctl compare verdict
         if: steps.profile.outputs.found == 'true'
@@ -142,15 +157,16 @@ jobs:
           BENCHSTAT_OUT=$(benchstat /tmp/bench/baseline.txt /tmp/bench/pgo.txt 2>&1 \
             || echo "(benchstat: no matching benchmarks or insufficient data)")
 
+          # Compare pre-PGO profile (original collected) vs post-PGO profile (collected from PGO binary)
           COMPARE_OUT=$(/tmp/pgoctl compare --json \
-            testdata/prometheus_cpu.pprof testdata/prometheus_cpu.pprof 2>&1 || true)
+            testdata/prometheus_cpu.pprof /tmp/pgo-collected.pprof 2>&1 || true)
 
           cat > /tmp/bench-report.md << 'REPORT'
           ## D4/D5 PGO Signal — Prometheus Benchmark
 
           | | |
           |---|---|
-          | Target | `prometheus/prometheus ./tsdb` |
+          | Target | `prometheus/prometheus ./tsdb/chunkenc` |
           | Profile | `testdata/prometheus_cpu.pprof` |
           | Rounds | 10 interleaved pairs, same runner |
           | Toolchain | pinned `GOTOOLCHAIN=local` |
@@ -167,7 +183,7 @@ jobs:
           > Threshold: ≥3% geomean improvement (p < 0.05) to promote.
           > p-value interpretation: p < 0.05 = statistically significant.
 
-          ### pgoctl compare verdict (pprof-diff mode)
+          ### pgoctl compare verdict (pre-PGO profile → post-PGO profile)
 
           ```
           REPORT2
