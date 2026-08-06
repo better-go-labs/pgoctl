@@ -272,12 +272,18 @@ func newCompareCmd() *cobra.Command {
 		Short: "Compare two CPU profiles and emit a gate verdict",
 		Long: `Compare two pprof files by CPU function attribution.
 
-SummaryCPUDelta = sum over all functions of: basePct * (basePct-candPct)/100
-Positive delta = candidate uses less CPU overall.
+delta_pct (per function) = (base - cand) / base * 100   [relative %% change]
+  base = 0 → delta_pct = -100  (new CPU cost in the candidate)
+  positive = candidate uses less CPU (improvement)
+
+SummaryCPUDelta = weighted average of relative delta_pct over functions
+present in BOTH profiles (weighted by baseline share). Single-profile
+functions are excluded because percentages sum to 100 on both sides, so a
+baseline-share-weighted sum of percentage-point diffs cancels to ~0.
 
 Verdict:
-  promote  — delta >= --min-improvement
-  rollback — delta <= -(--min-regression) (independent regression threshold)
+  promote  — SummaryCPUDelta >= --min-improvement
+  rollback — SummaryCPUDelta <= -(--min-regression)  (independent threshold)
   neutral  — within both thresholds
 
 --min-cpu-percent drops functions whose CPU share is below the given %% in
@@ -327,8 +333,8 @@ BOTH profiles before comparing (default 0 = no filtering).`,
 			return nil
 		},
 	}
-	cmd.Flags().Float64Var(&minImprovement, "min-improvement", 3.0, "min CPU delta %% to promote")
-	cmd.Flags().Float64Var(&minRegression, "min-regression", 3.0, "min CPU regression %% to rollback (independent of --min-improvement)")
+	cmd.Flags().Float64Var(&minImprovement, "min-improvement", 10.0, "min relative CPU %% improvement to promote")
+	cmd.Flags().Float64Var(&minRegression, "min-regression", 10.0, "min relative CPU %% regression to rollback (independent of --min-improvement)")
 	cmd.Flags().Float64Var(&minCPUPercent, "min-cpu-percent", 0.0, "drop functions below this CPU %% share in both profiles (0 = no filtering)")
 	cmd.Flags().IntVar(&topN, "top", 10, "number of function deltas to show")
 	return cmd
