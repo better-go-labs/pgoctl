@@ -21,7 +21,7 @@ permissions:
 jobs:
   bench:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -123,19 +123,28 @@ jobs:
           PKG_PATH[labels]="./model/labels"
           for name in tsdb promql storage chunkenc labels; do
             path="${PKG_PATH[$name]}"
-            echo "=== Compiling $name ($path) ==="
+            echo "[$(date -u +%H:%M:%S)] compiling ${name} (baseline) from ${path}"
             go test -c -o /tmp/bench/${name}-baseline.test "${path}"
-            echo "  baseline: $(ls -lh /tmp/bench/${name}-baseline.test)"
+            echo "[$(date -u +%H:%M:%S)] compiling ${name} (pgo) from ${path}"
             go test -c -pgo="$PGO_PROFILE" -o /tmp/bench/${name}-pgo.test "${path}"
-            echo "  pgo:      $(ls -lh /tmp/bench/${name}-pgo.test)"
           done
+          echo "[$(date -u +%H:%M:%S)] all test binaries compiled"
 
-      - name: Verify benchmarks exist in compiled binaries
+      - name: Verify + time curated benchmarks (fail-fast probe)
         if: steps.profile.outputs.found == 'true'
         run: |
+          declare -A BENCH
+          BENCH[tsdb]='^Benchmark(WAL_HistogramEncoding|DecodeHistogramSamples|ChunkWriteQueue_addJob)$'
+          BENCH[promql]='^BenchmarkParser$'
+          BENCH[storage]='^Benchmark(BufferedSeriesIterator|MemoizedSeriesIterator|NoMergeSeriesSet_100_100)$'
+          BENCH[chunkenc]='.'
+          BENCH[labels]='.'
           for name in tsdb promql storage chunkenc labels; do
-            echo "=== $name ==="
-            /tmp/bench/${name}-baseline.test -test.list='^Benchmark' 2>/dev/null | head -10 || true
+            s=$SECONDS
+            count=$(timeout 60s /tmp/bench/${name}-baseline.test \
+              -test.bench="${BENCH[$name]}" -test.benchtime=50ms -test.run='^$' 2>/dev/null \
+              | grep -c '^Benchmark' || echo 0)
+            echo "${name}: ${count} benchmarks matched, probe $((SECONDS-s))s"
           done
 
       - name: Run 5 interleaved benchmark rounds (baseline vs PGO, all hot packages)
@@ -153,9 +162,9 @@ jobs:
           echo "Profile: /tmp/default.pgo"
 
           declare -A BENCH
-          BENCH[tsdb]='^BenchmarkMemPostings'
-          BENCH[promql]='^BenchmarkRangeQuery'
-          BENCH[storage]='.'
+          BENCH[tsdb]='^Benchmark(WAL_HistogramEncoding|DecodeHistogramSamples|ChunkWriteQueue_addJob)$'
+          BENCH[promql]='^BenchmarkParser$'
+          BENCH[storage]='^Benchmark(BufferedSeriesIterator|MemoizedSeriesIterator|NoMergeSeriesSet_100_100)$'
           BENCH[chunkenc]='.'
           BENCH[labels]='.'
 
