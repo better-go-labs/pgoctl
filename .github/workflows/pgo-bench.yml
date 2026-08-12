@@ -145,6 +145,10 @@ jobs:
         run: |
           export GOMAXPROCS=2
           BENCHTIME=200ms
+          # Safety net: if a benchmark's setup hangs (no stdout, no timeout by default),
+          # the outer timeout kills it and rc=124 surfaces as a CI warning.
+          BINTIMEOUT=90s
+
           echo "Go version: $(go version)"
           echo "Profile: /tmp/default.pgo"
 
@@ -156,25 +160,33 @@ jobs:
           BENCH[labels]='.'
 
           echo "Running 5 interleaved rounds across 5 packages (GOMAXPROCS=${GOMAXPROCS}, benchtime=${BENCHTIME})..."
+          overall=$SECONDS
           for i in $(seq 1 5); do
+            r=$SECONDS
             echo ""
             echo "================= round $i/5 ================="
             for name in tsdb promql storage chunkenc labels; do
               sel="${BENCH[$name]}"
 
               echo "--- [$(date -u +%H:%M:%S)] round $i • ${name} • baseline • bench=${sel} ---"
-              /tmp/bench/${name}-baseline.test \
-                -test.bench="${sel}" -test.benchtime=${BENCHTIME} -test.benchmem -test.run=^$ \
-                2>&1 | tee -a /tmp/bench/${name}-baseline.txt || true
+              timeout "${BINTIMEOUT}" /tmp/bench/${name}-baseline.test \
+                -test.bench="${sel}" -test.benchtime=${BENCHTIME} -test.benchmem \
+                -test.timeout="${BINTIMEOUT}" -test.run=^$ \
+                2>&1 | tee -a /tmp/bench/${name}-baseline.txt || \
+                echo "    ::warning::${name}/baseline may have timed out"
 
               echo "--- [$(date -u +%H:%M:%S)] round $i • ${name} • pgo • bench=${sel} ---"
-              /tmp/bench/${name}-pgo.test \
-                -test.bench="${sel}" -test.benchtime=${BENCHTIME} -test.benchmem -test.run=^$ \
-                2>&1 | tee -a /tmp/bench/${name}-pgo.txt || true
+              timeout "${BINTIMEOUT}" /tmp/bench/${name}-pgo.test \
+                -test.bench="${sel}" -test.benchtime=${BENCHTIME} -test.benchmem \
+                -test.timeout="${BINTIMEOUT}" -test.run=^$ \
+                2>&1 | tee -a /tmp/bench/${name}-pgo.txt || \
+                echo "    ::warning::${name}/pgo may have timed out"
             done
+            echo "--- round $i done in $((SECONDS - r))s (total $((SECONDS - overall))s) ---"
           done
+
           echo ""
-          echo "[$(date -u +%H:%M:%S)] all rounds complete"
+          echo "[$(date -u +%H:%M:%S)] all rounds complete in $((SECONDS - overall))s"
 
       - name: benchstat + summary
         if: steps.profile.outputs.found == 'true'
