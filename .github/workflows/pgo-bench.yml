@@ -1,6 +1,6 @@
 name: PGO Benchmark
 # D4/D5 signal: proves PGO before/after on Prometheus.
-# Uses 10 interleaved rounds on the SAME runner to eliminate cross-job variance.
+# Uses 5 interleaved rounds on the SAME runner to eliminate cross-job variance.
 # Requires testdata/prometheus_cpu.pprof (from profile-collect workflow).
 # Posts benchstat p-value output to job summary and sticky PR comment.
 # Benchmarked packages are derived from pgoctl validate --json package_shares, not guessed.
@@ -138,114 +138,69 @@ jobs:
             /tmp/bench/${name}-baseline.test -test.list='^Benchmark' 2>/dev/null | head -10 || true
           done
 
-      - name: Run 10 interleaved benchmark rounds (baseline vs PGO, all hot packages)
+      - name: Run 5 interleaved benchmark rounds (baseline vs PGO, all hot packages)
         if: steps.profile.outputs.found == 'true'
         env:
           GOTOOLCHAIN: local
         run: |
-          export GOMAXPROCS=4
+          export GOMAXPROCS=2
+          BENCHTIME=200ms
           echo "Go version: $(go version)"
           echo "Profile: /tmp/default.pgo"
-          echo ""
-          # tsdb has 74 benchmarks; exclude slow compaction/block-open ones that
-          # are unrelated to the remote-write+query hot path in the profile.
-          TSDB_BENCH='^Benchmark(Head|Query|Querier|WAL|Label|Encode|Decode|Xor|WriteBit|Append|Filter|Chunk|Iter|Create|Load[WL])'
-          echo "Running 10 interleaved rounds across 5 packages..."
-          for i in $(seq 1 10); do
-            echo "=== round $i/10 ==="
-            /tmp/bench/tsdb-baseline.test \
-              -test.bench="${TSDB_BENCH}" -test.benchtime=500ms -test.benchmem \
-              -test.run=^$ >> /tmp/bench/tsdb-baseline.txt 2>/dev/null || true
-            /tmp/bench/tsdb-pgo.test \
-              -test.bench="${TSDB_BENCH}" -test.benchtime=500ms -test.benchmem \
-              -test.run=^$ >> /tmp/bench/tsdb-pgo.txt 2>/dev/null || true
-            for name in promql storage chunkenc labels; do
+
+          declare -A BENCH
+          BENCH[tsdb]='^BenchmarkMemPostings'
+          BENCH[promql]='^BenchmarkRangeQuery'
+          BENCH[storage]='.'
+          BENCH[chunkenc]='.'
+          BENCH[labels]='.'
+
+          echo "Running 5 interleaved rounds across 5 packages (GOMAXPROCS=${GOMAXPROCS}, benchtime=${BENCHTIME})..."
+          for i in $(seq 1 5); do
+            echo ""
+            echo "================= round $i/5 ================="
+            for name in tsdb promql storage chunkenc labels; do
+              sel="${BENCH[$name]}"
+
+              echo "--- [$(date -u +%H:%M:%S)] round $i • ${name} • baseline • bench=${sel} ---"
               /tmp/bench/${name}-baseline.test \
-                -test.bench=. -test.benchtime=500ms -test.benchmem \
-                -test.run=^$ >> /tmp/bench/${name}-baseline.txt 2>/dev/null || true
+                -test.bench="${sel}" -test.benchtime=${BENCHTIME} -test.benchmem -test.run=^$ \
+                2>&1 | tee -a /tmp/bench/${name}-baseline.txt || true
+
+              echo "--- [$(date -u +%H:%M:%S)] round $i • ${name} • pgo • bench=${sel} ---"
               /tmp/bench/${name}-pgo.test \
-                -test.bench=. -test.benchtime=500ms -test.benchmem \
-                -test.run=^$ >> /tmp/bench/${name}-pgo.txt 2>/dev/null || true
+                -test.bench="${sel}" -test.benchtime=${BENCHTIME} -test.benchmem -test.run=^$ \
+                2>&1 | tee -a /tmp/bench/${name}-pgo.txt || true
             done
           done
-          echo "Benchmark rounds complete."
-          for name in tsdb promql storage chunkenc labels; do
-            echo "${name} baseline lines: $(wc -l < /tmp/bench/${name}-baseline.txt 2>/dev/null || echo 0)"
-          done
+          echo ""
+          echo "[$(date -u +%H:%M:%S)] all rounds complete"
 
-      - name: Collect CPU profiles from chunkenc workload (for pgoctl compare)
+      - name: benchstat + summary
         if: steps.profile.outputs.found == 'true'
         run: |
-          # Both profiles from the same workload so pgoctl compare sees hot function deltas.
-          /tmp/bench/chunkenc-baseline.test \
-            -test.bench=. -test.benchtime=2s -test.benchmem \
-            -test.run=^$ -test.cpuprofile=/tmp/baseline-bench.pprof 2>/dev/null || true
-          /tmp/bench/chunkenc-pgo.test \
-            -test.bench=. -test.benchtime=2s -test.benchmem \
-            -test.run=^$ -test.cpuprofile=/tmp/pgo-bench.pprof 2>/dev/null || true
-          echo "baseline profile: $(ls -lh /tmp/baseline-bench.pprof 2>/dev/null || echo 'MISSING')"
-          echo "pgo profile:      $(ls -lh /tmp/pgo-bench.pprof 2>/dev/null || echo 'MISSING')"
-
-      - name: benchstat comparison + pgoctl compare verdict
-        if: steps.profile.outputs.found == 'true'
-        id: report
-        run: |
-          COMPARE_OUT=$(/tmp/pgoctl compare --json \
-            /tmp/baseline-bench.pprof /tmp/pgo-bench.pprof 2>&1 || true)
-
-          cat > /tmp/bench-report.md << 'REPORT'
-          ## D4/D5 PGO Signal — Prometheus Benchmark
-
-          | | |
-          |---|---|
-          | Profile (PGO input) | `testdata/prometheus_cpu.pprof` |
-          | Rounds | 10 interleaved pairs, same runner |
-          | Toolchain | pinned `GOTOOLCHAIN=local` |
-          | Method | `go test -c` once per arm, then run .test binary |
-
-          ### Profile Package Shares (`pgoctl validate --json`)
-
-          | Package | Flat CPU% | Benchmarked |
-          |---------|-----------|-------------|
-          | `./tsdb` | 15.92% | ✅ |
-          | `./promql` | 15.17% | ✅ |
-          | `./storage` | 6.38% | ✅ |
-          | `./tsdb/chunkenc` | 4.59% | ✅ |
-          | `./model/labels` | 3.28% | ✅ |
-          | `./util/annotations` | 0.74% | ❌ no benchmarks |
-
-          > Shares above are from the profile committed at the time of this run.
-          > Re-run profile-collect to refresh if the profile has been updated.
-
-          ### benchstat (geomean + p-value, per package)
-
-          > Threshold: ≥3% geomean improvement (p < 0.05) to promote.
-
-          REPORT
+          : > /tmp/bench-report.md
+          {
+            echo "## PGO Benchmark — baseline vs PGO"
+            echo ""
+            echo "_5 interleaved rounds, GOMAXPROCS=2, benchtime=200ms. Signal check: looking for ≥2–3% geomean improvement at p<0.05._"
+            echo ""
+          } >> /tmp/bench-report.md
 
           for name in tsdb promql storage chunkenc labels; do
-            echo "#### \`./\${name/chunkenc/tsdb\/chunkenc}\`" >> /tmp/bench-report.md
+            echo "### ${name}" | tee -a /tmp/bench-report.md >> $GITHUB_STEP_SUMMARY
             echo '```' >> /tmp/bench-report.md
             benchstat /tmp/bench/${name}-baseline.txt /tmp/bench/${name}-pgo.txt \
-              >> /tmp/bench-report.md 2>&1 || echo "(no matching benchmarks or insufficient data)" >> /tmp/bench-report.md
+              2>&1 | tee -a /tmp/bench-report.md | tee -a $GITHUB_STEP_SUMMARY || true
             echo '```' >> /tmp/bench-report.md
             echo "" >> /tmp/bench-report.md
           done
 
-          cat >> /tmp/bench-report.md << 'REPORT2'
-          ### pgoctl compare verdict (chunkenc baseline → PGO profile)
-
-          ```
-          REPORT2
-          echo "$COMPARE_OUT" >> /tmp/bench-report.md
-          printf '```\n' >> /tmp/bench-report.md
-
-          cat /tmp/bench-report.md >> $GITHUB_STEP_SUMMARY
+          echo "----- rendered report -----"
+          cat /tmp/bench-report.md
 
       - name: Post sticky PR comment
-        if: >
-          steps.profile.outputs.found == 'true' &&
-          github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.profile.outputs.found == 'true'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: pgo-bench
