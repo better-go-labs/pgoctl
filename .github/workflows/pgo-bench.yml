@@ -134,7 +134,7 @@ jobs:
         if: steps.profile.outputs.found == 'true'
         run: |
           declare -A BENCH
-          BENCH[tsdb]='^Benchmark(WAL_HistogramEncoding|DecodeHistogramSamples|ChunkWriteQueue_addJob)$'
+          BENCH[tsdb]='^Benchmark(HeadStripeSeriesCreate|HeadStripeSeriesCreateParallel|MergedStringIter)$'
           BENCH[promql]='^BenchmarkParser$'
           BENCH[storage]='^Benchmark(BufferedSeriesIterator|MemoizedSeriesIterator|NoMergeSeriesSet_100_100)$'
           BENCH[chunkenc]='.'
@@ -162,7 +162,7 @@ jobs:
           echo "Profile: /tmp/default.pgo"
 
           declare -A BENCH
-          BENCH[tsdb]='^Benchmark(WAL_HistogramEncoding|DecodeHistogramSamples|ChunkWriteQueue_addJob)$'
+          BENCH[tsdb]='^Benchmark(HeadStripeSeriesCreate|HeadStripeSeriesCreateParallel|MergedStringIter)$'
           BENCH[promql]='^BenchmarkParser$'
           BENCH[storage]='^Benchmark(BufferedSeriesIterator|MemoizedSeriesIterator|NoMergeSeriesSet_100_100)$'
           BENCH[chunkenc]='.'
