@@ -145,6 +145,10 @@ jobs:
               -test.bench="${BENCH[$name]}" -test.benchtime=50ms -test.run='^$' 2>/dev/null \
               | grep -c '^Benchmark' || echo 0)
             echo "${name}: ${count} benchmarks matched, probe $((SECONDS-s))s"
+            if [ "$count" -eq 0 ]; then
+              echo "::error::${name}: 0 benchmarks matched '${BENCH[$name]}' — fix the pattern before running 10 rounds"
+              exit 1
+            fi
           done
 
       - name: Run 10 interleaved benchmark rounds (baseline vs PGO, all hot packages)
