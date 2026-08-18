@@ -1,6 +1,6 @@
 name: PGO Benchmark
 # D4/D5 signal: proves PGO before/after on Prometheus.
-# Uses 5 interleaved rounds on the SAME runner to eliminate cross-job variance.
+# Uses 10 interleaved rounds on the SAME runner to eliminate cross-job variance.
 # Requires testdata/prometheus_cpu.pprof (from profile-collect workflow).
 # Posts benchstat p-value output to job summary and sticky PR comment.
 # Benchmarked packages are derived from pgoctl validate --json package_shares, not guessed.
@@ -147,7 +147,7 @@ jobs:
             echo "${name}: ${count} benchmarks matched, probe $((SECONDS-s))s"
           done
 
-      - name: Run 5 interleaved benchmark rounds (baseline vs PGO, all hot packages)
+      - name: Run 10 interleaved benchmark rounds (baseline vs PGO, all hot packages)
         if: steps.profile.outputs.found == 'true'
         env:
           GOTOOLCHAIN: local
@@ -168,12 +168,12 @@ jobs:
           BENCH[chunkenc]='.'
           BENCH[labels]='.'
 
-          echo "Running 5 interleaved rounds across 5 packages (GOMAXPROCS=${GOMAXPROCS}, benchtime=${BENCHTIME})..."
+          echo "Running 10 interleaved rounds across 5 packages (GOMAXPROCS=${GOMAXPROCS}, benchtime=${BENCHTIME})..."
           overall=$SECONDS
-          for i in $(seq 1 5); do
+          for i in $(seq 1 10); do
             r=$SECONDS
             echo ""
-            echo "================= round $i/5 ================="
+            echo "================= round $i/10 ================="
             for name in tsdb promql storage chunkenc labels; do
               sel="${BENCH[$name]}"
 
@@ -204,7 +204,7 @@ jobs:
           {
             echo "## PGO Benchmark — baseline vs PGO"
             echo ""
-            echo "_5 interleaved rounds, GOMAXPROCS=2, benchtime=200ms. Signal check: looking for ≥2–3% geomean improvement at p<0.05._"
+            echo "_10 interleaved rounds, GOMAXPROCS=2, benchtime=200ms. Signal check: looking for ≥2–3% geomean improvement at p<0.05._"
             echo ""
           } >> /tmp/bench-report.md
 
