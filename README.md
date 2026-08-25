@@ -58,6 +58,11 @@ Works with any Go service that imports `net/http/pprof`. No Parca required.
 go build -o bin/pgoctl ./cmd/pgoctl
 
 # Collect a 30s CPU profile
+pgoctl collect --source=pprof \
+  --url="http://localhost:6060/debug/pprof/profile?seconds=30" \
+  --out=cpu.pprof
+
+# Or with curl directly:
 curl -o cpu.pprof "http://localhost:6060/debug/pprof/profile?seconds=30"
 
 # Validate, merge, and build with PGO
@@ -145,7 +150,8 @@ pgoctl collect --source=parca \
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--source` | `parca` | Profiling backend (`parca`) |
+| `--source` | `parca` | Profile source: parca (default) or pprof |
+| `--url` | _(empty)_ | Full endpoint URL. Required when `--source=pprof` (e.g. `http://localhost:6060/debug/pprof/profile?seconds=30`) |
 | `--parca-addr` | _(required)_ | Base URL of the Parca server (e.g. `http://localhost:7070`) |
 | `--query` | _(required)_ | Parca label selector (e.g. `process_cpu:cpu:nanoseconds:cpu:nanoseconds{job="myapp"}`) |
 | `--window` | `5m` | Time window for the merged profile (e.g. `5m`, `1h`) |
@@ -327,7 +333,7 @@ cmd/
   pgoctl/     -- CLI entry point (validate/merge/compare/explain/collect)
   baseline/   -- standalone pprof collector for dev/baseline capture
 internal/
-  collect/    -- Parca HTTP adapter and source interface
+  collect/    -- pprof and Parca source adapters + source interface
   compare/    -- profile comparison and gate logic
   explain/    -- flat CPU attribution, package grouping, PGO verdict
   merge/      -- weighted profile merge strategies
