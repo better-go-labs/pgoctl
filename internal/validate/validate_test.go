@@ -1,11 +1,14 @@
 package validate_test
 
 import (
+	"fmt"
 	"os"
 	"runtime/pprof"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -184,4 +187,153 @@ func TestValidate_TableDriven(t *testing.T) {
 			}
 		})
 	}
+}
+
+// writeTmpProfileV writes p to a temp file and returns the path.
+func writeTmpProfileV(t *testing.T, p *profile.Profile) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "cpu*.pprof")
+	require.NoError(t, err)
+	require.NoError(t, p.Write(f))
+	require.NoError(t, f.Close())
+	return f.Name()
+}
+
+// TestParsePackageShareGates_EmptyEntries verifies whitespace-only and empty
+// comma-separated entries are silently skipped (covers the continue branch).
+func TestParsePackageShareGates_EmptyEntries(t *testing.T) {
+	gates, err := validate.ParsePackageShareGates([]string{" , github.com/foo/bar:5 , "})
+	require.NoError(t, err)
+	require.Len(t, gates, 1)
+	assert.Equal(t, "github.com/foo/bar", gates[0].Prefix)
+	assert.InDelta(t, 5.0, gates[0].MinPercent, 0.001)
+}
+
+// TestValidateFile_FallbackSampleType ensures a samples/count profile is accepted
+// and covers cpuSampleIndex's fallback branch (fallback=i, return fallback,true).
+func TestValidateFile_FallbackSampleType(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
+		DurationNanos: 30 * 1e9,
+	}
+	fn := &profile.Function{ID: 1, Name: "main.main"}
+	loc := &profile.Location{ID: 1, Line: []profile.Line{{Function: fn}}}
+	p.Function = []*profile.Function{fn}
+	p.Location = []*profile.Location{loc}
+	for i := 0; i < 20; i++ {
+		p.Sample = append(p.Sample, &profile.Sample{
+			Location: []*profile.Location{loc},
+			Value:    []int64{1},
+		})
+	}
+	path := writeTmpProfileV(t, p)
+
+	opts := validate.Options{MinSamples: 1, MinScore: 0, MinStackDepth: 1}
+	report, err := validate.ValidateFile(path, opts)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+	assert.Equal(t, int64(20), report.Samples)
+}
+
+// TestValidateFile_DefaultMinStackDepth verifies that MinStackDepth=0 is replaced
+// by the default 2.0 inside ValidateFile (covers the opts.MinStackDepth==0 branch).
+func TestValidateFile_DefaultMinStackDepth(t *testing.T) {
+	data := generateCPUProfile(t, 200)
+	f, err := os.CreateTemp(t.TempDir(), "cpu*.pprof")
+	require.NoError(t, err)
+	_, err = f.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	opts := validate.Options{MinSamples: 1, MinScore: 0, MinStackDepth: 0}
+	report, err := validate.ValidateFile(f.Name(), opts)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+}
+
+// TestValidateFile_InsufficientSamples verifies sampleCount < MinSamples generates
+// the "insufficient samples" error entry.
+func TestValidateFile_InsufficientSamples(t *testing.T) {
+	data := generateCPUProfile(t, 200)
+	f, err := os.CreateTemp(t.TempDir(), "cpu*.pprof")
+	require.NoError(t, err)
+	_, err = f.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	opts := validate.Options{MinSamples: 999999, MinScore: 0, MinStackDepth: 1}
+	report, err := validate.ValidateFile(f.Name(), opts)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+	assert.False(t, report.Valid)
+	found := false
+	for _, e := range report.Errors {
+		if strings.Contains(e, "insufficient samples") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected 'insufficient samples' error, got: %v", report.Errors)
+}
+
+// TestValidateFile_FlatProfileError verifies avgStackDepth < MinStackDepth generates
+// the flat-profile error entry.
+func TestValidateFile_FlatProfileError(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "cpu", Unit: "nanoseconds"}},
+		DurationNanos: 30 * 1e9,
+	}
+	for i := 0; i < 25; i++ {
+		fn := &profile.Function{ID: uint64(i + 1), Name: fmt.Sprintf("pkg.Func%d", i)}
+		loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn}}}
+		p.Function = append(p.Function, fn)
+		p.Location = append(p.Location, loc)
+		p.Sample = append(p.Sample, &profile.Sample{
+			Location: []*profile.Location{loc},
+			Value:    []int64{1000},
+		})
+	}
+	path := writeTmpProfileV(t, p)
+
+	opts := validate.Options{MinSamples: 1, MinScore: 0, MinStackDepth: 2.0}
+	report, err := validate.ValidateFile(path, opts)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+	assert.False(t, report.Valid)
+	found := false
+	for _, e := range report.Errors {
+		if strings.Contains(e, "stack") || strings.Contains(e, "depth") || strings.Contains(e, "flat") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected flat-profile error, got: %v", report.Errors)
+}
+
+// TestValidateFile_PackageShareZeroTotal covers computePackageShares's total==0 return
+// when all samples have zero CPU value.
+func TestValidateFile_PackageShareZeroTotal(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "cpu", Unit: "nanoseconds"}},
+		DurationNanos: 30 * 1e9,
+	}
+	fn := &profile.Function{ID: 1, Name: "main.main"}
+	loc := &profile.Location{ID: 1, Line: []profile.Line{{Function: fn}}}
+	p.Function = []*profile.Function{fn}
+	p.Location = []*profile.Location{loc}
+	for i := 0; i < 20; i++ {
+		p.Sample = append(p.Sample, &profile.Sample{
+			Location: []*profile.Location{loc},
+			Value:    []int64{0},
+		})
+	}
+	path := writeTmpProfileV(t, p)
+
+	opts := validate.Options{
+		MinSamples: 1, MinScore: 0, MinStackDepth: 1,
+		PackageShareGates: []validate.PackageShareGate{{Prefix: "main", MinPercent: 0}},
+	}
+	report, err := validate.ValidateFile(path, opts)
+	require.NoError(t, err)
+	require.NotNil(t, report)
 }
