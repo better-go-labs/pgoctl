@@ -112,7 +112,8 @@ runs:
           echo "Collecting ${{ inputs.duration }}s CPU profile from ${{ inputs.pprof-url }}"
           pgoctl collect \
             --source=pprof \
-            --url="${{ inputs.pprof-url }}/debug/pprof/profile?seconds=${{ inputs.duration }}" \
+            --url="${{ inputs.pprof-url }}/debug/pprof/profile" \
+            --window="${{ inputs.duration }}s" \
             --out=cpu.pprof
         else
           echo "Error: one of profile-file, parca-url, or pprof-url must be provided" >&2
