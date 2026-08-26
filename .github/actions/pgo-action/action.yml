@@ -76,6 +76,15 @@ outputs:
   validate-score:
     description: 'Quality score from pgoctl validate (0.0–1.0)'
     value: ${{ steps.validate.outputs.score }}
+  samples:
+    description: 'Number of CPU samples in the collected profile'
+    value: ${{ steps.validate.outputs.samples }}
+  unique-stacks:
+    description: 'Number of unique call stacks in the collected profile'
+    value: ${{ steps.validate.outputs.unique-stacks }}
+  cpu-delta:
+    description: 'Weighted CPU delta % vs baseline (positive = improvement)'
+    value: ${{ steps.compare.outputs.delta }}
 
 runs:
   using: 'composite'
@@ -132,8 +141,14 @@ runs:
         echo "$out"
         score=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('quality_score',0))" 2>/dev/null || echo "0")
         valid=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('valid',False))" 2>/dev/null || echo "False")
+        samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('samples',0))" 2>/dev/null || echo "0")
+        stacks=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('unique_stacks',0))" 2>/dev/null || echo "0")
+        errors=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('errors',[])))" 2>/dev/null || echo "")
         echo "score=$score" >> "$GITHUB_OUTPUT"
         echo "valid=$valid" >> "$GITHUB_OUTPUT"
+        echo "samples=$samples" >> "$GITHUB_OUTPUT"
+        echo "unique-stacks=$stacks" >> "$GITHUB_OUTPUT"
+        echo "validate-errors=$errors" >> "$GITHUB_OUTPUT"
         if [[ $exit_code -eq 1 ]]; then
           echo "::warning::Profile did not pass the quality gate (score=$score). PGO artifact will still be produced."
         elif [[ $exit_code -ne 0 ]]; then
@@ -206,8 +221,25 @@ runs:
         echo "$out"
         verdict=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('verdict',''))" 2>/dev/null || echo "")
         delta=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary_cpu_delta_pct',0))" 2>/dev/null || echo "0")
+        base_samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('baseline_samples',0))" 2>/dev/null || echo "0")
+        cand_samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('candidate_samples',0))" 2>/dev/null || echo "0")
+        top_deltas=$(echo "$out" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+rows=[]
+for f in d.get('top_deltas',[])[:5]:
+    rows.append(f\"{f['function']}|{f['base_pct']:.1f}%|{f['cand_pct']:.1f}%|{f['delta_pct']:+.1f}%\")
+print('\\n'.join(rows))
+" 2>/dev/null || echo "")
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
         echo "delta=$delta" >> "$GITHUB_OUTPUT"
+        echo "baseline-samples=$base_samples" >> "$GITHUB_OUTPUT"
+        echo "candidate-samples=$cand_samples" >> "$GITHUB_OUTPUT"
+        {
+          echo "top-deltas<<EOF_TOP"
+          echo "$top_deltas"
+          echo "EOF_TOP"
+        } >> "$GITHUB_OUTPUT"
         if [[ $exit_code -eq 1 ]]; then
           echo "::warning::Rollback verdict — CPU regression detected (delta=$delta%)"
         elif [[ $exit_code -ne 0 ]]; then
@@ -232,20 +264,74 @@ runs:
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const verdict  = '${{ steps.compare.outputs.verdict }}' || (${{ steps.restore.outputs.has-previous }} ? 'n/a (bootstrap — first run)' : 'n/a (no baseline)');
-          const delta    = '${{ steps.compare.outputs.delta }}' || '';
-          const score    = '${{ steps.validate.outputs.score }}';
-          const valid    = '${{ steps.validate.outputs.valid }}';
-          const icon     = verdict === 'promote' ? '✅' : verdict === 'rollback' ? '🚨' : 'ℹ️';
-          const deltaStr = delta ? ` | cpu_delta_pct \`${parseFloat(delta).toFixed(2)}%\`` : '';
+          const verdict       = '${{ steps.compare.outputs.verdict }}' || (${{ steps.restore.outputs.has-previous }} ? 'n/a (bootstrap)' : 'n/a (no baseline)');
+          const delta         = '${{ steps.compare.outputs.delta }}';
+          const score         = '${{ steps.validate.outputs.score }}';
+          const valid         = '${{ steps.validate.outputs.valid }}';
+          const samples       = '${{ steps.validate.outputs.samples }}';
+          const uniqueStacks  = '${{ steps.validate.outputs.unique-stacks }}';
+          const validateErrs  = '${{ steps.validate.outputs.validate-errors }}';
+          const baseSamples   = '${{ steps.compare.outputs.baseline-samples }}';
+          const candSamples   = '${{ steps.compare.outputs.candidate-samples }}';
+          const topDeltasRaw  = `${{ steps.compare.outputs.top-deltas }}`;
+
+          const icon = verdict === 'promote' ? '✅' : verdict === 'rollback' ? '🚨' : 'ℹ️';
+
+          // Format delta with directional arrow: positive = improvement (less CPU)
+          let deltaStr = '';
+          if (delta) {
+            const d = parseFloat(delta);
+            const arrow = d > 0 ? '↑' : d < 0 ? '↓' : '→';
+            deltaStr = ` · cpu Δ \`${arrow}${Math.abs(d).toFixed(2)}%\``;
+          }
+
+          // Profile quality table
+          const qualityRows = [
+            `| quality_score | \`${score}\` |`,
+            `| valid         | \`${valid}\` |`,
+            `| samples       | \`${parseInt(samples).toLocaleString()}\` |`,
+            `| unique_stacks | \`${parseInt(uniqueStacks).toLocaleString()}\` |`,
+          ];
+          if (baseSamples && candSamples && baseSamples !== '0') {
+            qualityRows.push(`| baseline_samples  | \`${parseInt(baseSamples).toLocaleString()}\` |`);
+            qualityRows.push(`| candidate_samples | \`${parseInt(candSamples).toLocaleString()}\` |`);
+          }
+
+          // Top changed functions table
+          let topFuncsSection = '';
+          if (topDeltasRaw.trim()) {
+            const rows = topDeltasRaw.trim().split('\n').map(line => {
+              const [fn, base, cand, deltaCol] = line.split('|');
+              return `| \`${fn}\` | ${base} | ${cand} | ${deltaCol} |`;
+            });
+            topFuncsSection = [
+              '',
+              '#### Top changed functions',
+              '| function | baseline | candidate | delta |',
+              '|----------|----------|-----------|-------|',
+              ...rows,
+            ].join('\n');
+          }
+
+          // Errors/warnings
+          let errSection = '';
+          if (validateErrs) {
+            errSection = '\n\n> ⚠️ **Validate warnings:** ' + validateErrs;
+          }
 
           const body = [
             '### pgo-action summary',
             '',
             `${icon} **verdict** \`${verdict}\`${deltaStr}`,
-            `**quality_score** \`${score}\` (valid: \`${valid}\`)`,
             '',
-            'Artifact: `default.pgo` uploaded — use as `-pgo=default.pgo` in your build.',
+            '#### Profile quality',
+            '| metric | value |',
+            '|--------|-------|',
+            ...qualityRows,
+          ].join('\n') + topFuncsSection + errSection + [
+            '',
+            '',
+            `Artifact \`${{ inputs.artifact-name }}\`: \`cpu.pprof\` + \`default.pgo\` — use \`-pgo=default.pgo\` in your build.`,
           ].join('\n');
 
           const marker = '<!-- pgo-action-comment -->';

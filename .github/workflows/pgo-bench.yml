@@ -37,19 +37,19 @@ jobs:
         id: profile
         run: |
           if [ -f testdata/prometheus_cpu.pprof ]; then
-            echo "found=true" >> $GITHUB_OUTPUT
+            echo "found=true" >> "$GITHUB_OUTPUT"
             echo "Profile found: testdata/prometheus_cpu.pprof"
           else
-            echo "found=false" >> $GITHUB_OUTPUT
+            echo "found=false" >> "$GITHUB_OUTPUT"
             echo "::warning::testdata/prometheus_cpu.pprof not found — run profile-collect workflow first."
           fi
 
       - name: Skip if no profile
         if: steps.profile.outputs.found != 'true'
         run: |
-          echo "## PGO Benchmark: skipped" >> $GITHUB_STEP_SUMMARY
+          echo "## PGO Benchmark: skipped" >> "$GITHUB_STEP_SUMMARY"
           echo "No \`testdata/prometheus_cpu.pprof\` present. Run the *Profile Collect* workflow, " \
-               "then commit the artifact to \`testdata/\` and re-trigger." >> $GITHUB_STEP_SUMMARY
+               "then commit the artifact to \`testdata/\` and re-trigger." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build pgoctl binary
         if: steps.profile.outputs.found == 'true'
@@ -213,10 +213,10 @@ jobs:
           } >> /tmp/bench-report.md
 
           for name in tsdb promql storage chunkenc labels; do
-            echo "### ${name}" | tee -a /tmp/bench-report.md >> $GITHUB_STEP_SUMMARY
+            echo "### ${name}" | tee -a /tmp/bench-report.md >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> /tmp/bench-report.md
             benchstat /tmp/bench/${name}-baseline.txt /tmp/bench/${name}-pgo.txt \
-              2>&1 | tee -a /tmp/bench-report.md | tee -a $GITHUB_STEP_SUMMARY || true
+              2>&1 | tee -a /tmp/bench-report.md | tee -a "$GITHUB_STEP_SUMMARY" || true
             echo '```' >> /tmp/bench-report.md
             echo "" >> /tmp/bench-report.md
           done
