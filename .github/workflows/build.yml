@@ -29,11 +29,13 @@ jobs:
         run: go vet ./...
 
       - name: Test
+        shell: bash
         run: |
           COVERPKG=$(go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$' | paste -sd,)
+          mapfile -t PKGS < <(go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$')
           go test -coverprofile=coverage.out -covermode=atomic \
-            -coverpkg=$COVERPKG \
-            $(go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$')
+            -coverpkg="$COVERPKG" \
+            "${PKGS[@]}"
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
