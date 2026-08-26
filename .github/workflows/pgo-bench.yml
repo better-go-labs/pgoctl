@@ -205,21 +205,63 @@ jobs:
         if: steps.profile.outputs.found == 'true'
         run: |
           : > /tmp/bench-report.md
+          : > /tmp/bench-summary.md
+
+          # Build per-package benchstat output first, extract geomean lines for top table
+          for name in tsdb promql storage chunkenc labels; do
+            benchstat /tmp/bench/${name}-baseline.txt /tmp/bench/${name}-pgo.txt \
+              > /tmp/bench/${name}-stat.txt 2>&1 || true
+          done
+
+          # Top-level geomean summary table (always visible)
           {
             echo "## PGO Benchmark — baseline vs PGO"
             echo ""
-            echo "_10 interleaved rounds, GOMAXPROCS=2, benchtime=200ms. Signal check: looking for ≥2–3% geomean improvement at p<0.05._"
+            echo "_10 interleaved rounds, GOMAXPROCS=2, benchtime=200ms. Signal: ≥2–3% geomean at p<0.05._"
+            echo ""
+            echo "| Package | geomean Δ | p-value |"
+            echo "|---------|-----------|---------|"
+            for name in tsdb promql storage chunkenc labels; do
+              geomean=$(grep -m1 "geomean" /tmp/bench/${name}-stat.txt 2>/dev/null || echo "")
+              if [ -n "$geomean" ]; then
+                delta=$(echo "$geomean" | awk '{print $3}' 2>/dev/null || echo "—")
+                pval=$(echo "$geomean"  | awk '{print $NF}' 2>/dev/null || echo "—")
+              else
+                delta="—"; pval="—"
+              fi
+              echo "| \`${name}\` | ${delta} | ${pval} |"
+            done
             echo ""
           } >> /tmp/bench-report.md
 
+          # Per-package collapsible sections
           for name in tsdb promql storage chunkenc labels; do
-            echo "### ${name}" | tee -a /tmp/bench-report.md >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> /tmp/bench-report.md
-            benchstat /tmp/bench/${name}-baseline.txt /tmp/bench/${name}-pgo.txt \
-              2>&1 | tee -a /tmp/bench-report.md | tee -a "$GITHUB_STEP_SUMMARY" || true
-            echo '```' >> /tmp/bench-report.md
-            echo "" >> /tmp/bench-report.md
+            {
+              echo "<details>"
+              echo "<summary><strong>${name}</strong> — click to expand benchstat output</summary>"
+              echo ""
+              echo '```'
+              cat /tmp/bench/${name}-stat.txt
+              echo '```'
+              echo ""
+              echo "</details>"
+              echo ""
+            } >> /tmp/bench-report.md
           done
+
+          # Job summary gets the full flat output (not PR comment, no collapsible needed)
+          {
+            echo "## PGO Benchmark — baseline vs PGO"
+            echo "_10 interleaved rounds, GOMAXPROCS=2, benchtime=200ms._"
+            echo ""
+            for name in tsdb promql storage chunkenc labels; do
+              echo "### ${name}"
+              echo '```'
+              cat /tmp/bench/${name}-stat.txt
+              echo '```'
+              echo ""
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
           echo "----- rendered report -----"
           cat /tmp/bench-report.md
