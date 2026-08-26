@@ -19,7 +19,7 @@ permissions:
   actions: read
 
 jobs:
-  # ── Job 1: fixture-pipeline ──────────────────────────────────────────────────
+  # ── Job 1: fixture-pipeline ───────────────────────────────────────────────────────
   # Covers: A (profile-file input), B (compare/verdict neutral), E (previous-profile merge).
   # Generates real pprof at runtime via a short pprof server collect (LFS files have no content).
   fixture-pipeline:
@@ -96,8 +96,9 @@ jobs:
             { echo "expected neutral, got: ${{ steps.run.outputs.verdict }}"; exit 1; }
           test -s "${{ steps.run.outputs.profile-path }}"
           test -s "${{ steps.run.outputs.artifact-path }}"
+          test -n "${{ steps.run.outputs.explain-top-functions }}" || { echo "empty explain output"; exit 1; }
 
-  # ── Job 2: artifact-roundtrip ────────────────────────────────────────────────
+  # ── Job 2: artifact-roundtrip ─────────────────────────────────────────────────
   # Covers: D (upload/download round-trip).
   # Verifies both cpu.pprof and default.pgo are non-empty after download.
   artifact-roundtrip:
@@ -184,7 +185,7 @@ jobs:
             --jq '[.[] | select(.body | contains("<!-- pgo-action-comment -->"))] | length')
           [ "$count" -eq 1 ] || { echo "Expected 1 comment, got $count"; exit 1; }
 
-  # ── Job 4: pprof-collect ─────────────────────────────────────────────────────
+  # ── Job 4: pprof-collect ────────────────────────────────────────────────────────
   # Covers: G (live pprof collect wiring inside the composite action).
   # Starts a CPU-burning pprof server, runs the action via pprof-url, asserts
   # the resulting profile is non-empty.
