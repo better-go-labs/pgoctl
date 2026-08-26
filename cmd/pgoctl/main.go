@@ -26,7 +26,7 @@ var (
 
 var jsonOutput bool
 
-func main() {
+func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "pgoctl",
 		Short:         "PGO profile management for Go applications",
@@ -40,8 +40,15 @@ func main() {
 	root.AddCommand(newCompareCmd())
 	root.AddCommand(newCollectCmd())
 	root.AddCommand(newExplainCmd())
-	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	return root
+}
+
+func main() {
+	if err := newRootCmd().Execute(); err != nil {
+		if code, ok := isExitError(err); ok {
+			os.Exit(code)
+		}
+		// cobra parse/usage error — already printed by cobra
 		os.Exit(2)
 	}
 }
@@ -73,12 +80,12 @@ func newValidateCmd() *cobra.Command {
 			v, err := newViper(cmd)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %s\n", err)
-				os.Exit(2)
+				return &exitError{2, err}
 			}
 			cfg, err := resolveConfig(cmd, v, validateConfigFlags)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %s\n", err)
-				os.Exit(2)
+				return &exitError{2, err}
 			}
 			// Apply env/config values to flags not set explicitly on the CLI.
 			var configErrs []string
@@ -140,13 +147,13 @@ func newValidateCmd() *cobra.Command {
 			if len(configErrs) > 0 {
 				fmt.Fprintf(os.Stderr, "error: invalid env/config value for %s\n",
 					strings.Join(configErrs, ", "))
-				os.Exit(2)
+				return &exitError{code: 2}
 			}
 
 			gates, err := validate.ParsePackageShareGates(minPackageShare)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %s\n", err)
-				os.Exit(2)
+				return &exitError{2, err}
 			}
 			opts := validate.Options{
 				MinSamples:         minSamples,
@@ -169,13 +176,13 @@ func newValidateCmd() *cobra.Command {
 				} else {
 					fmt.Fprintf(os.Stderr, "error: %s\n", err)
 				}
-				os.Exit(2)
+				return &exitError{code: 2}
 			}
 
 			printQualityReport(report, jsonOutput)
 
 			if !report.Valid {
-				os.Exit(1)
+				return &exitError{code: 1}
 			}
 			return nil
 		},
@@ -219,13 +226,13 @@ func newMergeCmd() *cobra.Command {
 				data, err := os.ReadFile(path) //nolint:gosec
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "error: read %s: %s\n", path, err)
-					os.Exit(2)
+					return &exitError{2, err}
 				}
 				// Capture time comes from the profile itself (p.TimeNanos), not time.Now().
 				p, err := profile.ParseData(data)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "error: parse %s: %s\n", path, err)
-					os.Exit(2)
+					return &exitError{2, err}
 				}
 				inputs[i] = merge.Input{Data: data, CapturedAt: time.Unix(0, p.TimeNanos)}
 			}
@@ -233,7 +240,7 @@ func newMergeCmd() *cobra.Command {
 			var buf bytes.Buffer
 			if err := merge.Profiles(inputs, opts, &buf); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %s\n", err)
-				os.Exit(1)
+				return &exitError{1, err}
 			}
 
 			var dst *os.File
@@ -243,14 +250,14 @@ func newMergeCmd() *cobra.Command {
 				f, err := os.Create(out) //nolint:gosec
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "error: create %s: %s\n", out, err)
-					os.Exit(2)
+					return &exitError{2, err}
 				}
 				defer func() { _ = f.Close() }()
 				dst = f
 			}
 			if _, err := dst.Write(buf.Bytes()); err != nil {
 				fmt.Fprintf(os.Stderr, "error: write: %s\n", err)
-				os.Exit(2)
+				return &exitError{2, err}
 			}
 			if out != "-" {
 				fmt.Fprintf(os.Stderr, "merged %d profile(s) → %s (%d bytes)\n",
@@ -309,7 +316,7 @@ BOTH profiles before comparing (default 0 = no filtering).`,
 				} else {
 					fmt.Fprintf(os.Stderr, "error: %s\n", err)
 				}
-				os.Exit(2)
+				return &exitError{code: 2}
 			}
 			if jsonOutput {
 				enc := json.NewEncoder(os.Stdout)
@@ -334,7 +341,7 @@ BOTH profiles before comparing (default 0 = no filtering).`,
 				_ = w.Flush()
 			}
 			if rpt.Verdict == compare.Rollback {
-				os.Exit(1)
+				return &exitError{code: 1}
 			}
 			return nil
 		},

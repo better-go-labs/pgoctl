@@ -62,6 +62,10 @@ inputs:
     description: 'Auto-download the most recent successful artifact of this name and use it as the previous profile.'
     required: false
     default: 'false'
+  explain-top-n:
+    description: 'Number of top functions to include in PR comment from pgoctl explain'
+    required: false
+    default: '5'
 
 outputs:
   verdict:
@@ -76,11 +80,32 @@ outputs:
   validate-score:
     description: 'Quality score from pgoctl validate (0.0–1.0)'
     value: ${{ steps.validate.outputs.score }}
+  samples:
+    description: 'Number of CPU samples in the collected profile'
+    value: ${{ steps.validate.outputs.samples }}
+  unique-stacks:
+    description: 'Number of unique call stacks in the collected profile'
+    value: ${{ steps.validate.outputs.unique-stacks }}
+  cpu-delta:
+    description: 'Weighted CPU delta % vs baseline (positive = improvement)'
+    value: ${{ steps.compare.outputs.delta }}
+  explain-top-functions:
+    description: 'Top CPU functions from pgoctl explain (newline-separated: function|flat_pct)'
+    value: ${{ steps.explain.outputs.top-functions }}
+  explain-packages:
+    description: 'Hot packages from pgoctl explain (newline-separated: package|total_pct)'
+    value: ${{ steps.explain.outputs.packages }}
+  explain-verdict-reason:
+    description: 'Plain-English verdict reason from pgoctl explain'
+    value: ${{ steps.explain.outputs.verdict-reason }}
+  explain-duration-sec:
+    description: 'Profile duration in seconds from pgoctl explain'
+    value: ${{ steps.explain.outputs.duration-sec }}
 
 runs:
   using: 'composite'
   steps:
-    # ── install pgoctl ───────────────────────────────────────────────────
+    # ── install pgoctl ────────────────────────────────────────
     - name: Install pgoctl
       shell: bash
       run: |
@@ -93,7 +118,7 @@ runs:
           echo "$RUNNER_TOOL_CACHE" >> "$GITHUB_PATH"
         fi
 
-    # ── collect or copy profile ───────────────────────────────────────
+    # ── collect or copy profile ─────────────────────────────────
     - name: Collect profile
       id: collect
       shell: bash
@@ -112,7 +137,8 @@ runs:
           echo "Collecting ${{ inputs.duration }}s CPU profile from ${{ inputs.pprof-url }}"
           pgoctl collect \
             --source=pprof \
-            --url="${{ inputs.pprof-url }}/debug/pprof/profile?seconds=${{ inputs.duration }}" \
+            --url="${{ inputs.pprof-url }}/debug/pprof/profile" \
+            --window="${{ inputs.duration }}s" \
             --out=cpu.pprof
         else
           echo "Error: one of profile-file, parca-url, or pprof-url must be provided" >&2
@@ -120,7 +146,7 @@ runs:
         fi
         echo "profile=cpu.pprof" >> "$GITHUB_OUTPUT"
 
-    # ── validate ─────────────────────────────────────────────────────────
+    # ── validate ─────────────────────────────────────────────────────
     - name: Validate profile
       id: validate
       shell: bash
@@ -131,8 +157,14 @@ runs:
         echo "$out"
         score=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('quality_score',0))" 2>/dev/null || echo "0")
         valid=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('valid',False))" 2>/dev/null || echo "False")
+        samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('samples',0))" 2>/dev/null || echo "0")
+        stacks=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('unique_stacks',0))" 2>/dev/null || echo "0")
+        errors=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('errors',[])))" 2>/dev/null || echo "")
         echo "score=$score" >> "$GITHUB_OUTPUT"
         echo "valid=$valid" >> "$GITHUB_OUTPUT"
+        echo "samples=$samples" >> "$GITHUB_OUTPUT"
+        echo "unique-stacks=$stacks" >> "$GITHUB_OUTPUT"
+        echo "validate-errors=$errors" >> "$GITHUB_OUTPUT"
         if [[ $exit_code -eq 1 ]]; then
           echo "::warning::Profile did not pass the quality gate (score=$score). PGO artifact will still be produced."
         elif [[ $exit_code -ne 0 ]]; then
@@ -177,7 +209,7 @@ runs:
         fi
         echo "artifact=default.pgo" >> "$GITHUB_OUTPUT"
 
-    # ── resolve output paths ──────────────────────────────────────────────────
+    # ── resolve output paths ──────────────────────────────────────────────
     - name: Set output paths
       id: paths
       shell: bash
@@ -205,15 +237,50 @@ runs:
         echo "$out"
         verdict=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('verdict',''))" 2>/dev/null || echo "")
         delta=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary_cpu_delta_pct',0))" 2>/dev/null || echo "0")
+        base_samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('baseline_samples',0))" 2>/dev/null || echo "0")
+        cand_samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('candidate_samples',0))" 2>/dev/null || echo "0")
+        top_deltas=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print('\n'.join('{0}|{1:.1f}%|{2:.1f}%|{3:+.1f}%'.format(f['function'],f['base_pct'],f['cand_pct'],f['delta_pct']) for f in d.get('top_deltas',[])[:5]))" 2>/dev/null || echo "")
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
         echo "delta=$delta" >> "$GITHUB_OUTPUT"
+        echo "baseline-samples=$base_samples" >> "$GITHUB_OUTPUT"
+        echo "candidate-samples=$cand_samples" >> "$GITHUB_OUTPUT"
+        {
+          echo "top-deltas<<EOF_TOP"
+          echo "$top_deltas"
+          echo "EOF_TOP"
+        } >> "$GITHUB_OUTPUT"
         if [[ $exit_code -eq 1 ]]; then
           echo "::warning::Rollback verdict — CPU regression detected (delta=$delta%)"
         elif [[ $exit_code -ne 0 ]]; then
           exit $exit_code
         fi
 
-    # ── upload artifact ─────────────────────────────────────────────────────
+    # ── explain profile ────────────────────────────────────────────────────
+    - name: Explain profile
+      id: explain
+      shell: bash
+      run: |
+        set +e
+        out=$(pgoctl explain --format json --top "${{ inputs.explain-top-n }}" default.pgo 2>&1)
+        exit_code=$?
+        echo "$out"
+        if [[ $exit_code -ne 0 ]]; then
+          echo "top-functions=" >> "$GITHUB_OUTPUT"
+          echo "packages=" >> "$GITHUB_OUTPUT"
+          echo "verdict-reason=" >> "$GITHUB_OUTPUT"
+          echo "duration-sec=" >> "$GITHUB_OUTPUT"
+        else
+          top_funcs=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print('\n'.join('|'.join([str(f['function']), '{:.2f}%'.format(f['flat_pct'])]) for f in d.get('top_functions',[])))" 2>/dev/null || echo "")
+          packages=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print('\n'.join('|'.join([g['package'], '{:.2f}%'.format(g['total_pct'])]) for g in d.get('package_groups',[])))" 2>/dev/null || echo "")
+          reason=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('verdict_reason',''))" 2>/dev/null || echo "")
+          duration=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('duration_sec',0))" 2>/dev/null || echo "")
+          { echo "top-functions<<EOF_TF"; echo "$top_funcs"; echo "EOF_TF"; } >> "$GITHUB_OUTPUT"
+          { echo "packages<<EOF_PKG"; echo "$packages"; echo "EOF_PKG"; } >> "$GITHUB_OUTPUT"
+          echo "verdict-reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "duration-sec=$duration" >> "$GITHUB_OUTPUT"
+        fi
+
+    # ── upload artifact ─────────────────────────────────────────────────
     - name: Upload PGO artifact
       if: inputs.upload-artifact == 'true'
       uses: actions/upload-artifact@v4
@@ -224,51 +291,159 @@ runs:
           default.pgo
         retention-days: 30
 
-    # ── comment on PR ────────────────────────────────────────────────────────────
+    # ── comment on PR ──────────────────────────────────────────────────────────
     - name: Comment on PR
       if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       uses: actions/github-script@v7
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const verdict  = '${{ steps.compare.outputs.verdict }}' || (${{ steps.restore.outputs.has-previous }} ? 'n/a (bootstrap — first run)' : 'n/a (no baseline)');
-          const delta    = '${{ steps.compare.outputs.delta }}' || '';
-          const score    = '${{ steps.validate.outputs.score }}';
-          const valid    = '${{ steps.validate.outputs.valid }}';
-          const icon     = verdict === 'promote' ? '✅' : verdict === 'rollback' ? '🚨' : 'ℹ️';
-          const deltaStr = delta ? ` | cpu_delta_pct \`${parseFloat(delta).toFixed(2)}%\`` : '';
+          const verdict       = '${{ steps.compare.outputs.verdict }}';
+          const delta         = parseFloat('${{ steps.compare.outputs.delta }}' || '0');
+          const score         = '${{ steps.validate.outputs.score }}';
+          const valid         = '${{ steps.validate.outputs.valid }}';
+          const samples       = parseInt('${{ steps.validate.outputs.samples }}' || '0');
+          const uniqueStacks  = parseInt('${{ steps.validate.outputs.unique-stacks }}' || '0');
+          const validateErrs  = '${{ steps.validate.outputs.validate-errors }}';
+          const baseSamples   = '${{ steps.compare.outputs.baseline-samples }}';
+          const candSamples   = '${{ steps.compare.outputs.candidate-samples }}';
+          const topDeltasRaw  = `${{ steps.compare.outputs.top-deltas }}`;
+          const topFuncsRaw   = `${{ steps.explain.outputs.top-functions }}`;
+          const packagesRaw   = `${{ steps.explain.outputs.packages }}`;
+          const verdictReason = '${{ steps.explain.outputs.verdict-reason }}';
+          const durationSec   = '${{ steps.explain.outputs.duration-sec }}';
 
-          const body = [
-            '### pgo-action summary',
-            '',
-            `${icon} **verdict** \`${verdict}\`${deltaStr}`,
-            `**quality_score** \`${score}\` (valid: \`${valid}\`)`,
-            '',
-            'Artifact: `default.pgo` uploaded — use as `-pgo=default.pgo` in your build.',
-          ].join('\n');
+          // Verdict badge
+          let verdictLine;
+          if (verdict === 'promote') {
+            verdictLine = `✅ **promote** — CPU improved by \`${Math.abs(delta).toFixed(2)}%\``;
+          } else if (verdict === 'rollback') {
+            verdictLine = `🚨 **rollback** — CPU regressed by \`${Math.abs(delta).toFixed(2)}%\``;
+          } else if (verdict === 'neutral') {
+            verdictLine = `➡️ **neutral** — within threshold (Δ \`${delta > 0 ? '+' : ''}${delta.toFixed(2)}%\`)`;
+          } else {
+            verdictLine = `ℹ️ **no comparison** — baseline not provided`;
+          }
+
+          // Summary table
+          const durationRow = durationSec ? `| duration | \`${parseFloat(durationSec).toFixed(1)}s\` |` : '';
+          const deltaRow = verdict ? `| cpu Δ vs baseline | \`${delta > 0 ? '↑' : delta < 0 ? '↓' : '→'}${Math.abs(delta).toFixed(2)}%\` |` : '';
+          const summaryTable = [
+            '| metric | value |',
+            '|--------|-------|',
+            `| quality score | \`${score}\` · valid \`${valid}\` |`,
+            `| samples | \`${samples.toLocaleString()}\` · \`${uniqueStacks.toLocaleString()}\` unique stacks |`,
+            durationRow,
+            deltaRow,
+          ].filter(Boolean).join('\n');
+
+          // Top CPU consumers (from explain)
+          let topFuncsSection = '';
+          if (topFuncsRaw.trim()) {
+            const rows = topFuncsRaw.trim().split('\n').map((line, i) => {
+              const [fn, pct] = line.split('|');
+              return `| ${i + 1} | \`${fn}\` | ${pct} |`;
+            });
+            topFuncsSection = [
+              '',
+              '#### 📊 Top CPU consumers',
+              '| # | Function | Flat % |',
+              '|---|----------|--------|',
+              ...rows,
+            ].join('\n');
+          }
+
+          // Hot packages (collapsible)
+          let packagesSection = '';
+          if (packagesRaw.trim()) {
+            const rows = packagesRaw.trim().split('\n').map(line => {
+              const [pkg, pct] = line.split('|');
+              return `| \`${pkg}\` | ${pct} |`;
+            });
+            packagesSection = [
+              '',
+              '<details>',
+              '<summary>🗂 Hot packages</summary>',
+              '',
+              '| Package | Total CPU % |',
+              '|---------|-------------|',
+              ...rows,
+              '',
+              '</details>',
+            ].join('\n');
+          }
+
+          // Delta vs baseline (collapsible)
+          let topDeltasSection = '';
+          if (topDeltasRaw.trim()) {
+            const rows = topDeltasRaw.trim().split('\n').map(line => {
+              const [fn, base, cand, d] = line.split('|');
+              return `| \`${fn}\` | ${base} | ${cand} | ${d} |`;
+            });
+            topDeltasSection = [
+              '',
+              '<details>',
+              '<summary>Δ vs baseline — top changed functions</summary>',
+              '',
+              '| Function | Baseline | Candidate | Delta |',
+              '|----------|----------|-----------|-------|',
+              ...rows,
+              '',
+              '</details>',
+            ].join('\n');
+          }
+
+          // Verdict reason prose (from explain)
+          const verdictReasonSection = verdictReason
+            ? `\n\n> ${verdictReason}`
+            : '';
+
+          // Validate errors
+          const errSection = validateErrs
+            ? `\n\n> ⚠️ **Validate warnings:** ${validateErrs}`
+            : '';
 
           const marker = '<!-- pgo-action-comment -->';
-          const fullBody = marker + '\n' + body;
+          const body = [
+            marker,
+            '## 🔬 PGO Profile Report',
+            '',
+            verdictLine,
+            '',
+            '#### Profile summary',
+            summaryTable,
+          ].join('\n')
+            + verdictReasonSection
+            + topFuncsSection
+            + packagesSection
+            + topDeltasSection
+            + errSection
+            + [
+              '',
+              '',
+              '---',
+              `Artifact \`${{ inputs.artifact-name }}\`: \`cpu.pprof\` + \`default.pgo\` — use \`-pgo=default.pgo\` in your build.`,
+            ].join('\n');
 
+          // Find-and-update or create
           const { data: comments } = await github.rest.issues.listComments({
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: context.issue.number,
           });
-
           const existing = comments.find(c => c.body.includes(marker));
           if (existing) {
             await github.rest.issues.updateComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               comment_id: existing.id,
-              body: fullBody,
+              body,
             });
           } else {
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: fullBody,
+              body,
             });
           }

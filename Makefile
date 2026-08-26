@@ -1,4 +1,6 @@
-.PHONY: build baseline-bin kind-up kind-down collect-baseline load-prometheus test vet smoke demo clean
+.PHONY: build baseline-bin kind-up kind-down collect-baseline load-prometheus test vet smoke demo clean cover
+
+COVERPKG := $(shell go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$$' | paste -sd,)
 
 BIN          := bin/pgoctl
 BASELINE_BIN := bin/baseline
@@ -45,3 +47,9 @@ vet:
 
 clean:
 	rm -rf bin/
+
+cover:
+	go test -covermode=set -coverpkg=$(COVERPKG) \
+	$(shell go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$$') \
+	-coverprofile=coverage.out
+	go tool cover -func=coverage.out | tail -1

@@ -1,0 +1,251 @@
+# NOTE: The pr-comment job requires pull-requests:write. Fork PRs will get a
+# 403 on the comment step — this is expected; document it as a known limitation.
+name: e2e / pgo-action
+
+on:
+  pull_request:
+    paths:
+      - '.github/actions/pgo-action/**'
+      - 'cmd/**'
+      - 'internal/**'
+      - '.github/workflows/e2e-action.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # weekly; reserved for deferred parca + dawidd6 jobs
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  # ── Job 1: fixture-pipeline ───────────────────────────────────────────────────────
+  # Covers: A (profile-file input), B (compare/verdict neutral), E (previous-profile merge).
+  # Generates real pprof at runtime via a short pprof server collect (LFS files have no content).
+  fixture-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Build pgoctl and generate fixture profile
+        run: |
+          go build -o /tmp/pgoctl ./cmd/pgoctl
+          echo /tmp >> "$GITHUB_PATH"
+
+          # Spin up a pprof server with real CPU load to generate a rich profile.
+          cat > /tmp/pprof_gen.go << 'EOF'
+          package main
+          import (
+            "net/http"
+            _ "net/http/pprof"
+            "runtime"
+          )
+          func main() {
+            for i := 0; i < runtime.NumCPU(); i++ {
+              go func() {
+                x := uint64(0)
+                for { x++ }
+              }()
+            }
+            http.ListenAndServe(":6060", nil)
+          }
+          EOF
+          go run /tmp/pprof_gen.go &
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:6060/debug/pprof/ >/dev/null 2>&1; then
+              echo "pprof server ready after ${i}s"
+              break
+            fi
+            [ "$i" -eq 15 ] && { echo "pprof server did not become ready"; exit 1; }
+            sleep 1
+          done
+
+          mkdir -p testdata/fixtures
+          /tmp/pgoctl collect \
+            --source=pprof \
+            --url=http://localhost:6060/debug/pprof/profile \
+            --window=10s \
+            --out=testdata/fixtures/cpu.pprof
+
+          # cpu-prev: same profile → neutral verdict (0% delta vs baseline)
+          cp testdata/fixtures/cpu.pprof testdata/fixtures/cpu-prev.pprof
+
+          # baseline.pgo from a single-profile merge
+          /tmp/pgoctl merge testdata/fixtures/cpu.pprof --out=testdata/fixtures/baseline.pgo
+
+      - id: run
+        uses: ./.github/actions/pgo-action
+        with:
+          profile-file: testdata/fixtures/cpu.pprof
+          baseline-profile: testdata/fixtures/baseline.pgo
+          previous-profile: testdata/fixtures/cpu-prev.pprof
+          upload-artifact: 'true'
+          comment-on-pr: 'false'
+          artifact-name: pgo-e2e-fixture
+
+      - name: assert outputs
+        run: |
+          test -n "${{ steps.run.outputs.verdict }}"        || { echo "empty verdict"; exit 1; }
+          test -n "${{ steps.run.outputs.validate-score }}" || { echo "empty score"; exit 1; }
+          case "${{ steps.run.outputs.verdict }}" in
+            promote|neutral|rollback) ;;
+            *) echo "unexpected verdict: ${{ steps.run.outputs.verdict }}"; exit 1;;
+          esac
+          [ "${{ steps.run.outputs.verdict }}" = "neutral" ] || \
+            { echo "expected neutral, got: ${{ steps.run.outputs.verdict }}"; exit 1; }
+          test -s "${{ steps.run.outputs.profile-path }}"
+          test -s "${{ steps.run.outputs.artifact-path }}"
+          test -n "${{ steps.run.outputs.explain-top-functions }}" || { echo "empty explain output"; exit 1; }
+
+  # ── Job 2: artifact-roundtrip ─────────────────────────────────────────────────
+  # Covers: D (upload/download round-trip).
+  # Verifies both cpu.pprof and default.pgo are non-empty after download.
+  artifact-roundtrip:
+    needs: fixture-pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pgo-e2e-fixture
+          path: dl
+      - run: test -s dl/cpu.pprof && test -s dl/default.pgo
+
+  # ── Job 3: pr-comment ────────────────────────────────────────────────────────
+  # Covers: C (PR comment idempotency). Pull-request only.
+  # Runs the action twice; asserts exactly 1 comment with the action marker exists.
+  pr-comment:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read        # required for checkout
+      pull-requests: write  # required for PR comments
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Build pgoctl and generate fixture profile
+        run: |
+          go build -o /tmp/pgoctl ./cmd/pgoctl
+          echo /tmp >> "$GITHUB_PATH"
+
+          cat > /tmp/pprof_gen.go << 'EOF'
+          package main
+          import (
+            "net/http"
+            _ "net/http/pprof"
+            "runtime"
+          )
+          func main() {
+            for i := 0; i < runtime.NumCPU(); i++ {
+              go func() {
+                x := uint64(0)
+                for { x++ }
+              }()
+            }
+            http.ListenAndServe(":6060", nil)
+          }
+          EOF
+          go run /tmp/pprof_gen.go &
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:6060/debug/pprof/ >/dev/null 2>&1; then break; fi
+            [ "$i" -eq 15 ] && { echo "pprof server not ready"; exit 1; }
+            sleep 1
+          done
+
+          mkdir -p testdata/fixtures
+          /tmp/pgoctl collect \
+            --source=pprof \
+            --url=http://localhost:6060/debug/pprof/profile \
+            --window=10s \
+            --out=testdata/fixtures/cpu.pprof
+
+      - id: run1
+        uses: ./.github/actions/pgo-action
+        with:
+          profile-file: testdata/fixtures/cpu.pprof
+          comment-on-pr: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          upload-artifact: 'false'
+
+      - id: run2
+        uses: ./.github/actions/pgo-action
+        with:
+          profile-file: testdata/fixtures/cpu.pprof
+          comment-on-pr: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          upload-artifact: 'false'
+
+      - name: assert comment idempotency
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          count=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '[.[] | select(.body | contains("<!-- pgo-action-comment -->"))] | length')
+          [ "$count" -eq 1 ] || { echo "Expected 1 comment, got $count"; exit 1; }
+
+  # ── Job 4: pprof-collect ────────────────────────────────────────────────────────
+  # Covers: G (live pprof collect wiring inside the composite action).
+  # Starts a CPU-burning pprof server, runs the action via pprof-url, asserts
+  # the resulting profile is non-empty.
+  pprof-collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Start pprof server (CPU burner)
+        run: |
+          cat > /tmp/pprof_server.go << 'EOF'
+          package main
+          import (
+            "net/http"
+            _ "net/http/pprof"
+            "runtime"
+          )
+          func main() {
+            for i := 0; i < runtime.NumCPU(); i++ {
+              go func() {
+                x := uint64(0)
+                for { x++ }
+              }()
+            }
+            http.ListenAndServe(":6060", nil)
+          }
+          EOF
+          go run /tmp/pprof_server.go &
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:6060/debug/pprof/ >/dev/null 2>&1; then
+              echo "pprof server ready after ${i}s"
+              break
+            fi
+            [ "$i" -eq 10 ] && { echo "pprof server did not become ready"; exit 1; }
+            sleep 1
+          done
+
+      - id: run
+        uses: ./.github/actions/pgo-action
+        with:
+          pprof-url: http://localhost:6060
+          duration: '10'
+          upload-artifact: 'false'
+          comment-on-pr: 'false'
+
+      - name: assert collect output
+        run: test -s "${{ steps.run.outputs.profile-path }}"
