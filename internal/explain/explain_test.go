@@ -282,3 +282,90 @@ func TestPprofDataVsExplain(t *testing.T) {
 	assert.Equal(t, VerdictNotReady, rpt.Verdict)
 	assert.Contains(t, rpt.VerdictReason, "5 unique functions")
 }
+
+// TestAnalyzeFile_ParseError covers the profile.ParseData error path in AnalyzeFile.
+func TestAnalyzeFile_ParseError(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "bad.pprof")
+	require.NoError(t, os.WriteFile(bad, []byte("not a pprof file"), 0o600))
+	_, err := AnalyzeFile(bad, 10)
+	require.Error(t, err)
+}
+
+// TestCPUSampleIndex_FallbackPath covers the samples/count fallback branch
+// (fallback=i and return fallback,true) in cpuSampleIndex.
+func TestCPUSampleIndex_FallbackPath(t *testing.T) {
+	p := &profile.Profile{
+		SampleType: []*profile.ValueType{
+			{Type: "samples", Unit: "count"},
+		},
+	}
+	idx, ok := cpuSampleIndex(p)
+	assert.True(t, ok)
+	assert.Equal(t, 0, idx)
+}
+
+// TestCPUSampleIndex_NotFound covers the return -1,false path when the profile
+// has neither cpu/nanoseconds nor samples/count sample types.
+func TestCPUSampleIndex_NotFound(t *testing.T) {
+	p := &profile.Profile{
+		SampleType: []*profile.ValueType{
+			{Type: "alloc_space", Unit: "bytes"},
+		},
+	}
+	idx, ok := cpuSampleIndex(p)
+	assert.False(t, ok)
+	assert.Equal(t, -1, idx)
+}
+
+// TestAnalyze_EqualPackageTotals covers the alphabetical sort fallback (line 126)
+// triggered when two package groups have equal TotalPct.
+func TestAnalyze_EqualPackageTotals(t *testing.T) {
+	// Two functions in different packages, each with 50% of CPU time.
+	// After rounding, both package totals are equal → alphabetical sort kicks in.
+	samples := []struct {
+		fn    string
+		count int64
+	}{
+		{"pkg-beta.Func", 5000},
+		{"pkg-alpha.Func", 5000},
+	}
+	p := makeProfile(t, samples)
+	path := writeTmpProfile(t, p)
+
+	rpt, err := AnalyzeFile(path, 10)
+	require.NoError(t, err)
+	require.Len(t, rpt.PackageGroups, 2)
+	assert.Equal(t, "pkg-alpha", rpt.PackageGroups[0].Package)
+	assert.Equal(t, "pkg-beta", rpt.PackageGroups[1].Package)
+}
+
+// TestAnalyze_EmptyLocationSkipped covers the len(s.Location)==0 continue
+// branch in analyze.
+func TestAnalyze_EmptyLocationSkipped(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "cpu", Unit: "nanoseconds"}},
+		DurationNanos: 10 * 1e9,
+	}
+	fn := &profile.Function{ID: 1, Name: "runtime.main"}
+	loc := &profile.Location{ID: 1, Line: []profile.Line{{Function: fn}}}
+	p.Function = []*profile.Function{fn}
+	p.Location = []*profile.Location{loc}
+
+	p.Sample = []*profile.Sample{
+		{Location: []*profile.Location{loc}, Value: []int64{1000}},
+		{Location: []*profile.Location{}, Value: []int64{500}}, // empty location → skipped
+	}
+
+	rpt := analyze("test.pprof", p, 10)
+	require.NotNil(t, rpt)
+	assert.Equal(t, int64(2), rpt.TotalSamples)
+	require.Len(t, rpt.TopFunctions, 1)
+}
+
+// TestPackageFromFunction_EmptyResult covers the pkg=="" return-name branch
+// when the function name starts with a "." or "(" and has no package prefix.
+func TestPackageFromFunction_EmptyResult(t *testing.T) {
+	// ".init" has no slash, and IndexAny finds "." at position 0 → cut=0 → pkg=""
+	result := packageFromFunction(".init")
+	assert.Equal(t, ".init", result)
+}
