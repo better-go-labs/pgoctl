@@ -107,3 +107,134 @@ func TestFromParca_EmptyProfile(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "empty profile")
 }
+
+func TestFromParca_InvalidJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("invalid json {"))
+	}))
+	defer srv.Close()
+
+	opts := Options{
+		Source:    SourceParca,
+		ParcaAddr: srv.URL,
+		Query:     "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
+		Window:    5 * time.Minute,
+		End:       time.Now(),
+		Timeout:   5 * time.Second,
+	}
+	_, err := FromParca(opts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "decode response")
+}
+
+func TestFromParca_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(mergeResponse{
+			Code:    "INVALID_QUERY",
+			Message: "query failed",
+		})
+	}))
+	defer srv.Close()
+
+	opts := Options{
+		Source:    SourceParca,
+		ParcaAddr: srv.URL,
+		Query:     "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
+		Window:    5 * time.Minute,
+		End:       time.Now(),
+		Timeout:   5 * time.Second,
+	}
+	_, err := FromParca(opts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "INVALID_QUERY")
+}
+
+func TestFromParca_BadBase64(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(mergeResponse{
+			Pprof: "not-base64!!!",
+		})
+	}))
+	defer srv.Close()
+
+	opts := Options{
+		Source:    SourceParca,
+		ParcaAddr: srv.URL,
+		Query:     "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
+		Window:    5 * time.Minute,
+		End:       time.Now(),
+		Timeout:   5 * time.Second,
+	}
+	_, err := FromParca(opts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "decode pprof base64")
+}
+
+func TestFromParca_BadAddr(t *testing.T) {
+	opts := Options{
+		Source:    SourceParca,
+		ParcaAddr: "http://[invalid",
+		Query:     "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
+		Window:    5 * time.Minute,
+		End:       time.Now(),
+		Timeout:   5 * time.Second,
+	}
+	_, err := FromParca(opts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "parse addr")
+}
+
+func TestFromParca_ZeroEnd(t *testing.T) {
+	fakeData := []byte("FAKE_PPROF_DATA")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(mergeResponse{
+			Pprof: base64.StdEncoding.EncodeToString(fakeData),
+		})
+	}))
+	defer srv.Close()
+
+	opts := Options{
+		Source:    SourceParca,
+		ParcaAddr: srv.URL,
+		Query:     "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
+		Window:    5 * time.Minute,
+		End:       time.Time{}, // zero time should use time.Now()
+		Timeout:   5 * time.Second,
+	}
+	result, err := FromParca(opts)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, fakeData, result.Bytes)
+}
+
+func TestFromParca_ZeroTimeout(t *testing.T) {
+	fakeData := []byte("FAKE_PPROF_DATA")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(mergeResponse{
+			Pprof: base64.StdEncoding.EncodeToString(fakeData),
+		})
+	}))
+	defer srv.Close()
+
+	opts := Options{
+		Source:    SourceParca,
+		ParcaAddr: srv.URL,
+		Query:     "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
+		Window:    5 * time.Minute,
+		End:       time.Now(),
+		Timeout:   0, // zero timeout should use default
+	}
+	result, err := FromParca(opts)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}

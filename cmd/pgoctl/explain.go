@@ -30,7 +30,7 @@ Designed for interactive use: pipe through less or redirect to a file.`,
 			rpt, err := explain.AnalyzeFile(args[0], topN)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %s\n", err)
-				os.Exit(2)
+				return &exitError{2, err}
 			}
 
 			if format == "json" {
