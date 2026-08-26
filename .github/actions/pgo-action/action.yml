@@ -223,14 +223,7 @@ runs:
         delta=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary_cpu_delta_pct',0))" 2>/dev/null || echo "0")
         base_samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('baseline_samples',0))" 2>/dev/null || echo "0")
         cand_samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('candidate_samples',0))" 2>/dev/null || echo "0")
-        top_deltas=$(echo "$out" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-rows=[]
-for f in d.get('top_deltas',[])[:5]:
-    rows.append(f\"{f['function']}|{f['base_pct']:.1f}%|{f['cand_pct']:.1f}%|{f['delta_pct']:+.1f}%\")
-print('\\n'.join(rows))
-" 2>/dev/null || echo "")
+        top_deltas=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print('\n'.join('{0}|{1:.1f}%|{2:.1f}%|{3:+.1f}%'.format(f['function'],f['base_pct'],f['cand_pct'],f['delta_pct']) for f in d.get('top_deltas',[])[:5]))" 2>/dev/null || echo "")
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
         echo "delta=$delta" >> "$GITHUB_OUTPUT"
         echo "baseline-samples=$base_samples" >> "$GITHUB_OUTPUT"
