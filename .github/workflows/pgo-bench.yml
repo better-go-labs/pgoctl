@@ -234,20 +234,22 @@ jobs:
             echo ""
           } >> /tmp/bench-report.md
 
-          # Per-package collapsible sections
-          for name in tsdb promql storage chunkenc labels; do
-            {
-              echo "<details>"
-              echo "<summary><strong>${name}</strong> — click to expand benchstat output</summary>"
+          # Per-package collapsible section (single <details> for all packages)
+          {
+            echo "<details>"
+            echo "<summary>📦 Package-level breakdown (5 packages)</summary>"
+            echo ""
+            for name in tsdb promql storage chunkenc labels; do
+              echo "#### ${name}"
               echo ""
               echo '```'
               cat /tmp/bench/${name}-stat.txt
               echo '```'
               echo ""
-              echo "</details>"
-              echo ""
-            } >> /tmp/bench-report.md
-          done
+            done
+            echo "</details>"
+            echo ""
+          } >> /tmp/bench-report.md
 
           # Job summary gets the full flat output (not PR comment, no collapsible needed)
           {
