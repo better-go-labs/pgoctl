@@ -89,7 +89,7 @@ jobs:
 
       - name: Cache Go modules (Prometheus)
         if: steps.profile.outputs.found == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/go/pkg/mod
           key: prom-mod-${{ hashFiles('_prometheus/go.sum') }}
