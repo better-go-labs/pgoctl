@@ -21,27 +21,57 @@ permissions:
 jobs:
   # ── Job 1: fixture-pipeline ──────────────────────────────────────────────────
   # Covers: A (profile-file input), B (compare/verdict neutral), E (previous-profile merge).
-  # All zero-infra: uses committed LFS test fixtures; generates baseline.pgo at runtime.
+  # Generates real pprof at runtime via a short pprof server collect (LFS files have no content).
   fixture-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
           cache: true
 
-      - name: Build pgoctl and prepare fixtures
+      - name: Build pgoctl and generate fixture profile
         run: |
           go build -o /tmp/pgoctl ./cmd/pgoctl
           echo /tmp >> "$GITHUB_PATH"
+
+          # Spin up a pprof server to generate a real profile at runtime.
+          cat > /tmp/pprof_gen.go << 'EOF'
+          package main
+          import (
+            "net/http"
+            _ "net/http/pprof"
+            "runtime"
+          )
+          func main() {
+            go func() { for { runtime.Gosched() } }()
+            http.ListenAndServe(":6060", nil)
+          }
+          EOF
+          go run /tmp/pprof_gen.go &
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:6060/debug/pprof/ >/dev/null 2>&1; then
+              echo "pprof server ready after ${i}s"
+              break
+            fi
+            [ "$i" -eq 15 ] && { echo "pprof server did not become ready"; exit 1; }
+            sleep 1
+          done
+
           mkdir -p testdata/fixtures
-          cp testdata/cpu_valid.pprof testdata/fixtures/cpu.pprof
-          cp testdata/prometheus_cpu.pprof testdata/fixtures/cpu-prev.pprof
+          /tmp/pgoctl collect \
+            --source=pprof \
+            --url=http://localhost:6060/debug/pprof/profile \
+            --window=10s \
+            --out=testdata/fixtures/cpu.pprof
+
+          # cpu-prev: same profile → neutral verdict (0% delta vs baseline)
+          cp testdata/fixtures/cpu.pprof testdata/fixtures/cpu-prev.pprof
+
+          # baseline.pgo from a single-profile merge
           /tmp/pgoctl merge testdata/fixtures/cpu.pprof --out=testdata/fixtures/baseline.pgo
 
       - id: run
@@ -87,25 +117,48 @@ jobs:
   pr-comment:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
-      pull-requests: write
+      contents: read        # required for checkout
+      pull-requests: write  # required for PR comments
     steps:
       - uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
           cache: true
 
-      - name: Build pgoctl and prepare fixtures
+      - name: Build pgoctl and generate fixture profile
         run: |
           go build -o /tmp/pgoctl ./cmd/pgoctl
           echo /tmp >> "$GITHUB_PATH"
+
+          cat > /tmp/pprof_gen.go << 'EOF'
+          package main
+          import (
+            "net/http"
+            _ "net/http/pprof"
+            "runtime"
+          )
+          func main() {
+            go func() { for { runtime.Gosched() } }()
+            http.ListenAndServe(":6060", nil)
+          }
+          EOF
+          go run /tmp/pprof_gen.go &
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:6060/debug/pprof/ >/dev/null 2>&1; then break; fi
+            [ "$i" -eq 15 ] && { echo "pprof server not ready"; exit 1; }
+            sleep 1
+          done
+
           mkdir -p testdata/fixtures
-          cp testdata/cpu_valid.pprof testdata/fixtures/cpu.pprof
+          /tmp/pgoctl collect \
+            --source=pprof \
+            --url=http://localhost:6060/debug/pprof/profile \
+            --window=10s \
+            --out=testdata/fixtures/cpu.pprof
 
       - id: run1
         uses: ./.github/actions/pgo-action
