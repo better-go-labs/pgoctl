@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
 
@@ -29,7 +29,15 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -covermode=atomic ./...
+
+      - name: Coverage
+        shell: bash
+        run: |
+          COVERPKG=$(go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$' | paste -sd,)
+          mapfile -t PKGS < <(go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$')
+          go test -covermode=atomic -coverpkg="$COVERPKG" -coverprofile=coverage.out \
+            "${PKGS[@]}"
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
