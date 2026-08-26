@@ -1,0 +1,81 @@
+name: Bug Report
+description: Report a bug in pgoctl
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill out the
+        fields below so we can reproduce and fix the issue.
+
+        > Do **not** report security vulnerabilities here. See our
+        > [Security Policy](https://github.com/better-go-labs/pgoctl/security/policy).
+  - type: input
+    id: title
+    attributes:
+      label: Summary
+      description: A short, clear summary of the bug.
+      placeholder: pgoctl panics when fetching an empty profile
+    validations:
+      required: true
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Output of `go version`.
+      placeholder: go1.22.3 linux/amd64
+    validations:
+      required: true
+  - type: input
+    id: pgoctl-version
+    attributes:
+      label: pgoctl version
+      description: Output of `pgoctl version` (or the commit SHA you built from).
+      placeholder: v0.3.1
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Give us a minimal, reliable set of steps to reproduce the behavior.
+      placeholder: |
+        1. Run `pgoctl ...`
+        2. Point it at ...
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / output
+      description: Paste any relevant log output. This will be automatically formatted as code.
+      render: shell
+    validations:
+      required: false
