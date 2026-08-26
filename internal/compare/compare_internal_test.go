@@ -16,7 +16,7 @@ func TestFlatPercents_EmptyAndZeroSamples(t *testing.T) {
 		Function:   []*profile.Function{fn},
 		Location:   []*profile.Location{loc},
 		Sample: []*profile.Sample{
-			{Location: nil, Value: nil},                            // hits empty-location/value continue
+			{Location: nil, Value: nil},                             // hits empty-location/value continue
 			{Location: []*profile.Location{loc}, Value: []int64{0}}, // total stays 0 → early return
 		},
 	}

@@ -155,7 +155,7 @@ func TestResolveConfig_CLIFlag(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("test-flag", "default", "test flag")
 	cmd.Root()
-	cmd.Flags().Set("test-flag", "from-cli")
+	require.NoError(t, cmd.Flags().Set("test-flag", "from-cli"))
 
 	v, err := newViper(cmd)
 	require.NoError(t, err)
