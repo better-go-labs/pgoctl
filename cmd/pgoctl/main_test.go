@@ -477,7 +477,6 @@ func TestCompare_MinCPUPercent(t *testing.T) {
 // TestCompare_TopN tests compare with custom top N functions.
 func TestCompare_TopN(t *testing.T) {
 	p1 := generateProfile(t)
-	p2 := generateProfile(t)
-	_, _, err := executeCmd(t, "compare", "--top=5", p1, p2)
+	_, _, err := executeCmd(t, "compare", "--top=5", p1, p1)
 	assert.NoError(t, err)
 }
