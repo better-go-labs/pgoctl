@@ -19,7 +19,7 @@
 ## Pipeline
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["Profile Source\n(pprof / Parca / file)"] --> B["pgoctl collect"]
     B --> C["cpu.pprof"]
     C --> D["go build -pgo"]
