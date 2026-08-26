@@ -38,7 +38,7 @@ jobs:
           go build -o /tmp/pgoctl ./cmd/pgoctl
           echo /tmp >> "$GITHUB_PATH"
 
-          # Spin up a pprof server to generate a real profile at runtime.
+          # Spin up a pprof server with real CPU load to generate a rich profile.
           cat > /tmp/pprof_gen.go << 'EOF'
           package main
           import (
@@ -47,7 +47,12 @@ jobs:
             "runtime"
           )
           func main() {
-            go func() { for { runtime.Gosched() } }()
+            for i := 0; i < runtime.NumCPU(); i++ {
+              go func() {
+                x := uint64(0)
+                for { x++ }
+              }()
+            }
             http.ListenAndServe(":6060", nil)
           }
           EOF
@@ -143,7 +148,12 @@ jobs:
             "runtime"
           )
           func main() {
-            go func() { for { runtime.Gosched() } }()
+            for i := 0; i < runtime.NumCPU(); i++ {
+              go func() {
+                x := uint64(0)
+                for { x++ }
+              }()
+            }
             http.ListenAndServe(":6060", nil)
           }
           EOF
@@ -210,7 +220,12 @@ jobs:
             "runtime"
           )
           func main() {
-            go func() { for { runtime.Gosched() } }()
+            for i := 0; i < runtime.NumCPU(); i++ {
+              go func() {
+                x := uint64(0)
+                for { x++ }
+              }()
+            }
             http.ListenAndServe(":6060", nil)
           }
           EOF
