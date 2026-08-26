@@ -32,10 +32,8 @@ jobs:
         shell: bash
         run: |
           COVERPKG=$(go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$' | paste -sd,)
-          mapfile -t PKGS < <(go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$')
-          go test -coverprofile=coverage.out -covermode=atomic \
-            -coverpkg="$COVERPKG" \
-            "${PKGS[@]}"
+          go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$' | \
+            xargs go test -coverprofile=coverage.out -covermode=atomic -coverpkg="$COVERPKG"
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
