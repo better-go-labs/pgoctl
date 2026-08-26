@@ -133,3 +133,55 @@ func TestEnvKey(t *testing.T) {
 	assert.Equal(t, "PGOCTL_MIN_PACKAGE_SHARE", envKey("min-package-share"))
 	assert.Equal(t, "PGOCTL_JSON", envKey("json"))
 }
+
+// TestConfigSearchPaths verifies the returned slice is non-empty and contains
+// a home-directory-relative path (the standard ~/.config/pgoctl location).
+func TestConfigSearchPaths(t *testing.T) {
+	paths := configSearchPaths()
+	require.NotEmpty(t, paths, "configSearchPaths must return at least one path")
+
+	// First entry is always "." (cwd).
+	assert.Equal(t, ".", paths[0])
+
+	// At least one path should contain ".config/pgoctl" (home dir entry).
+	found := false
+	for _, p := range paths {
+		if strings.Contains(p, filepath.Join(".config", "pgoctl")) {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected a ~/.config/pgoctl entry in %v", paths)
+}
+
+// TestNewViper_ReturnsNonNil verifies newViper succeeds and returns a usable instance.
+func TestNewViper_ReturnsNonNil(t *testing.T) {
+	cmd := testCommand(t)
+	// Wire the command into a root so PersistentFlags are accessible.
+	root := newRootCmd()
+	root.AddCommand(cmd)
+
+	v, err := newViper(cmd)
+	require.NoError(t, err)
+	require.NotNil(t, v)
+}
+
+// TestNewViper_BindsEnvPrefix verifies that env-var overrides are picked up by
+// valueFrom after newViper wires up the viper instance. The codebase translates
+// hyphens to underscores itself (PGOCTL_MIN_SAMPLES); this test uses valueFrom
+// (the real consumer) not v.GetInt64 directly.
+func TestNewViper_BindsEnvPrefix(t *testing.T) {
+	t.Setenv("PGOCTL_MIN_SAMPLES", "12345")
+	cmd := testCommand(t)
+	root := newRootCmd()
+	root.AddCommand(cmd)
+
+	v, err := newViper(cmd)
+	require.NoError(t, err)
+	require.NotNil(t, v)
+
+	// valueFrom does the hyphen→underscore conversion and os.LookupEnv.
+	val, ok := valueFrom(v, "min-samples")
+	require.True(t, ok, "expected PGOCTL_MIN_SAMPLES to be visible via valueFrom")
+	assert.Equal(t, "12345", val)
+}
