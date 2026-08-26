@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
 
@@ -81,7 +81,7 @@ jobs:
 
       - name: Checkout Prometheus
         if: steps.profile.outputs.found == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: prometheus/prometheus
           path: _prometheus
