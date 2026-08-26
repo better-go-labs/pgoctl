@@ -305,4 +305,4 @@ jobs:
           - Duration: ${{ github.event.inputs.duration || 60 }}s
 
           Download artifact **prometheus-pprof-${{ github.run_id }}** and commit to \`testdata/\` to enable pgo-bench." \
-          >> $GITHUB_STEP_SUMMARY
+          >> "$GITHUB_STEP_SUMMARY"

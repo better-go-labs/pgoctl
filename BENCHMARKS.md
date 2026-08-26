@@ -2,6 +2,20 @@
 
 pgoctl builds are benchmarked against the [Prometheus tsdb](https://github.com/prometheus/prometheus) package to measure the impact of Profile-Guided Optimization (PGO) on real-world Go workloads.
 
+## Running benchmarks
+
+### Manual trigger (recommended)
+
+1. Go to **Actions → PGO Benchmark → Run workflow** in the GitHub UI.
+2. Select the branch you want to benchmark (default: `main`).
+3. Click **Run workflow**.
+
+The workflow will fail fast with a clear message if `testdata/prometheus_cpu.pprof` is missing — run the `profile-collect` workflow first to generate it.
+
+### Automatic trigger
+
+The workflow also fires automatically on any PR that touches `testdata/*.pprof` or `.github/workflows/pgo-bench.yml`. It does **not** run on every PR.
+
 ## Methodology
 
 - **Harness:** each benchmarked package is run for **10 rounds**, baseline vs. PGO-optimized build, on the same runner.

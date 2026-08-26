@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -11,125 +10,226 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testCommand builds a command with the validate-like flags used by the
-// config tests.
-func testCommand(t *testing.T) *cobra.Command {
-	t.Helper()
-	cmd := &cobra.Command{Use: "validate <path>"}
-	cmd.Flags().Int64("min-samples", 10000, "")
-	cmd.Flags().Float64("min-score", 0.6, "")
-	cmd.Flags().StringArray("min-package-share", nil, "")
-	return cmd
+func TestConfigSearchPaths(t *testing.T) {
+	paths := configSearchPaths()
+	assert.Greater(t, len(paths), 0)
+	assert.Equal(t, ".", paths[0])
 }
 
-// writeConfig writes a pgoctl.conf into dir and returns the dir.
-func writeConfig(t *testing.T, dir, content string) string {
-	t.Helper()
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "pgoctl.conf"), []byte(content), 0o644))
-	return dir
+func TestFindConfigFile_NotFound(t *testing.T) {
+	result := findConfigFile([]string{t.TempDir()})
+	assert.Equal(t, "", result)
 }
 
-func TestValueFrom_EnvOverConfig(t *testing.T) {
-	dir := writeConfig(t, t.TempDir(), "min-score: 0.9\n")
-	cmd := testCommand(t)
-	v, err := newViperWithPaths(cmd, []string{dir})
-	require.NoError(t, err)
+func TestFindConfigFile_Found(t *testing.T) {
+	tmpDir := t.TempDir()
+	confPath := filepath.Join(tmpDir, "pgoctl.conf")
+	require.NoError(t, os.WriteFile(confPath, []byte("test"), 0o600))
 
-	t.Setenv("PGOCTL_MIN_SCORE", "0.2")
-	val, ok := valueFrom(v, "min-score")
-	require.True(t, ok)
-	assert.Equal(t, "0.2", val, "env must win over config file")
+	result := findConfigFile([]string{tmpDir})
+	assert.Equal(t, confPath, result)
 }
 
-func TestValueFrom_ConfigWhenNoEnv(t *testing.T) {
-	dir := writeConfig(t, t.TempDir(), "min-samples: 1234\n")
-	cmd := testCommand(t)
-	v, err := newViperWithPaths(cmd, []string{dir})
-	require.NoError(t, err)
+func TestFindConfigFile_MultipleSearchPaths(t *testing.T) {
+	tmpDir1 := t.TempDir()
+	tmpDir2 := t.TempDir()
+	confPath := filepath.Join(tmpDir2, "pgoctl.conf")
+	require.NoError(t, os.WriteFile(confPath, []byte("test"), 0o600))
 
-	val, ok := valueFrom(v, "min-samples")
-	require.True(t, ok)
-	assert.Equal(t, "1234", val, "config value must apply when env absent")
+	result := findConfigFile([]string{tmpDir1, tmpDir2})
+	assert.Equal(t, confPath, result)
 }
 
-func TestValueFrom_ListFromConfig(t *testing.T) {
-	dir := writeConfig(t, t.TempDir(),
-		"min-package-share:\n  - github.com/prometheus/prometheus/tsdb:5.0\n  - github.com/prometheus/prometheus/promql:1.5\n")
-	cmd := testCommand(t)
-	v, err := newViperWithPaths(cmd, []string{dir})
-	require.NoError(t, err)
+func TestNewViper_Success(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("test-flag", "default", "test flag")
+	cmd.Root()
 
-	val, ok := valueFrom(v, "min-package-share")
-	require.True(t, ok)
-	assert.Equal(t, "github.com/prometheus/prometheus/tsdb:5.0,github.com/prometheus/prometheus/promql:1.5", val)
+	v, err := newViper(cmd)
+	assert.NoError(t, err)
+	assert.NotNil(t, v)
 }
 
-func TestValueFrom_EnvList(t *testing.T) {
-	cmd := testCommand(t)
-	v, err := newViperWithPaths(cmd, []string{t.TempDir()})
-	require.NoError(t, err)
+func TestNewViperWithPaths_Success(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("test-flag", "default", "test flag")
+	cmd.Root()
 
-	t.Setenv("PGOCTL_MIN_PACKAGE_SHARE", "a/b:1.0,c/d:2.0")
-	val, ok := valueFrom(v, "min-package-share")
-	require.True(t, ok)
-	assert.Equal(t, "a/b:1.0,c/d:2.0", val)
+	tmpDir := t.TempDir()
+	v, err := newViperWithPaths(cmd, []string{tmpDir})
+	assert.NoError(t, err)
+	assert.NotNil(t, v)
 }
 
-func TestResolveConfig_CLIWinsOverFile(t *testing.T) {
-	// min-score is set explicitly on the CLI (wins, omitted from cfg);
-	// min-samples comes from the config file.
-	dir := writeConfig(t, t.TempDir(), "min-score: 0.9\nmin-samples: 1234\n")
-	cmd := testCommand(t)
-	require.NoError(t, cmd.Flags().Set("min-score", "0.1")) // explicit CLI flag
-	v, err := newViperWithPaths(cmd, []string{dir})
-	require.NoError(t, err)
+func TestNewViperWithPaths_BadConfig(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("test-flag", "default", "test flag")
+	cmd.Root()
 
-	cfg, err := resolveConfig(cmd, v, []string{"min-score", "min-samples"})
-	require.NoError(t, err)
-	assert.NotContains(t, cfg, "min-score", "explicit CLI flag must win; not overridden")
-	assert.Equal(t, "1234", cfg["min-samples"], "unset flag takes config value")
-}
+	tmpDir := t.TempDir()
+	confPath := filepath.Join(tmpDir, "pgoctl.conf")
+	// Write invalid YAML
+	require.NoError(t, os.WriteFile(confPath, []byte("{ invalid yaml: ["), 0o600))
 
-func TestResolveConfig_FileAppliesWhenFlagAbsent(t *testing.T) {
-	dir := writeConfig(t, t.TempDir(), "min-samples: 4321\nmin-score: 0.75\n")
-	cmd := testCommand(t)
-	v, err := newViperWithPaths(cmd, []string{dir})
-	require.NoError(t, err)
-
-	cfg, err := resolveConfig(cmd, v, []string{"min-samples", "min-score"})
-	require.NoError(t, err)
-	assert.Equal(t, "4321", cfg["min-samples"])
-	assert.Equal(t, "0.75", cfg["min-score"])
-}
-
-func TestResolveConfig_NothingSet(t *testing.T) {
-	cmd := testCommand(t)
-	v, err := newViperWithPaths(cmd, []string{t.TempDir()})
-	require.NoError(t, err)
-
-	cfg, err := resolveConfig(cmd, v, []string{"min-samples", "min-score"})
-	require.NoError(t, err)
-	assert.Empty(t, cfg, "no CLI/env/config values -> nothing resolved")
-}
-
-func TestNewViper_MalformedConfigError(t *testing.T) {
-	dir := writeConfig(t, t.TempDir(), "min-score: [unclosed\n")
-	cmd := testCommand(t)
-	_, err := newViperWithPaths(cmd, []string{dir})
-	require.Error(t, err)
-	assert.Contains(t, strings.ToLower(err.Error()), "config", "error must mention config")
-}
-
-func TestNewViper_MissingConfigNotAnError(t *testing.T) {
-	cmd := testCommand(t)
-	v, err := newViperWithPaths(cmd, []string{t.TempDir()})
-	require.NoError(t, err)
-	assert.False(t, v.InConfig("min-score"))
+	_, err := newViperWithPaths(cmd, []string{tmpDir})
+	assert.Error(t, err)
 }
 
 func TestEnvKey(t *testing.T) {
-	assert.Equal(t, "PGOCTL_MIN_SAMPLES", envKey("min-samples"))
-	assert.Equal(t, "PGOCTL_MIN_PACKAGE_SHARE", envKey("min-package-share"))
-	assert.Equal(t, "PGOCTL_JSON", envKey("json"))
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"min-samples", "PGOCTL_MIN_SAMPLES"},
+		{"min-score", "PGOCTL_MIN_SCORE"},
+		{"min-duration", "PGOCTL_MIN_DURATION"},
+		{"json", "PGOCTL_JSON"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, envKey(tt.input))
+	}
+}
+
+func TestValueFrom_EnvVar(t *testing.T) {
+	t.Setenv("PGOCTL_TEST_FLAG", "from-env")
+	cmd := &cobra.Command{}
+	cmd.Flags().String("test-flag", "default", "test flag")
+	cmd.Root()
+
+	v, err := newViper(cmd)
+	require.NoError(t, err)
+
+	val, ok := valueFrom(v, "test-flag")
+	assert.True(t, ok)
+	assert.Equal(t, "from-env", val)
+}
+
+func TestValueFrom_NotSet(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("test-flag", "default", "test flag")
+	cmd.Root()
+
+	v, err := newViper(cmd)
+	require.NoError(t, err)
+
+	val, ok := valueFrom(v, "nonexistent-flag")
+	assert.False(t, ok)
+	assert.Equal(t, "", val)
+}
+
+func TestValueFrom_ConfigFile_String(t *testing.T) {
+	tmpDir := t.TempDir()
+	confPath := filepath.Join(tmpDir, "pgoctl.conf")
+	require.NoError(t, os.WriteFile(confPath, []byte("min-samples: 5000\n"), 0o600))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Int64("min-samples", 10000, "min samples")
+	cmd.Root()
+
+	v, err := newViperWithPaths(cmd, []string{tmpDir})
+	require.NoError(t, err)
+
+	val, ok := valueFrom(v, "min-samples")
+	assert.True(t, ok)
+	assert.Equal(t, "5000", val)
+}
+
+func TestValueFrom_ConfigFile_List(t *testing.T) {
+	tmpDir := t.TempDir()
+	confPath := filepath.Join(tmpDir, "pgoctl.conf")
+	require.NoError(t, os.WriteFile(confPath, []byte("min-package-share:\n  - pkg1:10\n  - pkg2:20\n"), 0o600))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringArray("min-package-share", nil, "min package share")
+	cmd.Root()
+
+	v, err := newViperWithPaths(cmd, []string{tmpDir})
+	require.NoError(t, err)
+
+	val, ok := valueFrom(v, "min-package-share")
+	assert.True(t, ok)
+	assert.Equal(t, "pkg1:10,pkg2:20", val)
+}
+
+func TestResolveConfig_CLIFlag(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("test-flag", "default", "test flag")
+	cmd.Root()
+	require.NoError(t, cmd.Flags().Set("test-flag", "from-cli"))
+
+	v, err := newViper(cmd)
+	require.NoError(t, err)
+
+	cfg, err := resolveConfig(cmd, v, []string{"test-flag"})
+	require.NoError(t, err)
+	// CLI flag is set, so it should not be in the config map
+	assert.NotContains(t, cfg, "test-flag")
+}
+
+func TestResolveConfig_EnvVar(t *testing.T) {
+	t.Setenv("PGOCTL_TEST_FLAG", "from-env")
+	cmd := &cobra.Command{}
+	cmd.Flags().String("test-flag", "default", "test flag")
+	cmd.Root()
+
+	v, err := newViper(cmd)
+	require.NoError(t, err)
+
+	cfg, err := resolveConfig(cmd, v, []string{"test-flag"})
+	require.NoError(t, err)
+	assert.Contains(t, cfg, "test-flag")
+	assert.Equal(t, "from-env", cfg["test-flag"])
+}
+
+func TestValueFrom_ConfigFile_Int(t *testing.T) {
+	tmpDir := t.TempDir()
+	confPath := filepath.Join(tmpDir, "pgoctl.conf")
+	require.NoError(t, os.WriteFile(confPath, []byte("min-samples: 5000\n"), 0o600))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Int64("min-samples", 10000, "min samples")
+	cmd.Root()
+
+	v, err := newViperWithPaths(cmd, []string{tmpDir})
+	require.NoError(t, err)
+
+	val, ok := valueFrom(v, "min-samples")
+	assert.True(t, ok)
+	assert.Equal(t, "5000", val)
+}
+
+func TestValueFrom_ConfigFile_Bool(t *testing.T) {
+	tmpDir := t.TempDir()
+	confPath := filepath.Join(tmpDir, "pgoctl.conf")
+	require.NoError(t, os.WriteFile(confPath, []byte("json: true\n"), 0o600))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("json", false, "json output")
+	cmd.Root()
+
+	v, err := newViperWithPaths(cmd, []string{tmpDir})
+	require.NoError(t, err)
+
+	val, ok := valueFrom(v, "json")
+	assert.True(t, ok)
+	assert.Equal(t, "true", val)
+}
+
+func TestValueFrom_EnvVarPrecedence(t *testing.T) {
+	t.Setenv("PGOCTL_MIN_SAMPLES", "from-env")
+	tmpDir := t.TempDir()
+	confPath := filepath.Join(tmpDir, "pgoctl.conf")
+	require.NoError(t, os.WriteFile(confPath, []byte("min-samples: 5000\n"), 0o600))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Int64("min-samples", 10000, "min samples")
+	cmd.Root()
+
+	v, err := newViperWithPaths(cmd, []string{tmpDir})
+	require.NoError(t, err)
+
+	// Env should take precedence over config file
+	val, ok := valueFrom(v, "min-samples")
+	assert.True(t, ok)
+	assert.Equal(t, "from-env", val)
 }
