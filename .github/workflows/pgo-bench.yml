@@ -28,7 +28,7 @@ jobs:
         with:
           lfs: true
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26.x'
           cache: true
@@ -89,7 +89,7 @@ jobs:
 
       - name: Cache Go modules (Prometheus)
         if: steps.profile.outputs.found == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/go/pkg/mod
           key: prom-mod-${{ hashFiles('_prometheus/go.sum') }}
@@ -270,7 +270,7 @@ jobs:
 
       - name: Post sticky PR comment
         if: github.event_name == 'pull_request' && steps.profile.outputs.found == 'true'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: pgo-bench
           path: /tmp/bench-report.md
