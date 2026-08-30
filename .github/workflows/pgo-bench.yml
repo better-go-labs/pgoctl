@@ -270,7 +270,7 @@ jobs:
 
       - name: Post sticky PR comment
         if: github.event_name == 'pull_request' && steps.profile.outputs.found == 'true'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: pgo-bench
           path: /tmp/bench-report.md
