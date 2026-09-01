@@ -112,10 +112,34 @@ runs:
         if command -v pgoctl >/dev/null 2>&1; then
           echo "pgoctl already on PATH: $(pgoctl --version)"
         else
-          echo "Building pgoctl from source..."
-          cd ${{ github.action_path }}/../../..
-          go build -o "$RUNNER_TOOL_CACHE/pgoctl" ./cmd/pgoctl
-          echo "$RUNNER_TOOL_CACHE" >> "$GITHUB_PATH"
+          VERSION="${{ inputs.pgoctl-version }}"
+          INSTALLED=false
+          # Primary path: download prebuilt binary if version looks like a semver tag
+          if [[ "$VERSION" =~ ^v[0-9] ]]; then
+            OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+            ARCH="$(uname -m)"
+            case "$ARCH" in
+              x86_64) ARCH="x86_64" ;;
+              aarch64|arm64) ARCH="arm64" ;;
+            esac
+            URL="https://github.com/better-go-labs/pgoctl/releases/download/${VERSION}/pgoctl_${OS}_${ARCH}.tar.gz"
+            echo "Downloading pgoctl ${VERSION} from ${URL}"
+            if curl -fsSL "$URL" -o /tmp/pgoctl.tar.gz; then
+              tar -xzf /tmp/pgoctl.tar.gz -C /tmp pgoctl
+              chmod +x /tmp/pgoctl
+              echo /tmp >> "$GITHUB_PATH"
+              INSTALLED=true
+              echo "Installed pgoctl ${VERSION} from release"
+            else
+              echo "::warning::Release download failed for ${VERSION}; falling back to build from source"
+            fi
+          fi
+          # Fallback: build from source
+          if [[ "$INSTALLED" != "true" ]]; then
+            echo "Building pgoctl from source..."
+            go build -o /tmp/pgoctl ./cmd/pgoctl
+            echo /tmp >> "$GITHUB_PATH"
+          fi
         fi
 
     # ── collect or copy profile ─────────────────────────────────
@@ -283,7 +307,7 @@ runs:
     # ── upload artifact ─────────────────────────────────────────────────
     - name: Upload PGO artifact
       if: inputs.upload-artifact == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.artifact-name }}
         path: |
