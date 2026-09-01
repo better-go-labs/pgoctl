@@ -5,7 +5,7 @@ name: e2e / pgo-action
 on:
   pull_request:
     paths:
-      - '.github/actions/pgo-action/**'
+      - 'action.yml'
       - 'cmd/**'
       - 'internal/**'
       - '.github/workflows/e2e-action.yml'
@@ -80,7 +80,7 @@ jobs:
           /tmp/pgoctl merge testdata/fixtures/cpu.pprof --out=testdata/fixtures/baseline.pgo
 
       - id: run
-        uses: ./.github/actions/pgo-action
+        uses: ./
         with:
           profile-file: testdata/fixtures/cpu.pprof
           baseline-profile: testdata/fixtures/baseline.pgo
@@ -172,7 +172,7 @@ jobs:
             --out=testdata/fixtures/cpu.pprof
 
       - id: run1
-        uses: ./.github/actions/pgo-action
+        uses: ./
         with:
           profile-file: testdata/fixtures/cpu.pprof
           comment-on-pr: 'true'
@@ -180,7 +180,7 @@ jobs:
           upload-artifact: 'false'
 
       - id: run2
-        uses: ./.github/actions/pgo-action
+        uses: ./
         with:
           profile-file: testdata/fixtures/cpu.pprof
           comment-on-pr: 'true'
@@ -240,7 +240,7 @@ jobs:
           done
 
       - id: run
-        uses: ./.github/actions/pgo-action
+        uses: ./
         with:
           pprof-url: http://localhost:6060
           duration: '10'

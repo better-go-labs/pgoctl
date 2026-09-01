@@ -92,12 +92,12 @@ PARCA_URL=http://localhost:7070 ./demo.sh
 ### GitHub Action (CI integration)
 
 > The Action is currently in this repo and used internally. Once the repo is public it will be
-> referenceable as `better-go-labs/pgoctl/.github/actions/pgo-action@v0.1.0`.
+> referenceable as `better-go-labs/pgoctl@v0.1.0`.
 
 From a pre-collected pprof file (skips collect):
 
 ```yaml
-- uses: ./.github/actions/pgo-action
+- uses: better-go-labs/pgoctl@v0.1.0
   with:
     profile-file: cpu.pprof      # pre-collected pprof; skips the collect step
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -106,7 +106,7 @@ From a pre-collected pprof file (skips collect):
 From a live pprof endpoint:
 
 ```yaml
-- uses: ./.github/actions/pgo-action
+- uses: better-go-labs/pgoctl@v0.1.0
   with:
     pprof-url: http://localhost:6060
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -115,7 +115,7 @@ From a live pprof endpoint:
 From a Parca server:
 
 ```yaml
-- uses: ./.github/actions/pgo-action
+- uses: better-go-labs/pgoctl@v0.1.0
   with:
     parca-url: http://parca:7070
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -268,10 +268,10 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 
 ## GitHub Action
 
-`.github/actions/pgo-action` is a composite Action that runs the full pgoctl pipeline in CI: collect (or reuse an existing profile), validate, and compare against a baseline, then optionally uploads the artifact and posts a verdict comment on the PR.
+`action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI: collect (or reuse an existing profile), validate, and compare against a baseline, then optionally uploads the artifact and posts a verdict comment on the PR.
 
-> Currently for use within this repo (`./.github/actions/pgo-action`). Once published publicly,
-> the reference will be `better-go-labs/pgoctl/.github/actions/pgo-action@v0.1.0`.
+> Currently for use within this repo (`./`). Once published publicly,
+> the reference will be `better-go-labs/pgoctl@v0.1.0`.
 
 ### Inputs
 
