@@ -4,7 +4,7 @@ go 1.26.6
 
 require (
 	github.com/google/pprof v0.0.0-20260709232956-b9395ee17fa0
-	github.com/spf13/cobra v1.8.1
+	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 )
