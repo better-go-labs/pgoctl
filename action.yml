@@ -192,7 +192,7 @@ runs:
         valid=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('valid',False))" 2>/dev/null || echo "False")
         samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('samples',0))" 2>/dev/null || echo "0")
         stacks=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('unique_stacks',0))" 2>/dev/null || echo "0")
-        errors=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('errors',[])))" 2>/dev/null || echo "")
+        errors=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('errors',[])))\" 2>/dev/null || echo "")
         echo "score=$score" >> "$GITHUB_OUTPUT"
         echo "valid=$valid" >> "$GITHUB_OUTPUT"
         echo "samples=$samples" >> "$GITHUB_OUTPUT"
@@ -365,7 +365,8 @@ runs:
             '| metric | value |',
             '|--------|-------|',
             `| quality score | \`${score}\` · valid \`${valid}\` |`,
-            `| samples | \`${samples.toLocaleString()}\` · \`${uniqueStacks.toLocaleString()}\` unique stacks |`,
+            `| samples | \`${samples.toLocaleString()}\` |`,
+            `| unique stacks | \`${uniqueStacks.toLocaleString()}\` |`,
             durationRow,
             deltaRow,
           ].filter(Boolean).join('\n');
