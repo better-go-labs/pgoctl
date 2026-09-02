@@ -23,7 +23,11 @@ inputs:
     required: false
     default: '30'
   timeout:
-    description: 'HTTP timeout for profile collection in seconds (default: duration + 30, floor 120)'
+    description: 'HTTP timeout for profile collection in seconds (default: derived from window + buffer)'
+    required: false
+    default: ''
+  timeout-buffer:
+    description: 'Buffer added to window when deriving HTTP timeout in seconds (default 30)'
     required: false
     default: ''
   min-improvement:
@@ -167,11 +171,16 @@ runs:
           if [[ -n "${{ inputs.timeout }}" ]]; then
             TIMEOUT_FLAG="--timeout=${{ inputs.timeout }}s"
           fi
+          TIMEOUT_BUFFER_FLAG=""
+          if [[ -n "${{ inputs.timeout-buffer }}" ]]; then
+            TIMEOUT_BUFFER_FLAG="--timeout-buffer=${{ inputs.timeout-buffer }}s"
+          fi
           pgoctl collect \
             --source=pprof \
             --url="${{ inputs.pprof-url }}/debug/pprof/profile" \
             --window="${{ inputs.duration }}s" \
             ${TIMEOUT_FLAG} \
+            ${TIMEOUT_BUFFER_FLAG} \
             --out=cpu.pprof
         else
           echo "Error: one of profile-file, parca-url, or pprof-url must be provided" >&2
@@ -192,7 +201,7 @@ runs:
         valid=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('valid',False))" 2>/dev/null || echo "False")
         samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('samples',0))" 2>/dev/null || echo "0")
         stacks=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('unique_stacks',0))" 2>/dev/null || echo "0")
-        errors=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('errors',[])))\" 2>/dev/null || echo "")
+        errors=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('errors',[]))" 2>/dev/null || echo "")
         echo "score=$score" >> "$GITHUB_OUTPUT"
         echo "valid=$valid" >> "$GITHUB_OUTPUT"
         echo "samples=$samples" >> "$GITHUB_OUTPUT"

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-02
+
+### Fixed
+
+- `collect`: HTTP timeout derived from `window + buffer`; buffer configurable via `--timeout-buffer` flag and `timeout-buffer` action input (default 30 s, floor 120 s)
+- `action`: profile report splits samples and unique stacks into separate table columns
+
 ## [0.1.0] - 2026-09-01
 
 ### Added
@@ -64,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pgo-bench.yml` — 10-round PGO benchmark workflow: pre-compiles baseline and PGO binaries once, runs compute-bound micro-benchmarks across `tsdb`, `promql`, `storage`, and `tsdb/chunkenc`, and posts a benchstat summary as a sticky PR comment
 - `profile-collect.yml` — end-to-end profile-collection workflow: provisions a kind cluster with Prometheus, drives load via the built-in load generator, captures a CPU profile, validates coverage gates, and merges into `default.pgo`
 
-[Unreleased]: https://github.com/better-go-labs/pgoctl/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/better-go-labs/pgoctl/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/better-go-labs/pgoctl/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/better-go-labs/pgoctl/compare/v0.1.0-alpha...v0.1.0
 [0.1.0-alpha]: https://github.com/better-go-labs/pgoctl/releases/tag/v0.1.0-alpha

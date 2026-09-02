@@ -9,14 +9,16 @@ import (
 	"time"
 )
 
-// deriveTimeout returns the effective HTTP timeout for a pprof collect request.
-// When the caller sets opts.Timeout it is used as-is. Otherwise the timeout is
-// window + 30 s, with a floor of 120 s so short windows still get headroom.
+// deriveTimeout returns opts.Timeout if set, else window + buffer (opts.TimeoutBuffer, default 30s), floor 120s.
 func deriveTimeout(opts Options) time.Duration {
 	if opts.Timeout > 0 {
 		return opts.Timeout
 	}
-	t := opts.Window + 30*time.Second
+	buffer := opts.TimeoutBuffer
+	if buffer <= 0 {
+		buffer = 30 * time.Second
+	}
+	t := opts.Window + buffer
 	if t < 120*time.Second {
 		t = 120 * time.Second
 	}

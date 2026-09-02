@@ -42,19 +42,21 @@ func TestDeriveTimeout(t *testing.T) {
 	cases := []struct {
 		name    string
 		window  time.Duration
+		buffer  time.Duration
 		timeout time.Duration
 		want    time.Duration
 	}{
-		{"explicit timeout wins", 200 * time.Second, 45 * time.Second, 45 * time.Second},
-		{"short window uses floor", 30 * time.Second, 0, 120 * time.Second},
-		{"window below floor", 80 * time.Second, 0, 120 * time.Second},
-		{"window above floor adds buffer", 100 * time.Second, 0, 130 * time.Second},
-		{"large window adds buffer", 240 * time.Second, 0, 270 * time.Second},
-		{"zero window uses floor", 0, 0, 120 * time.Second},
+		{"explicit timeout wins", 200 * time.Second, 0, 45 * time.Second, 45 * time.Second},
+		{"short window uses floor", 30 * time.Second, 0, 0, 120 * time.Second},
+		{"window below floor", 80 * time.Second, 0, 0, 120 * time.Second},
+		{"window above floor adds buffer", 100 * time.Second, 0, 0, 130 * time.Second},
+		{"large window adds buffer", 240 * time.Second, 0, 0, 270 * time.Second},
+		{"zero window uses floor", 0, 0, 0, 120 * time.Second},
+		{"custom buffer applied", 100 * time.Second, 60 * time.Second, 0, 160 * time.Second},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := deriveTimeout(Options{Window: tc.window, Timeout: tc.timeout})
+			got := deriveTimeout(Options{Window: tc.window, TimeoutBuffer: tc.buffer, Timeout: tc.timeout})
 			require.Equal(t, tc.want, got)
 		})
 	}
