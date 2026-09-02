@@ -22,6 +22,10 @@ inputs:
     description: 'Profile collection duration in seconds'
     required: false
     default: '30'
+  timeout:
+    description: 'HTTP timeout for profile collection in seconds (default: duration + 30, floor 120)'
+    required: false
+    default: ''
   min-improvement:
     description: 'Min CPU delta %% to promote (passed to pgoctl compare)'
     required: false
@@ -159,10 +163,15 @@ runs:
             --out=cpu.pprof
         elif [[ -n "${{ inputs.pprof-url }}" ]]; then
           echo "Collecting ${{ inputs.duration }}s CPU profile from ${{ inputs.pprof-url }}"
+          TIMEOUT_FLAG=""
+          if [[ -n "${{ inputs.timeout }}" ]]; then
+            TIMEOUT_FLAG="--timeout=${{ inputs.timeout }}s"
+          fi
           pgoctl collect \
             --source=pprof \
             --url="${{ inputs.pprof-url }}/debug/pprof/profile" \
             --window="${{ inputs.duration }}s" \
+            ${TIMEOUT_FLAG} \
             --out=cpu.pprof
         else
           echo "Error: one of profile-file, parca-url, or pprof-url must be provided" >&2
