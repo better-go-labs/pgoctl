@@ -1,1 +1,498 @@
-bmFtZTogJ3Bnb2N0bC1hY3Rpb24nCmRlc2NyaXB0aW9uOiAnQ29sbGVjdCwgdmFsaWRhdGUsIG1lcmdlLCBhbmQgY29tcGFyZSBQR08gcHJvZmlsZXMgZm9yIEdvIHNlcnZpY2VzJwoKYnJhbmRpbmc6CiAgaWNvbjogJ2FjdGl2aXR5JwogIGNvbG9yOiAnZ3JlZW4nCgppbnB1dHM6CiAgcGFyY2EtdXJsOgogICAgZGVzY3JpcHRpb246ICdCYXNlIFVSTCBvZiB0aGUgcnVubmluZyBQYXJjYSBpbnN0YW5jZSAoZS5nLiBodHRwOi8vcGFyY2E6NzA3MCknCiAgICByZXF1aXJlZDogZmFsc2UKICAgIGRlZmF1bHQ6ICcnCiAgcHByb2YtdXJsOgogICAgZGVzY3JpcHRpb246ICdCYXNlIFVSTCBvZiBhIEdvIHBwcm9mIEhUVFAgZW5kcG9pbnQgKGUuZy4gaHR0cDovL2xvY2FsaG9zdDo2MDYwKScKICAgIHJlcXVpcmVkOiBmYWxzZQogICAgZGVmYXVsdDogJycKICBwcm9maWxlLWZpbGU6CiAgICBkZXNjcmlwdGlvbjogJ1BhdGggdG8gYW4gZXhpc3RpbmcgcHByb2YgZmlsZSAoc2tpcCBjb2xsZWN0IHN0ZXApJwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAnJwogIGJhc2VsaW5lLXByb2ZpbGU6CiAgICBkZXNjcmlwdGlvbjogJ1BhdGggdG8gYmFzZWxpbmUgcHByb2YgZmlsZSBmb3IgY29tcGFyaXNvbiAob3B0aW9uYWwpJwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAnJwogIGR1cmF0aW9uOgogICAgZGVzY3JpcHRpb246ICdQcm9maWxlIGNvbGxlY3Rpb24gZHVyYXRpb24gaW4gc2Vjb25kcycKICAgIHJlcXVpcmVkOiBmYWxzZQogICAgZGVmYXVsdDogJzMwJwogIHRpbWVvdXQ6CiAgICBkZXNjcmlwdGlvbjogJ0hUVFAgdGltZW91dCBmb3IgcHJvZmlsZSBjb2xsZWN0aW9uIGluIHNlY29uZHMgKGRlZmF1bHQ6IGRlcml2ZWQgZnJvbSB3aW5kb3cgKyBidWZmZXIpJwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAnJwogIHRpbWVvdXQtYnVmZmVyOgogICAgZGVzY3JpcHRpb246ICdCdWZmZXIgYWRkZWQgdG8gd2luZG93IHdoZW4gZGVyaXZpbmcgSFRUUCB0aW1lb3V0IGluIHNlY29uZHMgKGRlZmF1bHQgMzApJwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAnJwogIG1pbi1pbXByb3ZlbWVudDoKICAgIGRlc2NyaXB0aW9uOiAnTWluIENQVSBkZWx0YSAlJSB0byBwcm9tb3RlIChwYXNzZWQgdG8gcGdvY3RsIGNvbXBhcmUpJwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAnMy4wJwogIG1pbi1yZWdyZXNzaW9uOgogICAgZGVzY3JpcHRpb246ICdNaW4gQ1BVIHJlZ3Jlc3Npb24gJSUgdG8gcm9sbGJhY2sgKHBhc3NlZCB0byBwZ29jdGwgY29tcGFyZSknCiAgICByZXF1aXJlZDogZmFsc2UKICAgIGRlZmF1bHQ6ICczLjAnCiAgdmFsaWRhdGUtZmxhZ3M6CiAgICBkZXNjcmlwdGlvbjogJ0V4dHJhIGZsYWdzIHRvIHBhc3MgdG8gcGdvY3RsIHZhbGlkYXRlIChlLmcuIC0tbWluLXBhY2thZ2Utc2hhcmUgdHNkYjo1KScKICAgIHJlcXVpcmVkOiBmYWxzZQogICAgZGVmYXVsdDogJycKICBhcnRpZmFjdC1uYW1lOgogICAgZGVzY3JpcHRpb246ICdOYW1lIGZvciB0aGUgdXBsb2FkZWQgR2l0SHViIGFydGlmYWN0JwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAncGdvLXByb2ZpbGUnCiAgdXBsb2FkLWFydGlmYWN0OgogICAgZGVzY3JpcHRpb246ICdVcGxvYWQgY3B1LnBwcm9mIGFuZCBkZWZhdWx0LnBnbyBhcyBhIHdvcmtmbG93IGFydGlmYWN0JwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAndHJ1ZScKICBjb21tZW50LW9uLXByOgogICAgZGVzY3JpcHRpb246ICdQb3N0IGEgc3VtbWFyeSBjb21tZW50IG9uIHRoZSBQUiAocmVxdWlyZXMgZ2l0aHViLXRva2VuKScKICAgIHJlcXVpcmVkOiBmYWxzZQogICAgZGVmYXVsdDogJ3RydWUnCiAgZ2l0aHViLXRva2VuOgogICAgZGVzY3JpcHRpb246ICdHaXRIdWIgdG9rZW4gZm9yIFBSIGNvbW1lbnRzJwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAkeyB7IGdpdGh1Yi50b2tlbiB9IH0KICBwZ29jdGwtdmVyc2lvbjoKICAgIGRlc2NyaXB0aW9uOiAncGdvY3RsIHZlcnNpb24gdG8gaW5zdGFsbCAoZGVmYXVsdDogbGF0ZXN0IGluIFBBVEggb3IgYnVpbHQgZnJvbSBzb3VyY2UpJwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAnbGF0ZXN0JwogIHByZXZpb3VzLXByb2ZpbGU6CiAgICBkZXNjcmlwdGlvbjogJ1BhdGggdG8gYSBwcmV2aW91cyBkZWZhdWx0LnBnbyB0byBtZXJnZSB3aXRoIChzdGVhZHktc3RhdGUpLiBPdmVycmlkZXMgcmVzdG9yZS1wcmV2aW91cy1hcnRpZmFjdCBpZiBzZXQuJwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAnJwogIHJlc3RvcmUtcHJldmlvdXMtYXJ0aWZhY3Q6CiAgICBkZXNjcmlwdGlvbjogJ0F1dG8tZG93bmxvYWQgdGhlIG1vc3QgcmVjZW50IHN1Y2Nlc3NmdWwgYXJ0aWZhY3Qgb2YgdGhpcyBuYW1lIGFuZCB1c2UgaXQgYXMgdGhlIHByZXZpb3VzIHByb2ZpbGUuJwogICAgcmVxdWlyZWQ6IGZhbHNlCiAgICBkZWZhdWx0OiAnZmFsc2UnCiAgZXhwbGFpbi10b3AtbjoKICAgIGRlc2NyaXB0aW9uOiAnTnVtYmVyIG9mIHRvcCBmdW5jdGlvbnMgdG8gaW5jbHVkZSBpbiBQUiBjb21tZW50IGZyb20gcGdvY3RsIGV4cGxhaW4nCiAgICByZXF1aXJlZDogZmFsc2UKICAgIGRlZmF1bHQ6ICc1JwoKb3V0cHV0czoKICB2ZXJkaWN0OgogICAgZGVzY3JpcHRpb246ICdHYXRlIHZlcmRpY3QgZnJvbSBwZ29jdGwgY29tcGFyZTogcHJvbW90ZSB8IG5ldXRyYWwgfCByb2xsYmFjayAoZW1wdHkgaWYgbm8gYmFzZWxpbmUpJwogICAgdmFsdWU6ICR7IHsgc3RlcHMuY29tcGFyZS5vdXRwdXRzLnZlcmRpY3QgfSB9CiAgcHJvZmlsZS1wYXRoOgogICAgZGVzY3JpcHRpb246ICdQYXRoIHRvIHRoZSBjb2xsZWN0ZWQvdmFsaWRhdGVkIHBwcm9mIGZpbGUnCiAgICB2YWx1ZTogJHsgeyBzdGVwcy5wYXRocy5vdXRwdXRzLnByb2ZpbGUgfSB9CiAgYXJ0aWZhY3QtcGF0aDoKICAgIGRlc2NyaXB0aW9uOiAnUGF0aCB0byB0aGUgbWVyZ2VkIGRlZmF1bHQucGdvIGFydGlmYWN0JwogICAgdmFsdWU6ICR7IHsgc3RlcHMucGF0aHMub3V0cHV0cy5hcnRpZmFjdCB9IH0KICB2YWxpZGF0ZS1zY29yZToKICAgIGRlc2NyaXB0aW9uOiAnUXVhbGl0eSBzY29yZSBmcm9tIHBnb2N0bCB2YWxpZGF0ZSAoMC4wLTEuMCknCiAgICB2YWx1ZTogJHsgeyBzdGVwcy52YWxpZGF0ZS5vdXRwdXRzLnNjb3JlIH0gfQogIHNhbXBsZXM6CiAgICBkZXNjcmlwdGlvbjogJ051bWJlciBvZiBDUFUgc2FtcGxlcyBpbiB0aGUgY29sbGVjdGVkIHByb2ZpbGUnCiAgICB2YWx1ZTogJHsgeyBzdGVwcy52YWxpZGF0ZS5vdXRwdXRzLnNhbXBsZXMgfSB9CiAgdW5pcXVlLXN0YWNrczoKICAgIGRlc2NyaXB0aW9uOiAnTnVtYmVyIG9mIHVuaXF1ZSBjYWxsIHN0YWNrcyBpbiB0aGUgY29sbGVjdGVkIHByb2ZpbGUnCiAgICB2YWx1ZTogJHsgeyBzdGVwcy52YWxpZGF0ZS5vdXRwdXRzLnVuaXF1ZS1zdGFja3MgfSB9CiAgY3B1LWRlbHRhOgogICAgZGVzY3JpcHRpb246ICdXZWlnaHRlZCBDUFUgZGVsdGEgJSB2cyBiYXNlbGluZSAocG9zaXRpdmUgPSBpbXByb3ZlbWVudCknCiAgICB2YWx1ZTogJHsgeyBzdGVwcy5jb21wYXJlLm91dHB1dHMuZGVsdGEgfSB9CiAgZXhwbGFpbi10b3AtZnVuY3Rpb25zOgogICAgZGVzY3JpcHRpb246ICdUb3AgQ1BVIGZ1bmN0aW9ucyBmcm9tIHBnb2N0bCBleHBsYWluIChuZXdsaW5lLXNlcGFyYXRlZDogZnVuY3Rpb258ZmxhdF9wY3QpJwogICAgdmFsdWU6ICR7IHsgc3RlcHMuZXhwbGFpbi5vdXRwdXRzLnRvcC1mdW5jdGlvbnMgfSB9CiAgZXhwbGFpbi1wYWNrYWdlczoKICAgIGRlc2NyaXB0aW9uOiAnSG90IHBhY2thZ2VzIGZyb20gcGdvY3RsIGV4cGxhaW4gKG5ld2xpbmUtc2VwYXJhdGVkOiBwYWNrYWdlfHRvdGFsX3BjdCknCiAgICB2YWx1ZTogJHsgeyBzdGVwcy5leHBsYWluLm91dHB1dHMucGFja2FnZXMgfSB9CiAgZXhwbGFpbi12ZXJkaWN0LXJlYXNvbjoKICAgIGRlc2NyaXB0aW9uOiAnUGxhaW4tRW5nbGlzaCB2ZXJkaWN0IHJlYXNvbiBmcm9tIHBnb2N0bCBleHBsYWluJwogICAgdmFsdWU6ICR7IHsgc3RlcHMuZXhwbGFpbi5vdXRwdXRzLnZlcmRpY3QtcmVhc29uIH0gfQogIGV4cGxhaW4tZHVyYXRpb24tc2VjOgogICAgZGVzY3JpcHRpb246ICdQcm9maWxlIGR1cmF0aW9uIGluIHNlY29uZHMgZnJvbSBwZ29jdGwgZXhwbGFpbicKICAgIHZhbHVlOiAkeyB7IHN0ZXBzLmV4cGxhaW4ub3V0cHV0cy5kdXJhdGlvbi1zZWMgfSB9CgpydW5zOgogIHVzaW5nOiAnY29tcG9zaXRlJwogIHN0ZXBzOgogICAgIyDilIwgaW5zdGFsbCBwZ29jdGwg4oCULS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KICAgIC0gbmFtZTogSW5zdGFsbCBwZ29jdGwKICAgICAgc2hlbGw6IGJhc2gKICAgICAgcnVuOiB8CiAgICAgICAgaWYgY29tbWFuZCAtdiBwZ29jdGwgPi9kZXYvbnVsbCAyPiYxOyB0aGVuCiAgICAgICAgICBlY2hvICJwZ29jdGwgYWxyZWFkeSBvbiBQQVRIOiAkKHBnb2N0bCAtLXZlcnNpb24pIgogICAgICAgIGVsc2UKICAgICAgICAgIFZFUlNJT049IiR7eyBpbnB1dHMucGdvY3RsLXZlcnNpb24gfX0iCiAgICAgICAgICBJTlNUQUxMRUQ9ZmFsc2UKICAgICAgICAgICMgUHJpbWFyeSBwYXRoOiBkb3dubG9hZCBwcmVidWlsdCBiaW5hcnkgaWYgdmVyc2lvbiBsb29rcyBsaWtlIGEgc2VtdmVyIHRhZwogICAgICAgICAgaWYgW1sgIiRWRVJTSU9OIiA9fiBeditbMC05XSBdXTsgdGhlbgogICAgICAgICAgICBPUz0iJCh1bmFtZSAtcyB8IHRyICdbOmFwcGVyOl0nICdbOmxvd2VyOl0nKSIKICAgICAgICAgICAgQVJDSD0iJCh1bmFtZSAtbSkiCiAgICAgICAgICAgIGNhc2UgIiRBUkNIIiBpbgogICAgICAgICAgICAgIHg4Nl82NCkgQVJDSD0iYW1kNjQiIDs7CiAgICAgICAgICAgICAgYWFyY2g2NHxhcm02NCkgQVJDSD0iYXJtNjQiIDs7CiAgICAgICAgICAgIGVzYWMKICAgICAgICAgICAgVkVSU0lPTl9DTEVBTj0iJHtWRVJTSU9OI3Z9IgogICAgICAgICAgICBVUkw9Imh0dHBzOi8vZ2l0aHViLmNvbS9iZXR0ZXItZ28tbGFicy9wZ29jdGwvcmVsZWFzZXMvZG93bmxvYWQvJHtWRVJTSU9OfS9wZ29jdGxfJHtWRVJTSU9OX0NMRUFOX18ke09TfV8ke0FSQ0h9LnRhci5neiIKICAgICAgICAgICAgZWNobyAiRG93bmxvYWRpbmcgcGdvY3RsICR7VkVSU0lPTn0gZnJvbSAke1VSTH0iCiAgICAgICAgICAgIGlmIGN1cmwgLWZzU0wgIiRVUkwiIC1vIC90bXAvcGdvY3RsLnRhci5nejsgdGhlbgogICAgICAgICAgICAgIHRhciAteHpmIC90bXAvcGdvY3RsLnRhci5neiAtQyAvdG1wIHBnb2N0bAogICAgICAgICAgICAgIGNobW9kICt4IC90bXAvcGdvY3RsCiAgICAgICAgICAgICAgZWNobyAvdG1wID4+ICIkR0lUSFVCX1BBVEgiCiAgICAgICAgICAgICAgSU5TVEFMTEVEPXRydWUKICAgICAgICAgICAgICBlY2hvICJJbnN0YWxsZWQgcGdvY3RsICR7VkVSU0lPTn0gZnJvbSByZWxlYXNlIgogICAgICAgICAgICBlbHNlCiAgICAgICAgICAgICAgZWNobyAiOjp3YXJuaW5nOjpSZWxlYXNlIGRvd25sb2FkIGZhaWxlZCBmb3IgJHtWRVJTSU9OfTsgZmFsbGluZyBiYWNrIHRvIGJ1aWxkIGZyb20gc291cmNlIgogICAgICAgICAgICBmaQogICAgICAgICAgZmkKICAgICAgICAgICMgRmFsbGJhY2s6IGJ1aWxkIGZyb20gc291cmNlCiAgICAgICAgICBpZiBbWyAiJElOU1RBTExFRCIgIT0gInRydWUiIF1dOyB0aGVuCiAgICAgICAgICAgIGVjaG8gIkJ1aWxkaW5nIHBnb2N0bCBmcm9tIHNvdXJjZS4uLiIKICAgICAgICAgICAgZ28gYnVpbGQgLW8gL3RtcC9wZ29jdGwgLi9jbWQvcGdvY3RsCiAgICAgICAgICAgIGVjaG8gL3RtcCA+PiAiJEdJVEhVQl9QQVRIIgogICAgICAgICAgZmkKICAgICAgICBmaQoKICAgICMg4pSMIGNvbGxlY3Qgb3IgY29weSBwcm9maWxlIOKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkuKUkgogICAgLSBuYW1lOiBDb2xsZWN0IHByb2ZpbGUKICAgICAgaWQ6IGNvbGxlY3QKICAgICAgc2hlbGw6IGJhc2gKICAgICAgcnVuOiB8CiAgICAgICAgaWYgW1sgLW4gIiR7eyBpbnB1dHMucHJvZmlsZS1maWxlIH19IiBdXTsgdGhlbgogICAgICAgICAgZWNobyAiVXNpbmcgZXhpc3RpbmcgcHJvZmlsZTogJHt7IGlucHV0cy5wcm9maWxlLWZpbGUgfX0iCiAgICAgICAgICBjcCAiJHt7IGlucHV0cy5wcm9maWxlLWZpbGUgfX0iIGNwdS5wcHJvZgogICAgICAgIGVsaWYgW1sgLW4gIiR7eyBpbnB1dHMucGFyY2EtdXJsIH19IiBdXTsgdGhlbgogICAgICAgICAgZWNobyAiQ29sbGVjdGluZyAke0RVUkFUSU9OfXMgQ1BVIHByb2ZpbGUgZnJvbSAke3sgaW5wdXRzLnBhcmNhLXVybCB9fSIKICAgICAgICAgIHBnb2N0bCBjb2xsZWN0IFwKICAgICAgICAgICAgLS1zb3VyY2U9cGFyY2EgXAogICAgICAgICAgICAtLXVybD0iJHt7IGlucHV0cy5wYXJjYS11cmwgfX0iIFwKICAgICAgICAgICAgLS1kdXJhdGlvbj0iJHt7IGlucHV0cy5kdXJhdGlvbiB9fSIgXAogICAgICAgICAgICAtLW91dD1jcHUucHByb2YKICAgICAgICBlbGlmIFtbIC1uICIke3sgaW5wdXRzLnBwcm9mLXVybCB9fSIgXV07IHRoZW4KICAgICAgICAgIGVjaG8gIkNvbGxlY3RpbmcgJHt7IGlucHV0cy5kdXJhdGlvbiB9fXMgQ1BVIHByb2ZpbGUgZnJvbSAke3sgaW5wdXRzLnBwcm9mLXVybCB9fSIKICAgICAgICAgIFRJTUVPVVRfRkxBRz0iIgogICAgICAgICAgaWYgW1sgLW4gIiR7eyBpbnB1dHMudGltZW91dCB9fSIgXV07IHRoZW4KICAgICAgICAgICAgVElNRU9VVF9GTEFHPSJZ1RJTUVPVVRGTEFHIgogICAgICAgICAgICBpZiBbWyAtbiAiJHt7IGlucHV0cy50aW1lb3V0IH19IiBdXTsgdGhlbgogICAgICAgICAgICAgIFRJTUVPVVRfRkxBRz0iLS10aW1lb3V0PSR7eyBpbnB1dHMudGltZW91dCB9fXMiCiAgICAgICAgICAgIGZpCiAgICAgICAgICAgIFRJTUVPVVRfQlVGRkVSX0ZMQUc9IiIKICAgICAgICAgICAgaWYgW1sgLW4gIiR7eyBpbnB1dHMudGltZW91dC1idWZmZXIgfX0iIF1dOyB0aGVuCiAgICAgICAgICAgICAgVElNRU9VVF9CVUZGRVJfRkxBRz0iLS10aW1lb3V0LWJ1ZmZlcj0ke3sgaW5wdXRzLnRpbWVvdXQtYnVmZmVyIH19cyIKICAgICAgICAgICAgZmkKICAgICAgICAgICAgcGdvY3RsIGNvbGxlY3QgXAogICAgICAgICAgICAgIC0tc291cmNlPXBwcm9mIFwKICAgICAgICAgICAgICAtLXVybD0iJHt7IGlucHV0cy5wcHJvZi11cmwgfX0vZGVidWcvcHByb2YvcHJvZmlsZSIgXAogICAgICAgICAgICAgIC0td2luZG93PSIke3sgaW5wdXRzLmR1cmF0aW9uIH19cyIgXAogICAgICAgICAgICAgICR7VElNRU9VVF9GTEFHSH0gXAogICAgICAgICAgICAgICR7VElNRU9VVF9CVUZGRVJfRkxBR30gXAogICAgICAgICAgICAgIC0tb3V0PWNwdS5wcHJvZgogICAgICAgIGVsc2UKICAgICAgICAgIGVjaG8gIkVycm9yOiBvbmUgb2YgcHJvZmlsZS1maWxlLCBwYXJjYS11cmwsIG9yIHBwcm9mLXVybCBtdXN0IGJlIHByb3ZpZGVkIiA+JjIKICAgICAgICAgIGV4aXQgMgogICAgICAgIGZpCiAgICAgICAgZWNobyAicHJvZmlsZT1jcHUucHByb2YiID4+ICIkR0lUSFVCX09VVFBVVCIKB
+name: 'pgoctl-action'
+description: 'Collect, validate, merge, and compare PGO profiles for Go services'
+
+branding:
+  icon: 'activity'
+  color: 'green'
+
+inputs:
+  parca-url:
+    description: 'Base URL of the running Parca instance (e.g. http://parca:7070)'
+    required: false
+    default: ''
+  pprof-url:
+    description: 'Base URL of a Go pprof HTTP endpoint (e.g. http://localhost:6060)'
+    required: false
+    default: ''
+  profile-file:
+    description: 'Path to an existing pprof file (skip collect step)'
+    required: false
+    default: ''
+  baseline-profile:
+    description: 'Path to baseline pprof file for comparison (optional)'
+    required: false
+    default: ''
+  duration:
+    description: 'Profile collection duration in seconds'
+    required: false
+    default: '30'
+  timeout:
+    description: 'HTTP timeout for profile collection in seconds (default: derived from window + buffer)'
+    required: false
+    default: ''
+  timeout-buffer:
+    description: 'Buffer added to window when deriving HTTP timeout in seconds (default 30)'
+    required: false
+    default: ''
+  min-improvement:
+    description: 'Min CPU delta %% to promote (passed to pgoctl compare)'
+    required: false
+    default: '3.0'
+  min-regression:
+    description: 'Min CPU regression %% to rollback (passed to pgoctl compare)'
+    required: false
+    default: '3.0'
+  validate-flags:
+    description: 'Extra flags to pass to pgoctl validate (e.g. --min-package-share tsdb:5)'
+    required: false
+    default: ''
+  artifact-name:
+    description: 'Name for the uploaded GitHub artifact'
+    required: false
+    default: 'pgo-profile'
+  upload-artifact:
+    description: 'Upload cpu.pprof and default.pgo as a workflow artifact'
+    required: false
+    default: 'true'
+  comment-on-pr:
+    description: 'Post a summary comment on the PR (requires github-token)'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for PR comments'
+    required: false
+    default: ${{ github.token }}
+  pgoctl-version:
+    description: 'pgoctl version to install (default: latest in PATH or built from source)'
+    required: false
+    default: 'latest'
+  previous-profile:
+    description: 'Path to a previous default.pgo to merge with (steady-state). Overrides restore-previous-artifact if set.'
+    required: false
+    default: ''
+  restore-previous-artifact:
+    description: 'Auto-download the most recent successful artifact of this name and use it as the previous profile.'
+    required: false
+    default: 'false'
+  explain-top-n:
+    description: 'Number of top functions to include in PR comment from pgoctl explain'
+    required: false
+    default: '5'
+
+outputs:
+  verdict:
+    description: 'Gate verdict from pgoctl compare: promote | neutral | rollback (empty if no baseline)'
+    value: ${{ steps.compare.outputs.verdict }}
+  profile-path:
+    description: 'Path to the collected/validated pprof file'
+    value: ${{ steps.paths.outputs.profile }}
+  artifact-path:
+    description: 'Path to the merged default.pgo artifact'
+    value: ${{ steps.paths.outputs.artifact }}
+  validate-score:
+    description: 'Quality score from pgoctl validate (0.0–1.0)'
+    value: ${{ steps.validate.outputs.score }}
+  samples:
+    description: 'Number of CPU samples in the collected profile'
+    value: ${{ steps.validate.outputs.samples }}
+  unique-stacks:
+    description: 'Number of unique call stacks in the collected profile'
+    value: ${{ steps.validate.outputs.unique-stacks }}
+  cpu-delta:
+    description: 'Weighted CPU delta % vs baseline (positive = improvement)'
+    value: ${{ steps.compare.outputs.delta }}
+  explain-top-functions:
+    description: 'Top CPU functions from pgoctl explain (newline-separated: function|flat_pct)'
+    value: ${{ steps.explain.outputs.top-functions }}
+  explain-packages:
+    description: 'Hot packages from pgoctl explain (newline-separated: package|total_pct)'
+    value: ${{ steps.explain.outputs.packages }}
+  explain-verdict-reason:
+    description: 'Plain-English verdict reason from pgoctl explain'
+    value: ${{ steps.explain.outputs.verdict-reason }}
+  explain-duration-sec:
+    description: 'Profile duration in seconds from pgoctl explain'
+    value: ${{ steps.explain.outputs.duration-sec }}
+
+runs:
+  using: 'composite'
+  steps:
+    # ── install pgoctl ────────────────────────────────────
+    - name: Install pgoctl
+      shell: bash
+      run: |
+        if command -v pgoctl >/dev/null 2>&1; then
+          echo "pgoctl already on PATH: $(pgoctl --version)"
+        else
+          VERSION="${{ inputs.pgoctl-version }}"
+          INSTALLED=false
+          # Primary path: download prebuilt binary if version looks like a semver tag
+          if [[ "$VERSION" =~ ^v[0-9] ]]; then
+            OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+            ARCH="$(uname -m)"
+            case "$ARCH" in
+              x86_64) ARCH="amd64" ;;
+              aarch64|arm64) ARCH="arm64" ;;
+            esac
+            VERSION_CLEAN="${VERSION#v}"
+            URL="https://github.com/better-go-labs/pgoctl/releases/download/${VERSION}/pgoctl_${VERSION_CLEAN}_${OS}_${ARCH}.tar.gz"
+            echo "Downloading pgoctl ${VERSION} from ${URL}"
+            if curl -fsSL "$URL" -o /tmp/pgoctl.tar.gz; then
+              tar -xzf /tmp/pgoctl.tar.gz -C /tmp pgoctl
+              chmod +x /tmp/pgoctl
+              echo /tmp >> "$GITHUB_PATH"
+              INSTALLED=true
+              echo "Installed pgoctl ${VERSION} from release"
+            else
+              echo "::warning::Release download failed for ${VERSION}; falling back to build from source"
+            fi
+          fi
+          # Fallback: build from source
+          if [[ "$INSTALLED" != "true" ]]; then
+            echo "Building pgoctl from source..."
+            go build -o /tmp/pgoctl ./cmd/pgoctl
+            echo /tmp >> "$GITHUB_PATH"
+          fi
+        fi
+
+    # ── collect or copy profile ──────────────────────────────
+    - name: Collect profile
+      id: collect
+      shell: bash
+      run: |
+        if [[ -n "${{ inputs.profile-file }}" ]]; then
+          echo "Using existing profile: ${{ inputs.profile-file }}"
+          cp "${{ inputs.profile-file }}" cpu.pprof
+        elif [[ -n "${{ inputs.parca-url }}" ]]; then
+          echo "Collecting ${DURATION}s CPU profile from ${{ inputs.parca-url }}"
+          pgoctl collect \
+            --source=parca \
+            --url="${{ inputs.parca-url }}" \
+            --duration="${{ inputs.duration }}" \
+            --out=cpu.pprof
+        elif [[ -n "${{ inputs.pprof-url }}" ]]; then
+          echo "Collecting ${{ inputs.duration }}s CPU profile from ${{ inputs.pprof-url }}"
+          TIMEOUT_FLAG=""
+          if [[ -n "${{ inputs.timeout }}" ]]; then
+            TIMEOUT_FLAG="--timeout=${{ inputs.timeout }}s"
+          fi
+          TIMEOUT_BUFFER_FLAG=""
+          if [[ -n "${{ inputs.timeout-buffer }}" ]]; then
+            TIMEOUT_BUFFER_FLAG="--timeout-buffer=${{ inputs.timeout-buffer }}s"
+          fi
+          pgoctl collect \
+            --source=pprof \
+            --url="${{ inputs.pprof-url }}/debug/pprof/profile" \
+            --window="${{ inputs.duration }}s" \
+            ${TIMEOUT_FLAG} \
+            ${TIMEOUT_BUFFER_FLAG} \
+            --out=cpu.pprof
+        else
+          echo "Error: one of profile-file, parca-url, or pprof-url must be provided" >&2
+          exit 2
+        fi
+        echo "profile=cpu.pprof" >> "$GITHUB_OUTPUT"
+
+    # ── validate ──────────────────────────────────────────────────────
+    - name: Validate profile
+      id: validate
+      shell: bash
+      run: |
+        set +e
+        out=$(pgoctl validate ${{ inputs.validate-flags }} --json cpu.pprof 2>&1)
+        exit_code=$?
+        echo "$out"
+        score=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('quality_score',0))" 2>/dev/null || echo "0")
+        valid=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('valid',False))" 2>/dev/null || echo "False")
+        samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('samples',0))" 2>/dev/null || echo "0")
+        stacks=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('unique_stacks',0))" 2>/dev/null || echo "0")
+        errors=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('errors',[]))" 2>/dev/null || echo "")
+        echo "score=$score" >> "$GITHUB_OUTPUT"
+        echo "valid=$valid" >> "$GITHUB_OUTPUT"
+        echo "samples=$samples" >> "$GITHUB_OUTPUT"
+        echo "unique-stacks=$stacks" >> "$GITHUB_OUTPUT"
+        echo "validate-errors=$errors" >> "$GITHUB_OUTPUT"
+        if [[ $exit_code -eq 1 ]]; then
+          echo "::warning::Profile did not pass the quality gate (score=$score). PGO artifact will still be produced."
+        elif [[ $exit_code -ne 0 ]]; then
+          exit $exit_code
+        fi
+
+    # ── restore previous artifact (for steady-state accumulation) ────
+    - name: Restore previous artifact
+      id: restore-artifact
+      if: inputs.restore-previous-artifact == 'true' && inputs.previous-profile == ''
+      uses: dawidd6/action-download-artifact@v6
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: previous
+        workflow_conclusion: success
+        if_no_artifact_found: warn
+
+    - name: Resolve previous profile path
+      id: restore
+      shell: bash
+      run: |
+        if [[ -n "${{ inputs.previous-profile }}" ]]; then
+          echo "has-previous=true" >> "$GITHUB_OUTPUT"
+          echo "prev-path=${{ inputs.previous-profile }}" >> "$GITHUB_OUTPUT"
+        elif [[ -f "previous/default.pgo" ]]; then
+          echo "has-previous=true" >> "$GITHUB_OUTPUT"
+          echo "prev-path=previous/default.pgo" >> "$GITHUB_OUTPUT"
+        else
+          echo "has-previous=false" >> "$GITHUB_OUTPUT"
+          echo "prev-path=" >> "$GITHUB_OUTPUT"
+        fi
+
+    # ── merge → default.pgo ─────────────────────────────────────────────────
+    - name: Merge profiles
+      id: merge
+      shell: bash
+      run: |
+        if [[ "${{ steps.restore.outputs.has-previous }}" == "true" ]]; then
+          pgoctl merge cpu.pprof "${{ steps.restore.outputs.prev-path }}" --out=default.pgo
+        else
+          pgoctl merge cpu.pprof --out=default.pgo
+        fi
+        echo "artifact=default.pgo" >> "$GITHUB_OUTPUT"
+
+    # ── resolve output paths ──────────────────────────────────────────────
+    - name: Set output paths
+      id: paths
+      shell: bash
+      run: |
+        echo "profile=$(pwd)/cpu.pprof" >> "$GITHUB_OUTPUT"
+        echo "artifact=$(pwd)/default.pgo" >> "$GITHUB_OUTPUT"
+
+    # ── compare against baseline (optional) ──────────────────────────────
+    - name: Compare profiles
+      id: compare
+      if: inputs.baseline-profile != '' || steps.restore.outputs.has-previous == 'true'
+      shell: bash
+      run: |
+        BASELINE="${{ inputs.baseline-profile }}"
+        if [[ -z "$BASELINE" ]]; then
+          BASELINE="${{ steps.restore.outputs.prev-path }}"
+        fi
+        set +e
+        out=$(pgoctl compare \
+          --min-improvement="${{ inputs.min-improvement }}" \
+          --min-regression="${{ inputs.min-regression }}" \
+          --json \
+          "$BASELINE" cpu.pprof 2>&1)
+        exit_code=$?
+        echo "$out"
+        verdict=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('verdict',''))" 2>/dev/null || echo "")
+        delta=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary_cpu_delta_pct',0))" 2>/dev/null || echo "0")
+        base_samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('baseline_samples',0))" 2>/dev/null || echo "0")
+        cand_samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('candidate_samples',0))" 2>/dev/null || echo "0")
+        top_deltas=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print('\n'.join('{0}|{1:.1f}%|{2:.1f}%|{3:+.1f}%'.format(f['function'],f['base_pct'],f['cand_pct'],f['delta_pct']) for f in d.get('top_deltas',[])[:5]))" 2>/dev/null || echo "")
+        echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+        echo "delta=$delta" >> "$GITHUB_OUTPUT"
+        echo "baseline-samples=$base_samples" >> "$GITHUB_OUTPUT"
+        echo "candidate-samples=$cand_samples" >> "$GITHUB_OUTPUT"
+        {
+          echo "top-deltas<<EOF_TOP"
+          echo "$top_deltas"
+          echo "EOF_TOP"
+        } >> "$GITHUB_OUTPUT"
+        if [[ $exit_code -eq 1 ]]; then
+          echo "::warning::Rollback verdict — CPU regression detected (delta=$delta%)"
+        elif [[ $exit_code -ne 0 ]]; then
+          exit $exit_code
+        fi
+
+    # ── explain profile ─────────────────────────────────────────────────────
+    - name: Explain profile
+      id: explain
+      shell: bash
+      run: |
+        set +e
+        out=$(pgoctl explain --format json --top "${{ inputs.explain-top-n }}" default.pgo 2>&1)
+        exit_code=$?
+        echo "$out"
+        if [[ $exit_code -ne 0 ]]; then
+          echo "top-functions=" >> "$GITHUB_OUTPUT"
+          echo "packages=" >> "$GITHUB_OUTPUT"
+          echo "verdict-reason=" >> "$GITHUB_OUTPUT"
+          echo "duration-sec=" >> "$GITHUB_OUTPUT"
+        else
+          top_funcs=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print('\n'.join('|'.join([str(f['function']), '{:.2f}%'.format(f['flat_pct'])]) for f in d.get('top_functions',[])))" 2>/dev/null || echo "")
+          packages=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print('\n'.join('|'.join([g['package'], '{:.2f}%'.format(g['total_pct'])]) for g in d.get('package_groups',[])))" 2>/dev/null || echo "")
+          reason=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('verdict_reason',''))" 2>/dev/null || echo "")
+          duration=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('duration_sec',0))" 2>/dev/null || echo "")
+          { echo "top-functions<<EOF_TF"; echo "$top_funcs"; echo "EOF_TF"; } >> "$GITHUB_OUTPUT"
+          { echo "packages<<EOF_PKG"; echo "$packages"; echo "EOF_PKG"; } >> "$GITHUB_OUTPUT"
+          echo "verdict-reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "duration-sec=$duration" >> "$GITHUB_OUTPUT"
+        fi
+
+    # ── upload artifact ─────────────────────────────────────────────────────
+    - name: Upload PGO artifact
+      if: inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          cpu.pprof
+          default.pgo
+        retention-days: 30
+
+    # ── comment on PR ──────────────────────────────────────────────────────────
+    - name: Comment on PR
+      if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const verdict       = '${{ steps.compare.outputs.verdict }}';
+          const delta         = parseFloat('${{ steps.compare.outputs.delta }}' || '0');
+          const score         = '${{ steps.validate.outputs.score }}';
+          const valid         = '${{ steps.validate.outputs.valid }}';
+          const samples       = parseInt('${{ steps.validate.outputs.samples }}' || '0');
+          const uniqueStacks  = parseInt('${{ steps.validate.outputs.unique-stacks }}' || '0');
+          const validateErrs  = '${{ steps.validate.outputs.validate-errors }}';
+          const baseSamples   = '${{ steps.compare.outputs.baseline-samples }}';
+          const candSamples   = '${{ steps.compare.outputs.candidate-samples }}';
+          const topDeltasRaw  = `${{ steps.compare.outputs.top-deltas }}`;
+          const topFuncsRaw   = `${{ steps.explain.outputs.top-functions }}`;
+          const packagesRaw   = `${{ steps.explain.outputs.packages }}`;
+          const verdictReason = '${{ steps.explain.outputs.verdict-reason }}';
+          const durationSec   = '${{ steps.explain.outputs.duration-sec }}';
+
+          // Verdict badge
+          let verdictLine;
+          if (verdict === 'promote') {
+            verdictLine = `✅ **promote** — CPU improved by \`${Math.abs(delta).toFixed(2)}%\``;
+          } else if (verdict === 'rollback') {
+            verdictLine = `🚨 **rollback** — CPU regressed by \`${Math.abs(delta).toFixed(2)}%\``;
+          } else if (verdict === 'neutral') {
+            verdictLine = `➡️ **neutral** — within threshold (Δ \`${delta > 0 ? '+' : ''}${delta.toFixed(2)}%\`)`;
+          } else {
+            verdictLine = `ℹ️ **no comparison** — baseline not provided`;
+          }
+
+          // Summary table
+          const durationRow = durationSec ? `| duration | \`${parseFloat(durationSec).toFixed(1)}s\` |` : '';
+          const deltaRow = verdict ? `| cpu Δ vs baseline | \`${delta > 0 ? '↑' : delta < 0 ? '↓' : '→'}${Math.abs(delta).toFixed(2)}%\` |` : '';
+          const summaryTable = [
+            '| metric | value |',
+            '|--------|-------|',
+            `| quality score | \`${score}\` |`,
+            `| valid | \`${valid}\` |`,
+            `| samples | \`${samples.toLocaleString()}\` |`,
+            `| unique stacks | \`${uniqueStacks.toLocaleString()}\` |`,
+            durationRow,
+            deltaRow,
+          ].filter(Boolean).join('\n');
+
+          // Top CPU consumers (from explain)
+          let topFuncsSection = '';
+          if (topFuncsRaw.trim()) {
+            const rows = topFuncsRaw.trim().split('\n').map((line, i) => {
+              const [fn, pct] = line.split('|');
+              return `| ${i + 1} | \`${fn}\` | ${pct} |`;
+            });
+            topFuncsSection = [
+              '',
+              '#### 📊 Top CPU consumers',
+              '| # | Function | Flat % |',
+              '|---|----------|--------|',
+              ...rows,
+            ].join('\n');
+          }
+
+          // Hot packages (collapsible)
+          let packagesSection = '';
+          if (packagesRaw.trim()) {
+            const rows = packagesRaw.trim().split('\n').map(line => {
+              const [pkg, pct] = line.split('|');
+              return `| \`${pkg}\` | ${pct} |`;
+            });
+            packagesSection = [
+              '',
+              '<details>',
+              '<summary>🗂 Hot packages</summary>',
+              '',
+              '| Package | Total CPU % |',
+              '|---------|-------------|',
+              ...rows,
+              '',
+              '</details>',
+            ].join('\n');
+          }
+
+          // Delta vs baseline (collapsible)
+          let topDeltasSection = '';
+          if (topDeltasRaw.trim()) {
+            const rows = topDeltasRaw.trim().split('\n').map(line => {
+              const [fn, base, cand, d] = line.split('|');
+              return `| \`${fn}\` | ${base} | ${cand} | ${d} |`;
+            });
+            topDeltasSection = [
+              '',
+              '<details>',
+              '<summary>Δ vs baseline — top changed functions</summary>',
+              '',
+              '| Function | Baseline | Candidate | Delta |',
+              '|----------|----------|-----------|-------|',
+              ...rows,
+              '',
+              '</details>',
+            ].join('\n');
+          }
+
+          // Verdict reason prose (from explain)
+          const verdictReasonSection = verdictReason
+            ? `\n\n> ${verdictReason}`
+            : '';
+
+          // Validate errors
+          const errSection = validateErrs
+            ? `\n\n> ⚠️ **Validate warnings:** ${validateErrs}`
+            : '';
+
+          const marker = '<!-- pgo-action-comment -->';
+          const body = [
+            marker,
+            '## 🔬 PGO Profile Report',
+            '',
+            verdictLine,
+            '',
+            '#### Profile summary',
+            summaryTable,
+          ].join('\n')
+            + verdictReasonSection
+            + topFuncsSection
+            + packagesSection
+            + topDeltasSection
+            + errSection
+            + [
+              '',
+              '',
+              '---',
+              `Artifact \`${{ inputs.artifact-name }}\`: \`cpu.pprof\` + \`default.pgo\` — use \`-pgo=default.pgo\` in your build.`,
+            ].join('\n');
+
+          // Find-and-update or create
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          const existing = comments.find(c => c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+          }
