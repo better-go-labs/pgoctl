@@ -378,7 +378,8 @@ runs:
           const summaryTable = [
             '| metric | value |',
             '|--------|-------|',
-            `| quality score | \`${score}\` · valid \`${valid}\` |`,
+            `| quality score | \`${score}\` |`,
+            `| valid | \`${valid}\` |`,
             `| samples | \`${samples.toLocaleString()}\` |`,
             `| unique stacks | \`${uniqueStacks.toLocaleString()}\` |`,
             durationRow,
