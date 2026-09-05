@@ -13,20 +13,26 @@ import (
 	"github.com/google/pprof/profile"
 )
 
+// Verdict classifies the PGO leverage result for a build target.
 type Verdict string
 
 const (
+	// VerdictLeverageFound indicates PGO-specific compiler decisions were detected.
 	VerdictLeverageFound Verdict = "LEVERAGE_FOUND"
-	VerdictNoLeverage    Verdict = "NO_LEVERAGE"
-	VerdictProfileOnly   Verdict = "PROFILE_ONLY"
+	// VerdictNoLeverage indicates zero PGO-specific decisions; optimization unlikely to help.
+	VerdictNoLeverage Verdict = "NO_LEVERAGE"
+	// VerdictProfileOnly indicates analysis was profile-only (no build was run).
+	VerdictProfileOnly Verdict = "PROFILE_ONLY"
 )
 
+// FunctionEntry holds the name and CPU share for a hot function.
 type FunctionEntry struct {
 	Function string  `json:"function"`
 	Package  string  `json:"package"`
 	FlatPct  float64 `json:"flat_pct"`
 }
 
+// BuildAnalysis holds the raw counts from comparing a PGO build against a baseline build.
 type BuildAnalysis struct {
 	DevirtDecisions int `json:"devirt_decisions"`
 	PGOExtraInlines int `json:"pgo_extra_inlines"`
@@ -34,6 +40,7 @@ type BuildAnalysis struct {
 	PGOInlines      int `json:"pgo_inlines"`
 }
 
+// Report is the output of CheckFile: a structured summary of PGO leverage for a build target.
 type Report struct {
 	ProfilePath   string          `json:"profile_path"`
 	TotalSamples  int64           `json:"total_samples"`
@@ -44,12 +51,15 @@ type Report struct {
 	VerdictReason string          `json:"verdict_reason"`
 }
 
+// Options controls CheckFile behaviour.
 type Options struct {
 	TopN    int
 	Dir     string
 	Package string
 }
 
+// CheckFile parses the pprof at profilePath, identifies hot functions, and optionally
+// runs a PGO build (when opts.Dir is set) to count devirtualization and extra-inline decisions.
 func CheckFile(profilePath string, opts Options) (*Report, error) {
 	data, err := os.ReadFile(profilePath)
 	if err != nil {
