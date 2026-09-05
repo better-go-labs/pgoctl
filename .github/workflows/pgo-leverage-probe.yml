@@ -53,16 +53,18 @@ jobs:
           go test -bench=BenchmarkControl -benchtime=15s -cpuprofile=/tmp/ctrl.pprof .
           ls -lh /tmp/ctrl.pprof
 
+      # go test -c compiles the test binary and emits gcflags diagnostics for
+      # test packages; go build ignores *_test.go files and produces no output.
       - name: "Ctrl | gcflags -m=2 WITHOUT PGO"
         working-directory: scripts/pgo-leverage/positive-control
         run: |
-          go build -pgo=off -gcflags="-m=2" . 2>&1 | head -c 5242880 > /tmp/ctrl-no-pgo.txt || true
+          go test -c -pgo=off -gcflags="-m=2" -o /dev/null . 2>&1 | head -c 5242880 > /tmp/ctrl-no-pgo.txt || true
           echo "Inline decisions (no PGO): $(grep -cE 'can inline|inlining call' /tmp/ctrl-no-pgo.txt || echo 0)"
 
       - name: "Ctrl | gcflags -m=2 WITH PGO"
         working-directory: scripts/pgo-leverage/positive-control
         run: |
-          go build -pgo=/tmp/ctrl.pprof -gcflags="-m=2" . 2>&1 | head -c 5242880 > /tmp/ctrl-with-pgo.txt || true
+          go test -c -pgo=/tmp/ctrl.pprof -gcflags="-m=2" -o /dev/null . 2>&1 | head -c 5242880 > /tmp/ctrl-with-pgo.txt || true
           echo "Inline decisions (with PGO): $(grep -cE 'can inline|inlining call' /tmp/ctrl-with-pgo.txt || echo 0)"
           echo "PGO markers: $(grep -ciE 'devirtuali|pgo.driven|pgo-driven' /tmp/ctrl-with-pgo.txt || echo 0)"
 
@@ -135,7 +137,7 @@ jobs:
         run: |
           if [ "$HAS_PROFILE" = "true" ]; then
             /tmp/pgoctl explain --format json --top 10 /tmp/prometheus.pgo \
-              > /tmp/prom-explain.json 2>&1 || echo "{}" > /tmp/prom-explain.json
+              > /tmp/prom-explain.json 2>/dev/null || echo "{}" > /tmp/prom-explain.json
           else
             echo "{}" > /tmp/prom-explain.json
           fi
@@ -204,13 +206,14 @@ jobs:
 
       # Try to fetch a profile artifact from the better-go-labs fork;
       # gracefully skip if unavailable (cross-repo artifact access may be restricted).
+      # Use ?per_page=100 (no --paginate) so the jq filter runs over the full
+      # result set; --paginate applies jq per page so `last` would be wrong.
       - name: "nats-server | Fetch PGO profile artifact (if available)"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          RUN_ID=$(gh api "/repos/better-go-labs/nats-server/actions/artifacts" \
-            --paginate \
+          RUN_ID=$(gh api "/repos/better-go-labs/nats-server/actions/artifacts?per_page=100" \
             --jq '[.artifacts[] | select(.name=="default-pgo" and .expired==false)] | sort_by(.created_at) | last | .workflow_run.id' \
             2>/dev/null || echo "")
           if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ] && [ "$RUN_ID" != "" ]; then
@@ -257,7 +260,7 @@ jobs:
         run: |
           if [ "$HAS_PROFILE" = "true" ]; then
             /tmp/pgoctl explain --format json --top 10 "$NATS_PGO_FILE" \
-              > /tmp/nats-explain.json 2>&1 || echo "{}" > /tmp/nats-explain.json
+              > /tmp/nats-explain.json 2>/dev/null || echo "{}" > /tmp/nats-explain.json
           else
             echo "{}" > /tmp/nats-explain.json
           fi

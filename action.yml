@@ -217,7 +217,7 @@ runs:
         valid=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('valid',False))" 2>/dev/null || echo "False")
         samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('samples',0))" 2>/dev/null || echo "0")
         stacks=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('unique_stacks',0))" 2>/dev/null || echo "0")
-        errors=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('errors',[])))" 2>/dev/null || echo "")
+        errors=$(echo "$out" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(",".join(d.get("errors",[])))' 2>/dev/null || echo "")
         echo "score=$score" >> "$GITHUB_OUTPUT"
         echo "valid=$valid" >> "$GITHUB_OUTPUT"
         echo "samples=$samples" >> "$GITHUB_OUTPUT"
@@ -242,19 +242,19 @@ runs:
         echo "=== PGO leverage probe: $TARGET ==="
 
         # Baseline: inline decision count without PGO
-        go build -pgo=off -gcflags="-m=2" $TARGET 2>&1 \
+        go build -pgo=off -gcflags="-m=2" "$TARGET" 2>&1 \
           | head -c 10485760 > /tmp/leverage-no-pgo.txt || true
         echo "Inline decisions (no PGO): $(grep -cE 'can inline|inlining call' /tmp/leverage-no-pgo.txt || echo 0)"
 
         # With PGO: count new inline + devirt decisions
-        go build -pgo=cpu.pprof -gcflags="-m=2" $TARGET 2>&1 \
+        go build -pgo=cpu.pprof -gcflags="-m=2" "$TARGET" 2>&1 \
           | head -c 10485760 > /tmp/leverage-with-pgo.txt || true
         echo "Inline decisions (with PGO): $(grep -cE 'can inline|inlining call' /tmp/leverage-with-pgo.txt || echo 0)"
         echo "PGO markers:                 $(grep -ciE 'devirtuali|pgo.driven|pgo-driven' /tmp/leverage-with-pgo.txt || echo 0)"
 
         # Profile analysis via pgoctl explain
         pgoctl explain --format json --top 10 cpu.pprof \
-          > /tmp/leverage-explain.json 2>&1 || echo "{}" > /tmp/leverage-explain.json
+          > /tmp/leverage-explain.json 2>/dev/null || echo "{}" > /tmp/leverage-explain.json
 
         # Generate report + extract verdict
         TARGET_NAME="$TARGET" \
