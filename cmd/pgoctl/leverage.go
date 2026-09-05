@@ -33,7 +33,7 @@ With --dir, runs build analysis to measure PGO-specific compiler decisions:
 If either is detected, PGO will likely provide benefit. If neither is found,
 PGO won't measurably improve this workload.`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			opts := leverage.Options{
 				TopN:    topN,
 				Dir:     dir,

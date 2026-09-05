@@ -1,3 +1,4 @@
+// Package leverage assesses PGO benefit for a Go module before running the full optimization pipeline.
 package leverage
 
 import (

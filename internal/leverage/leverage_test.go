@@ -108,7 +108,7 @@ func TestDetectHotInterfaces(t *testing.T) {
 			want:    1,
 		},
 		{
-			name:    "multiple interfaces",
+			name: "multiple interfaces",
 			entries: []FunctionEntry{
 				{Function: "foo.(*Bar).(Reader)"},
 				{Function: "baz.(*Qux).(Writer)"},
