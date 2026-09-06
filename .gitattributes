@@ -1,2 +1,4 @@
 # Git LFS: binary profile artifacts — keep blobs out of git (repo is public)
 *.pprof filter=lfs diff=lfs merge=lfs -text
+# Test fixture: committed directly (small, synthetic, not a real profile)
+testdata/cpu_valid.pprof -filter -diff -merge text
