@@ -62,6 +62,14 @@ func newValidateCmd() *cobra.Command {
 	var minStackDepth float64
 	var weightDensity, weightRichness, weightCoverage, weightDepth, richnessFactor float64
 	var minPackageShare []string
+	// workload-shape signal flags
+	var workloadSignals bool
+	var minCPUBoundFraction float64
+	var peakednessTopN int
+	var minPeakedness float64
+	var crossPkgHotThreshold float64
+	var minCrossPkgDensity float64
+	var maxDriftPct float64
 
 	// validateConfigFlags are the flags resolved from env/config (precedence:
 	// CLI > env > config file > default). json is the root persistent flag.
@@ -70,6 +78,8 @@ func newValidateCmd() *cobra.Command {
 		"target-samples", "target-duration", "min-stack-depth",
 		"weight-density", "weight-richness", "weight-coverage", "weight-depth",
 		"richness-factor", "min-package-share", "json",
+		"workload-signals", "min-cpu-bound-fraction", "peakedness-top-n",
+		"min-peakedness", "cross-pkg-hot-threshold", "min-cross-pkg-density", "max-drift-pct",
 	}
 
 	cmd := &cobra.Command{
@@ -102,6 +112,12 @@ func newValidateCmd() *cobra.Command {
 						// valueFrom joins YAML lists with commas; the existing
 						// parser already handles comma-separated entries.
 						minPackageShare = []string{val}
+					case "workload-signals":
+						b, err := strconv.ParseBool(val)
+						if err != nil {
+							return err
+						}
+						workloadSignals = b
 					case "min-samples", "target-samples":
 						n, err := strconv.ParseInt(val, 10, 64)
 						if err != nil {
@@ -112,6 +128,12 @@ func newValidateCmd() *cobra.Command {
 						} else {
 							targetSamples = n
 						}
+					case "peakedness-top-n":
+						n, err := strconv.Atoi(val)
+						if err != nil {
+							return err
+						}
+						peakednessTopN = n
 					default: // float64 flags
 						f, err := strconv.ParseFloat(val, 64)
 						if err != nil {
@@ -136,6 +158,16 @@ func newValidateCmd() *cobra.Command {
 							weightDepth = f
 						case "richness-factor":
 							richnessFactor = f
+						case "min-cpu-bound-fraction":
+							minCPUBoundFraction = f
+						case "min-peakedness":
+							minPeakedness = f
+						case "cross-pkg-hot-threshold":
+							crossPkgHotThreshold = f
+						case "min-cross-pkg-density":
+							minCrossPkgDensity = f
+						case "max-drift-pct":
+							maxDriftPct = f
 						}
 					}
 					return nil
@@ -156,18 +188,25 @@ func newValidateCmd() *cobra.Command {
 				return &exitError{2, err}
 			}
 			opts := validate.Options{
-				MinSamples:         minSamples,
-				MinDurationSeconds: minDuration,
-				MinScore:           minScore,
-				TargetSamples:      targetSamples,
-				TargetDuration:     targetDuration,
-				MinStackDepth:      minStackDepth,
-				WeightDensity:      weightDensity,
-				WeightRichness:     weightRichness,
-				WeightCoverage:     weightCoverage,
-				WeightDepth:        weightDepth,
-				RichnessFactor:     richnessFactor,
-				PackageShareGates:  gates,
+				MinSamples:                  minSamples,
+				MinDurationSeconds:          minDuration,
+				MinScore:                    minScore,
+				TargetSamples:               targetSamples,
+				TargetDuration:              targetDuration,
+				MinStackDepth:               minStackDepth,
+				WeightDensity:               weightDensity,
+				WeightRichness:              weightRichness,
+				WeightCoverage:              weightCoverage,
+				WeightDepth:                 weightDepth,
+				RichnessFactor:              richnessFactor,
+				PackageShareGates:           gates,
+				ComputeWorkloadSignals:      workloadSignals,
+				MinCPUBoundFraction:         minCPUBoundFraction,
+				PeakednessTopN:              peakednessTopN,
+				MinPeakedness:               minPeakedness,
+				CrossPackageHotThresholdPct: crossPkgHotThreshold,
+				MinCrossPackageChainDensity: minCrossPkgDensity,
+				MaxDriftPct:                 maxDriftPct,
 			}
 			report, err := validate.ValidateFile(args[0], opts) //nolint:gosec
 			if err != nil {
@@ -199,6 +238,13 @@ func newValidateCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&weightDepth, "weight-depth", 0.10, "depth score weight")
 	cmd.Flags().Float64Var(&richnessFactor, "richness-factor", 0.02, "richness scaling factor")
 	cmd.Flags().StringArrayVar(&minPackageShare, "min-package-share", nil, "min combined flat CPU %% for a package prefix, e.g. github.com/prometheus/prometheus/tsdb:5 (repeatable or comma-separated; subpackages included)")
+	cmd.Flags().BoolVar(&workloadSignals, "workload-signals", false, "compute workload-shape signals (cpu-bound fraction, peakedness, cross-pkg chain density, drift)")
+	cmd.Flags().Float64Var(&minCPUBoundFraction, "min-cpu-bound-fraction", 0, "warn if CPU-bound fraction of on-CPU time is below this value (0–1, 0=disabled)")
+	cmd.Flags().IntVar(&peakednessTopN, "peakedness-top-n", 10, "number of top functions for peakedness cumulative share")
+	cmd.Flags().Float64Var(&minPeakedness, "min-peakedness", 0, "warn if top-N cumulative CPU%% is below this value (0=disabled)")
+	cmd.Flags().Float64Var(&crossPkgHotThreshold, "cross-pkg-hot-threshold", 0, "per-function flat CPU%% threshold to count as hot for cross-package chain density (0=all)")
+	cmd.Flags().Float64Var(&minCrossPkgDensity, "min-cross-pkg-density", 0, "warn if cross-package chain density is below this value (0–1, 0=disabled)")
+	cmd.Flags().Float64Var(&maxDriftPct, "max-drift-pct", 0, "warn if intra-profile drift exceeds this percentage (0=disabled)")
 	return cmd
 }
 
@@ -366,6 +412,16 @@ func printQualityReport(report *profiletypes.QualityReport, jsonOutput bool) {
 		_, _ = fmt.Fprintf(w, "unique_stacks\t%d\n", report.UniqueStacks)
 		for prefix, share := range report.PackageShares {
 			_, _ = fmt.Fprintf(w, "package_share\t%s\t%.2f%%\n", prefix, share)
+		}
+		if ws := report.WorkloadSignals; ws != nil {
+			_, _ = fmt.Fprintf(w, "cpu_bound_fraction\t%.4f\n", ws.CPUBoundFraction)
+			_, _ = fmt.Fprintf(w, "peakedness\t%.2f%%\n", ws.Peakedness)
+			_, _ = fmt.Fprintf(w, "cross_package_chain_density\t%.4f\n", ws.CrossPackageChainDensity)
+			if ws.DriftPct >= 0 {
+				_, _ = fmt.Fprintf(w, "drift_pct\t%.2f%%\n", ws.DriftPct)
+			} else {
+				_, _ = fmt.Fprintf(w, "drift_pct\tn/a\n")
+			}
 		}
 		for _, e := range report.Errors {
 			_, _ = fmt.Fprintf(w, "error\t%s\n", e)
