@@ -80,8 +80,10 @@ jobs:
 
       - name: "Ctrl | Job summary"
         run: |
-          echo "## Positive Control" >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/ctrl-report.md >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Positive Control"
+            cat /tmp/ctrl-report.md
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # -------- Main probe: Prometheus -------------------------------------
       - name: "Prometheus | Checkout"
@@ -155,10 +157,12 @@ jobs:
 
       - name: "Prometheus | Job summary"
         run: |
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "---" >> "$GITHUB_STEP_SUMMARY"
-          echo "## Prometheus Leverage Probe" >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/prom-leverage-report.md >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "---"
+            echo "## Prometheus Leverage Probe"
+            cat /tmp/prom-leverage-report.md
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: "Prometheus | Sticky PR comment"
         if: github.event_name == 'pull_request'
@@ -278,8 +282,10 @@ jobs:
 
       - name: "nats-server | Job summary"
         run: |
-          echo "## nats-server Leverage Probe" >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/nats-leverage-report.md >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## nats-server Leverage Probe"
+            cat /tmp/nats-leverage-report.md
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: "nats-server | Sticky PR comment"
         if: github.event_name == 'pull_request'
