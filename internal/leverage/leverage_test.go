@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/google/pprof/profile"
 )
 
 func TestCheckFile_ProfileOnly(t *testing.T) {
@@ -212,5 +214,151 @@ func TestReadProfileFileAbsolute(t *testing.T) {
 
 	if rpt.TotalSamples <= 0 {
 		t.Errorf("expected TotalSamples > 0")
+	}
+}
+
+func TestCPUSampleIndex(t *testing.T) {
+	tests := []struct {
+		name           string
+		filename       string
+		wantIdx        int
+		wantOk         bool
+	}{
+		{
+			name:     "cpu_valid.pprof has cpu samples",
+			filename: "cpu_valid.pprof",
+			wantIdx:  1,
+			wantOk:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join("..", "..", "testdata", tt.filename)
+			data, err := os.ReadFile(path)
+			if err != nil || strings.Contains(string(data), "git-lfs") {
+				t.Skipf("testdata %s not available", tt.filename)
+			}
+
+			p, err := profile.ParseData(data)
+			if err != nil {
+				t.Fatalf("failed to parse profile: %v", err)
+			}
+
+			idx, ok := cpuSampleIndex(p)
+			if ok != tt.wantOk {
+				t.Errorf("cpuSampleIndex() ok = %v, want %v", ok, tt.wantOk)
+			}
+			if ok && idx != tt.wantIdx {
+				t.Errorf("cpuSampleIndex() idx = %d, want %d", idx, tt.wantIdx)
+			}
+		})
+	}
+}
+
+func TestPackageFromFunctionEdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   string
+		want string
+	}{
+		{
+			name: "empty string",
+			fn:   "",
+			want: "",
+		},
+		{
+			name: "no slash",
+			fn:   "Foo",
+			want: "Foo",
+		},
+		{
+			name: "local package",
+			fn:   "main.Foo",
+			want: "main",
+		},
+		{
+			name: "nested with method",
+			fn:   "github.com/foo/bar/baz.(*Type).Method",
+			want: "github.com/foo/bar/baz",
+		},
+		{
+			name: "nested with paren in middle",
+			fn:   "github.com/foo/(bar)",
+			want: "github.com/foo/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := packageFromFunction(tt.fn)
+			if got != tt.want {
+				t.Errorf("packageFromFunction(%q) = %q, want %q", tt.fn, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDetectHotInterfacesWithDuplicates(t *testing.T) {
+	entries := []FunctionEntry{
+		{Function: "foo.(*Bar).(Reader)"},
+		{Function: "foo.(*Bar).(Reader)"},
+		{Function: "baz.(*Qux).(Writer)"},
+	}
+
+	got := detectHotInterfaces(entries)
+	if len(got) != 2 {
+		t.Errorf("detectHotInterfaces() = %d interfaces, want 2 (should dedup)", len(got))
+	}
+
+	seen := make(map[string]bool)
+	for _, iface := range got {
+		if seen[iface] {
+			t.Errorf("detectHotInterfaces() returned duplicate: %s", iface)
+		}
+		seen[iface] = true
+	}
+}
+
+func TestCountLinesEdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		pattern string
+		want    int
+	}{
+		{
+			name:    "empty output",
+			output:  "",
+			pattern: "test",
+			want:    0,
+		},
+		{
+			name:    "empty pattern",
+			output:  "line1\nline2",
+			pattern: "",
+			want:    2,
+		},
+		{
+			name:    "pattern on empty line",
+			output:  "\n\n",
+			pattern: "test",
+			want:    0,
+		},
+		{
+			name:    "case insensitive with mixed case",
+			output:  "DeVirtualizing Foo\ndevirtualizing Bar",
+			pattern: "devirtualizing",
+			want:    2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := countLines(tt.output, tt.pattern)
+			if got != tt.want {
+				t.Errorf("countLines(%q, %q) = %d, want %d", tt.output, tt.pattern, got, tt.want)
+			}
+		})
 	}
 }
