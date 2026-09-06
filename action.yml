@@ -78,6 +78,14 @@ inputs:
     description: 'Number of top functions to include in PR comment from pgoctl explain'
     required: false
     default: '5'
+  run-leverage-probe:
+    description: 'Run PGO leverage pre-check (go build -gcflags=-m=2) before the benchmark cycle. Emits leverage-verdict output.'
+    required: false
+    default: 'false'
+  leverage-probe-target:
+    description: 'Go build target for the leverage probe (default: ./... for all packages)'
+    required: false
+    default: './...'
 
 outputs:
   verdict:
@@ -113,6 +121,9 @@ outputs:
   explain-duration-sec:
     description: 'Profile duration in seconds from pgoctl explain'
     value: ${{ steps.explain.outputs.duration-sec }}
+  leverage-verdict:
+    description: 'PGO leverage pre-check verdict: NONE | LOW | HIGH | INCOMPLETE (empty if probe not run)'
+    value: ${{ steps.leverage.outputs.verdict }}
 
 runs:
   using: 'composite'
@@ -155,7 +166,7 @@ runs:
           fi
         fi
 
-    # ── collect or copy profile ──────────────────────────────
+    # ── collect or copy profile ───────────────────────────
     - name: Collect profile
       id: collect
       shell: bash
@@ -193,7 +204,7 @@ runs:
         fi
         echo "profile=cpu.pprof" >> "$GITHUB_OUTPUT"
 
-    # ── validate ──────────────────────────────────────────────────────
+    # ── validate ──────────────────────────────────────────────
     - name: Validate profile
       id: validate
       shell: bash
@@ -206,7 +217,7 @@ runs:
         valid=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('valid',False))" 2>/dev/null || echo "False")
         samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('samples',0))" 2>/dev/null || echo "0")
         stacks=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('unique_stacks',0))" 2>/dev/null || echo "0")
-        errors=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(','.join(d.get('errors',[]))" 2>/dev/null || echo "")
+        errors=$(echo "$out" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(",".join(d.get("errors",[])))' 2>/dev/null || echo "")
         echo "score=$score" >> "$GITHUB_OUTPUT"
         echo "valid=$valid" >> "$GITHUB_OUTPUT"
         echo "samples=$samples" >> "$GITHUB_OUTPUT"
@@ -217,6 +228,52 @@ runs:
         elif [[ $exit_code -ne 0 ]]; then
           exit $exit_code
         fi
+
+    # ── PGO leverage probe (optional early gate) ────────────────────────
+    - name: PGO leverage probe
+      id: leverage
+      if: inputs.run-leverage-probe == 'true'
+      shell: bash
+      run: |
+        set +e
+        TARGET="${{ inputs.leverage-probe-target }}"
+        SCRIPT_DIR="${{ github.action_path }}/scripts/pgo-leverage"
+
+        echo "=== PGO leverage probe: $TARGET ==="
+
+        # Baseline: inline decision count without PGO
+        go build -pgo=off -gcflags="-m=2" "$TARGET" 2>&1 \
+          | head -c 10485760 > /tmp/leverage-no-pgo.txt || true
+        echo "Inline decisions (no PGO): $(grep -cE 'can inline|inlining call' /tmp/leverage-no-pgo.txt || echo 0)"
+
+        # With PGO: count new inline + devirt decisions
+        go build -pgo=cpu.pprof -gcflags="-m=2" "$TARGET" 2>&1 \
+          | head -c 10485760 > /tmp/leverage-with-pgo.txt || true
+        echo "Inline decisions (with PGO): $(grep -cE 'can inline|inlining call' /tmp/leverage-with-pgo.txt || echo 0)"
+        echo "PGO markers:                 $(grep -ciE 'devirtuali|pgo.driven|pgo-driven' /tmp/leverage-with-pgo.txt || echo 0)"
+
+        # Profile analysis via pgoctl explain
+        pgoctl explain --format json --top 10 cpu.pprof \
+          > /tmp/leverage-explain.json 2>/dev/null || echo "{}" > /tmp/leverage-explain.json
+
+        # Generate report + extract verdict
+        TARGET_NAME="$TARGET" \
+        HAS_PROFILE="true" \
+        GCFLAGS_NO_PGO="/tmp/leverage-no-pgo.txt" \
+        GCFLAGS_WITH_PGO="/tmp/leverage-with-pgo.txt" \
+        EXPLAIN_JSON="/tmp/leverage-explain.json" \
+        REPORT_OUT="/tmp/leverage-report.md" \
+          python3 "$SCRIPT_DIR/report.py"
+
+        VERDICT=$(grep -oE 'PGO-leverage = (NONE|LOW|HIGH|INCOMPLETE)' /tmp/leverage-report.md \
+          | head -1 | grep -oE 'NONE|LOW|HIGH|INCOMPLETE' || echo "INCOMPLETE")
+        echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+        cat /tmp/leverage-report.md >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$VERDICT" = "NONE" ]; then
+          echo "::warning::PGO-leverage = NONE — no codegen lever found on this hot path. Consider skipping the full benchmark cycle."
+        fi
+        set -e
 
     # ── restore previous artifact (for steady-state accumulation) ────
     - name: Restore previous artifact
@@ -244,7 +301,7 @@ runs:
           echo "prev-path=" >> "$GITHUB_OUTPUT"
         fi
 
-    # ── merge → default.pgo ─────────────────────────────────────────────────
+    # ── merge → default.pgo ─────────────────────────────────────────
     - name: Merge profiles
       id: merge
       shell: bash
@@ -256,7 +313,7 @@ runs:
         fi
         echo "artifact=default.pgo" >> "$GITHUB_OUTPUT"
 
-    # ── resolve output paths ──────────────────────────────────────────────
+    # ── resolve output paths ────────────────────────────────────
     - name: Set output paths
       id: paths
       shell: bash
@@ -264,7 +321,7 @@ runs:
         echo "profile=$(pwd)/cpu.pprof" >> "$GITHUB_OUTPUT"
         echo "artifact=$(pwd)/default.pgo" >> "$GITHUB_OUTPUT"
 
-    # ── compare against baseline (optional) ──────────────────────────────
+    # ── compare against baseline (optional) ──────────────────────
     - name: Compare profiles
       id: compare
       if: inputs.baseline-profile != '' || steps.restore.outputs.has-previous == 'true'
@@ -302,7 +359,7 @@ runs:
           exit $exit_code
         fi
 
-    # ── explain profile ─────────────────────────────────────────────────────
+    # ── explain profile ─────────────────────────────────────────
     - name: Explain profile
       id: explain
       shell: bash
@@ -327,7 +384,7 @@ runs:
           echo "duration-sec=$duration" >> "$GITHUB_OUTPUT"
         fi
 
-    # ── upload artifact ─────────────────────────────────────────────────────
+    # ── upload artifact ───────────────────────────────────────
     - name: Upload PGO artifact
       if: inputs.upload-artifact == 'true'
       uses: actions/upload-artifact@v7
@@ -338,7 +395,7 @@ runs:
           default.pgo
         retention-days: 30
 
-    # ── comment on PR ──────────────────────────────────────────────────────────
+    # ── comment on PR ────────────────────────────────────────────
     - name: Comment on PR
       if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       uses: actions/github-script@v7
