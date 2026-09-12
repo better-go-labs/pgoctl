@@ -9,13 +9,26 @@ import (
 	"time"
 )
 
+// deriveTimeout returns opts.Timeout if set, else window + buffer (opts.TimeoutBuffer, default 30s), floor 120s.
+func deriveTimeout(opts Options) time.Duration {
+	if opts.Timeout > 0 {
+		return opts.Timeout
+	}
+	buffer := opts.TimeoutBuffer
+	if buffer <= 0 {
+		buffer = 30 * time.Second
+	}
+	t := opts.Window + buffer
+	if t < 120*time.Second {
+		t = 120 * time.Second
+	}
+	return t
+}
+
 // FromPprof fetches a CPU profile from a standard Go pprof HTTP endpoint.
 // opts.URL must be the full URL including query params (e.g. /debug/pprof/profile?seconds=30).
 func FromPprof(opts Options) (*Result, error) {
-	timeout := opts.Timeout
-	if timeout == 0 {
-		timeout = 120 * time.Second
-	}
+	timeout := deriveTimeout(opts)
 
 	rawURL := opts.URL
 	if opts.Window > 0 {
