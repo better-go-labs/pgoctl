@@ -241,32 +241,24 @@ runs:
 
         echo "=== PGO leverage probe: $TARGET ==="
 
-        # Baseline: inline decision count without PGO
-        go build -pgo=off -gcflags="-m=2" "$TARGET" 2>&1 \
-          | head -c 10485760 > /tmp/leverage-no-pgo.txt || true
-        echo "Inline decisions (no PGO): $(grep -cE 'can inline|inlining call' /tmp/leverage-no-pgo.txt || echo 0)"
+        # Run pgoctl leverage-check with --dir for build analysis
+        pgoctl leverage-check --dir . --format json --package "$TARGET" cpu.pprof \
+          > /tmp/leverage.json 2>&1
+        LEVERAGE_STATUS=$?
+        cat /tmp/leverage.json
 
-        # With PGO: count new inline + devirt decisions
-        go build -pgo=cpu.pprof -gcflags="-m=2" "$TARGET" 2>&1 \
-          | head -c 10485760 > /tmp/leverage-with-pgo.txt || true
-        echo "Inline decisions (with PGO): $(grep -cE 'can inline|inlining call' /tmp/leverage-with-pgo.txt || echo 0)"
-        echo "PGO markers:                 $(grep -ciE 'devirtuali|pgo.driven|pgo-driven' /tmp/leverage-with-pgo.txt || echo 0)"
+        if [ $LEVERAGE_STATUS -ne 0 ] || [ ! -f /tmp/leverage.json ]; then
+          # Fallback: run without build analysis
+          echo "{\"verdict\": \"INCOMPLETE\", \"verdict_reason\": \"leverage-check failed; no build analysis available\"}" > /tmp/leverage.json
+        fi
 
-        # Profile analysis via pgoctl explain
-        pgoctl explain --format json --top 10 cpu.pprof \
-          > /tmp/leverage-explain.json 2>/dev/null || echo "{}" > /tmp/leverage-explain.json
-
-        # Generate report + extract verdict
+        # Generate report from JSON
+        LEVERAGE_JSON="/tmp/leverage.json" \
         TARGET_NAME="$TARGET" \
-        HAS_PROFILE="true" \
-        GCFLAGS_NO_PGO="/tmp/leverage-no-pgo.txt" \
-        GCFLAGS_WITH_PGO="/tmp/leverage-with-pgo.txt" \
-        EXPLAIN_JSON="/tmp/leverage-explain.json" \
         REPORT_OUT="/tmp/leverage-report.md" \
           python3 "$SCRIPT_DIR/report.py"
 
-        VERDICT=$(grep -oE 'PGO-leverage = (NONE|LOW|HIGH|INCOMPLETE)' /tmp/leverage-report.md \
-          | head -1 | grep -oE 'NONE|LOW|HIGH|INCOMPLETE' || echo "INCOMPLETE")
+        VERDICT=$(python3 -c "import json; d=json.load(open('/tmp/leverage.json')); print(d.get('verdict','INCOMPLETE'))" 2>/dev/null || echo "INCOMPLETE")
         echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
         cat /tmp/leverage-report.md >> "$GITHUB_STEP_SUMMARY"
 
