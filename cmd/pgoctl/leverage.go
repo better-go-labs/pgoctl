@@ -30,8 +30,13 @@ With --dir, runs build analysis to measure PGO-specific compiler decisions:
   - Interface devirtualization (hot interface.Method calls → direct calls)
   - Extra inlining decisions (functions inlined only with PGO profile guidance)
 
-If either is detected, PGO will likely provide benefit. If neither is found,
-PGO won't measurably improve this workload.`,
+Verdict taxonomy:
+  HIGH        ≥5 devirt decisions or ≥30 extra inlines — run full benchmark
+  LOW         1–4 devirt or 5–29 extra inlines — benchmark; gains likely modest
+  NONE        0 decisions — no codegen lever; skip benchmark (exit 2)
+  INCOMPLETE  no --dir provided — collect build analysis first
+
+Exit codes: 0 = HIGH/LOW/INCOMPLETE, 2 = NONE (CI gate), 1 = error`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			opts := leverage.Options{
@@ -54,7 +59,7 @@ PGO won't measurably improve this workload.`,
 
 			printLeverageReport(rpt)
 
-			if rpt.Verdict == leverage.VerdictNoLeverage {
+			if rpt.Verdict == leverage.VerdictNone {
 				return &exitError{code: 2}
 			}
 			return nil

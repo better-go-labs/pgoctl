@@ -18,12 +18,14 @@ import (
 type Verdict string
 
 const (
-	// VerdictLeverageFound indicates PGO-specific compiler decisions were detected.
-	VerdictLeverageFound Verdict = "LEVERAGE_FOUND"
-	// VerdictNoLeverage indicates zero PGO-specific decisions; optimization unlikely to help.
-	VerdictNoLeverage Verdict = "NO_LEVERAGE"
-	// VerdictProfileOnly indicates analysis was profile-only (no build was run).
-	VerdictProfileOnly Verdict = "PROFILE_ONLY"
+	// VerdictNone indicates zero PGO-specific compiler decisions; optimization will not help.
+	VerdictNone Verdict = "NONE"
+	// VerdictLow indicates modest PGO leverage: 1–4 devirt decisions or 5–29 extra inlines.
+	VerdictLow Verdict = "LOW"
+	// VerdictHigh indicates strong PGO leverage: ≥5 devirt decisions or ≥30 extra inlines.
+	VerdictHigh Verdict = "HIGH"
+	// VerdictIncomplete indicates build analysis was not run (no --dir provided).
+	VerdictIncomplete Verdict = "INCOMPLETE"
 )
 
 // FunctionEntry holds the name and CPU share for a hot function.
@@ -31,6 +33,7 @@ type FunctionEntry struct {
 	Function string  `json:"function"`
 	Package  string  `json:"package"`
 	FlatPct  float64 `json:"flat_pct"`
+	CumPct   float64 `json:"cum_pct"`
 }
 
 // BuildAnalysis holds the raw counts from comparing a PGO build against a baseline build.
@@ -80,7 +83,8 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 
 	idx, ok := cpuSampleIndex(p)
 	total := 0.0
-	counts := make(map[string]float64)
+	flatCounts := make(map[string]float64)
+	cumCounts := make(map[string]float64)
 
 	if ok {
 		for _, s := range p.Sample {
@@ -91,21 +95,33 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 			total += v
 			loc := s.Location[0]
 			if len(loc.Line) > 0 && loc.Line[0].Function != nil {
-				counts[loc.Line[0].Function.Name] += v
+				flatCounts[loc.Line[0].Function.Name] += v
+			}
+			seen := make(map[string]bool)
+			for _, loc := range s.Location {
+				for _, line := range loc.Line {
+					if line.Function != nil && !seen[line.Function.Name] {
+						cumCounts[line.Function.Name] += v
+						seen[line.Function.Name] = true
+					}
+				}
 			}
 		}
 	}
 
-	entries := make([]FunctionEntry, 0, len(counts))
-	for fn, c := range counts {
-		pct := 0.0
+	entries := make([]FunctionEntry, 0, len(flatCounts))
+	for fn, c := range flatCounts {
+		flatPct := 0.0
+		cumPct := 0.0
 		if total > 0 {
-			pct = math.Round(100.0*c/total*100) / 100
+			flatPct = math.Round(100.0*c/total*100) / 100
+			cumPct = math.Round(100.0*cumCounts[fn]/total*100) / 100
 		}
 		entries = append(entries, FunctionEntry{
 			Function: fn,
 			Package:  packageFromFunction(fn),
-			FlatPct:  pct,
+			FlatPct:  flatPct,
+			CumPct:   cumPct,
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -134,8 +150,9 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		}
 		buildAnalysis = ba
 
-		if ba.DevirtDecisions > 0 || ba.PGOExtraInlines > 0 {
-			verdict = VerdictLeverageFound
+		switch {
+		case ba.DevirtDecisions >= 5 || ba.PGOExtraInlines >= 30:
+			verdict = VerdictHigh
 			parts := []string{}
 			if ba.DevirtDecisions > 0 {
 				parts = append(parts, fmt.Sprintf("%d devirtualization decision(s)", ba.DevirtDecisions))
@@ -143,18 +160,28 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 			if ba.PGOExtraInlines > 0 {
 				parts = append(parts, fmt.Sprintf("%d extra inline(s) with PGO", ba.PGOExtraInlines))
 			}
-			verdictReason = fmt.Sprintf("%s found: %s", verdict, strings.Join(parts, ", "))
-		} else {
-			verdict = VerdictNoLeverage
+			verdictReason = fmt.Sprintf("HIGH: strong PGO leverage — %s; run a full benchmark cycle", strings.Join(parts, ", "))
+		case ba.DevirtDecisions >= 1 || ba.PGOExtraInlines >= 5:
+			verdict = VerdictLow
+			parts := []string{}
+			if ba.DevirtDecisions > 0 {
+				parts = append(parts, fmt.Sprintf("%d devirtualization decision(s)", ba.DevirtDecisions))
+			}
+			if ba.PGOExtraInlines > 0 {
+				parts = append(parts, fmt.Sprintf("%d extra inline(s) with PGO", ba.PGOExtraInlines))
+			}
+			verdictReason = fmt.Sprintf("LOW: marginal PGO leverage — %s; benchmark may show modest gains", strings.Join(parts, ", "))
+		default:
+			verdict = VerdictNone
 			topFn := ""
 			if len(topEntries) > 0 {
-				topFn = fmt.Sprintf(" top hot function %s", topEntries[0].Function)
+				topFn = fmt.Sprintf("; top hot function %s", topEntries[0].Function)
 			}
-			verdictReason = fmt.Sprintf("0 PGO-specific compiler decisions; PGO will not provide measurable benefit%s", topFn)
+			verdictReason = fmt.Sprintf("NONE: 0 PGO-specific compiler decisions — no codegen lever for this hot path%s", topFn)
 		}
 	} else {
-		verdict = VerdictProfileOnly
-		verdictReason = "Profile analysis only (no build analysis); run with --dir to determine actual PGO benefit"
+		verdict = VerdictIncomplete
+		verdictReason = "INCOMPLETE: no build analysis run; use --dir to measure PGO-specific compiler decisions"
 	}
 
 	return &Report{

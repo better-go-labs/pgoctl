@@ -22,15 +22,15 @@ func TestPrintLeverageReport(t *testing.T) {
 			report: &leverage.Report{
 				ProfilePath:  "test.pprof",
 				TotalSamples: 1000,
-				Verdict:      leverage.VerdictProfileOnly,
-				VerdictReason: "Profile analysis only (no build analysis); run with --dir to determine actual PGO benefit",
+				Verdict:      leverage.VerdictIncomplete,
+				VerdictReason: "INCOMPLETE: no build analysis run; use --dir to measure PGO-specific compiler decisions",
 				TopFunctions: []leverage.FunctionEntry{
 					{Function: "foo.Bar", Package: "foo", FlatPct: 10.5},
 					{Function: "baz.Qux", Package: "baz", FlatPct: 5.3},
 				},
 			},
 			shouldContain: []string{
-				"PROFILE_ONLY",
+				"INCOMPLETE",
 				"1000",
 				"foo.Bar",
 				"baz.Qux",
@@ -42,8 +42,8 @@ func TestPrintLeverageReport(t *testing.T) {
 			report: &leverage.Report{
 				ProfilePath:  "test.pprof",
 				TotalSamples: 1000,
-				Verdict:      leverage.VerdictLeverageFound,
-				VerdictReason: "LEVERAGE_FOUND found: 5 devirtualization decision(s)",
+				Verdict:      leverage.VerdictHigh,
+				VerdictReason: "HIGH: strong PGO leverage — 5 devirtualization decision(s), 3 extra inline(s) with PGO; run a full benchmark cycle",
 				BuildAnalysis: &leverage.BuildAnalysis{
 					DevirtDecisions: 5,
 					PGOExtraInlines: 3,
@@ -56,7 +56,7 @@ func TestPrintLeverageReport(t *testing.T) {
 				},
 			},
 			shouldContain: []string{
-				"LEVERAGE_FOUND",
+				"HIGH",
 				"devirt_decisions",
 				"5",
 				"pgo_extra_inlines",
@@ -70,8 +70,8 @@ func TestPrintLeverageReport(t *testing.T) {
 			report: &leverage.Report{
 				ProfilePath:   "test.pprof",
 				TotalSamples:  1000,
-				Verdict:       leverage.VerdictNoLeverage,
-				VerdictReason: "0 PGO-specific compiler decisions; PGO will not provide measurable benefit",
+				Verdict:       leverage.VerdictNone,
+				VerdictReason: "NONE: 0 PGO-specific compiler decisions — no codegen lever for this hot path",
 				BuildAnalysis: &leverage.BuildAnalysis{
 					DevirtDecisions: 0,
 					PGOExtraInlines: 0,
@@ -81,7 +81,7 @@ func TestPrintLeverageReport(t *testing.T) {
 				TopFunctions: []leverage.FunctionEntry{},
 			},
 			shouldContain: []string{
-				"NO_LEVERAGE",
+				"NONE",
 				"0 PGO-specific compiler decisions",
 			},
 		},
@@ -138,13 +138,13 @@ func TestNewLeverageCheckCmdJSON(t *testing.T) {
 
 	if err != nil {
 		// ProfileOnly verdict doesn't error
-		if !strings.Contains(outputStr, "PROFILE_ONLY") {
+		if !strings.Contains(outputStr, "INCOMPLETE") {
 			t.Errorf("expected profile-only output, got error: %v", err)
 		}
 	}
 
 	// Check that it's valid text output by default
-	if !strings.Contains(outputStr, "verdict") && !strings.Contains(outputStr, "PROFILE_ONLY") {
+	if !strings.Contains(outputStr, "verdict") && !strings.Contains(outputStr, "INCOMPLETE") {
 		t.Errorf("expected text output format, got: %s", outputStr)
 	}
 }

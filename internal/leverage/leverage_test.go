@@ -26,8 +26,8 @@ func TestCheckFile_ProfileOnly(t *testing.T) {
 		t.Fatalf("CheckFile failed: %v", err)
 	}
 
-	if rpt.Verdict != VerdictProfileOnly {
-		t.Errorf("expected VerdictProfileOnly, got %s", rpt.Verdict)
+	if rpt.Verdict != VerdictIncomplete {
+		t.Errorf("expected VerdictIncomplete, got %s", rpt.Verdict)
 	}
 
 	if len(rpt.TopFunctions) == 0 {
@@ -174,8 +174,8 @@ func TestCheckFileDefaultOptions(t *testing.T) {
 		t.Fatalf("CheckFile with default options failed: %v", err)
 	}
 
-	if rpt.Verdict != VerdictProfileOnly {
-		t.Errorf("expected VerdictProfileOnly, got %s", rpt.Verdict)
+	if rpt.Verdict != VerdictIncomplete {
+		t.Errorf("expected VerdictIncomplete, got %s", rpt.Verdict)
 	}
 }
 
