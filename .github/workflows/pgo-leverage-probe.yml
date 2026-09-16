@@ -53,28 +53,16 @@ jobs:
           go test -bench=BenchmarkControl -benchtime=15s -cpuprofile=/tmp/ctrl.pprof .
           ls -lh /tmp/ctrl.pprof
 
-      # go test -c compiles the test binary and emits gcflags diagnostics for
-      # test packages; go build ignores *_test.go files and produces no output.
-      - name: "Ctrl | gcflags -m=2 WITHOUT PGO"
+      - name: "Ctrl | Check leverage (--dir)"
         working-directory: scripts/pgo-leverage/positive-control
         run: |
-          go test -c -pgo=off -gcflags="-m=2" -o /dev/null . 2>&1 | head -c 5242880 > /tmp/ctrl-no-pgo.txt || true
-          echo "Inline decisions (no PGO): $(grep -cE 'can inline|inlining call' /tmp/ctrl-no-pgo.txt || echo 0)"
-
-      - name: "Ctrl | gcflags -m=2 WITH PGO"
-        working-directory: scripts/pgo-leverage/positive-control
-        run: |
-          go test -c -pgo=/tmp/ctrl.pprof -gcflags="-m=2" -o /dev/null . 2>&1 | head -c 5242880 > /tmp/ctrl-with-pgo.txt || true
-          echo "Inline decisions (with PGO): $(grep -cE 'can inline|inlining call' /tmp/ctrl-with-pgo.txt || echo 0)"
-          echo "PGO markers: $(grep -ciE 'devirtuali|pgo.driven|pgo-driven' /tmp/ctrl-with-pgo.txt || echo 0)"
+          /tmp/pgoctl leverage-check --dir . --format json /tmp/ctrl.pprof > /tmp/ctrl-leverage.json
+          cat /tmp/ctrl-leverage.json
 
       - name: "Ctrl | Report"
         env:
           TARGET_NAME: "positive-control (interface dispatch)"
-          HAS_PROFILE: "true"
-          GCFLAGS_NO_PGO: /tmp/ctrl-no-pgo.txt
-          GCFLAGS_WITH_PGO: /tmp/ctrl-with-pgo.txt
-          EXPLAIN_JSON: /dev/null
+          LEVERAGE_JSON: /tmp/ctrl-leverage.json
           REPORT_OUT: /tmp/ctrl-report.md
         run: python3 scripts/pgo-leverage/report.py
 
@@ -116,44 +104,22 @@ jobs:
         working-directory: _prometheus
         run: go mod download
 
-      - name: "Prometheus | gcflags -m=2 WITHOUT PGO"
-        working-directory: _prometheus
-        run: |
-          go build -pgo=off -gcflags="-m=2" ./... 2>&1 | head -c 10485760 > /tmp/prom-no-pgo.txt || true
-          echo "Inline decisions (no PGO): $(grep -cE 'can inline|inlining call' /tmp/prom-no-pgo.txt || echo 0)"
-          echo "PGO markers   (no PGO):   $(grep -ciE 'devirtuali|pgo.driven|pgo-driven' /tmp/prom-no-pgo.txt || echo 0)"
-
-      - name: "Prometheus | gcflags -m=2 WITH PGO"
+      - name: "Prometheus | Check leverage"
         working-directory: _prometheus
         run: |
           if [ "$HAS_PROFILE" = "true" ]; then
-            go build -pgo="$PGO_FILE" -gcflags="-m=2" ./... 2>&1 | head -c 10485760 > /tmp/prom-with-pgo.txt || true
-            echo "Inline decisions (with PGO): $(grep -cE 'can inline|inlining call' /tmp/prom-with-pgo.txt || echo 0)"
-            echo "PGO markers   (with PGO):   $(grep -ciE 'devirtuali|pgo.driven|pgo-driven' /tmp/prom-with-pgo.txt || echo 0)"
+            /tmp/pgoctl leverage-check --dir . --format json "$PGO_FILE" > /tmp/prom-leverage.json
           else
-            echo "SKIPPED_NO_PROFILE" > /tmp/prom-with-pgo.txt
-            echo "Skipped — no profile."
+            /tmp/pgoctl leverage-check --format json ./... > /tmp/prom-leverage.json || echo "{\"verdict\": \"INCOMPLETE\"}" > /tmp/prom-leverage.json
           fi
-
-      - name: "Prometheus | Explain profile"
-        run: |
-          if [ "$HAS_PROFILE" = "true" ]; then
-            /tmp/pgoctl explain --format json --top 10 /tmp/prometheus.pgo \
-              > /tmp/prom-explain.json 2>/dev/null || echo "{}" > /tmp/prom-explain.json
-          else
-            echo "{}" > /tmp/prom-explain.json
-          fi
+          cat /tmp/prom-leverage.json
 
       - name: "Prometheus | Generate leverage report"
         env:
           TARGET_NAME: "prometheus/prometheus"
-          GCFLAGS_NO_PGO: /tmp/prom-no-pgo.txt
-          GCFLAGS_WITH_PGO: /tmp/prom-with-pgo.txt
-          EXPLAIN_JSON: /tmp/prom-explain.json
+          LEVERAGE_JSON: /tmp/prom-leverage.json
           REPORT_OUT: /tmp/prom-leverage-report.md
-        run: |
-          export HAS_PROFILE="$HAS_PROFILE"
-          python3 scripts/pgo-leverage/report.py
+        run: python3 scripts/pgo-leverage/report.py
 
       - name: "Prometheus | Job summary"
         run: |
@@ -238,47 +204,22 @@ jobs:
           fi
           set -e
 
-      - name: "nats-server | gcflags -m=2 WITHOUT PGO"
-        working-directory: _nats-server
-        run: |
-          go build -pgo=off -gcflags="-m=2" . 2>&1 | head -c 10485760 > /tmp/nats-no-pgo.txt || true
-          echo "Inline decisions (no PGO): $(grep -cE 'can inline|inlining call' /tmp/nats-no-pgo.txt || echo 0)"
-          echo "PGO markers   (no PGO):   $(grep -ciE 'devirtuali|pgo.driven|pgo-driven' /tmp/nats-no-pgo.txt || echo 0)"
-          # Surface the client.parse inline-budget finding (the root cause from BP-23)
-          grep -iE 'client.*parse.*budget|parse.*too large' /tmp/nats-no-pgo.txt || \
-            echo "(client.parse inline-budget violation not surfaced at -m=2; use -m=3 for verbose)"
-
-      - name: "nats-server | gcflags -m=2 WITH PGO"
+      - name: "nats-server | Check leverage"
         working-directory: _nats-server
         run: |
           if [ "$HAS_PROFILE" = "true" ]; then
-            go build -pgo="$NATS_PGO_FILE" -gcflags="-m=2" . 2>&1 | head -c 10485760 > /tmp/nats-with-pgo.txt || true
-            echo "Inline decisions (with PGO): $(grep -cE 'can inline|inlining call' /tmp/nats-with-pgo.txt || echo 0)"
-            echo "PGO markers   (with PGO):   $(grep -ciE 'devirtuali|pgo.driven|pgo-driven' /tmp/nats-with-pgo.txt || echo 0)"
+            /tmp/pgoctl leverage-check --dir . --format json "$NATS_PGO_FILE" > /tmp/nats-leverage.json
           else
-            echo "SKIPPED_NO_PROFILE" > /tmp/nats-with-pgo.txt
-            echo "Skipped — no profile available."
+            /tmp/pgoctl leverage-check --format json . > /tmp/nats-leverage.json || echo "{\"verdict\": \"INCOMPLETE\"}" > /tmp/nats-leverage.json
           fi
-
-      - name: "nats-server | Explain profile"
-        run: |
-          if [ "$HAS_PROFILE" = "true" ]; then
-            /tmp/pgoctl explain --format json --top 10 "$NATS_PGO_FILE" \
-              > /tmp/nats-explain.json 2>/dev/null || echo "{}" > /tmp/nats-explain.json
-          else
-            echo "{}" > /tmp/nats-explain.json
-          fi
+          cat /tmp/nats-leverage.json
 
       - name: "nats-server | Generate leverage report"
         env:
           TARGET_NAME: "nats-io/nats-server"
-          GCFLAGS_NO_PGO: /tmp/nats-no-pgo.txt
-          GCFLAGS_WITH_PGO: /tmp/nats-with-pgo.txt
-          EXPLAIN_JSON: /tmp/nats-explain.json
+          LEVERAGE_JSON: /tmp/nats-leverage.json
           REPORT_OUT: /tmp/nats-leverage-report.md
-        run: |
-          export HAS_PROFILE="$HAS_PROFILE"
-          python3 scripts/pgo-leverage/report.py
+        run: python3 scripts/pgo-leverage/report.py
 
       - name: "nats-server | Job summary"
         run: |
