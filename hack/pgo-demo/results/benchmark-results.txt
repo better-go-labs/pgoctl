@@ -1,0 +1,35 @@
+
+===== HASHCALC SERVICE =====
+Prediction: HIGH (93 devirt decisions)
+
+=== HASHCALC BASELINE (no PGO) ===
+  trial 1: rps=223.8 mean_latency_ms=35.71 requests=4486 elapsed=20.0s
+  trial 2: rps=250.6 mean_latency_ms=31.90 requests=5020 elapsed=20.0s
+  trial 3: rps=214.9 mean_latency_ms=37.22 requests=4301 elapsed=20.0s
+  trial 4: rps=252.2 mean_latency_ms=31.71 requests=5049 elapsed=20.0s
+  trial 5: rps=254.3 mean_latency_ms=31.44 requests=5091 elapsed=20.0s
+
+=== HASHCALC WITH PGO ===
+  trial 1: rps=240.4 mean_latency_ms=33.23 requests=4831 elapsed=20.1s
+  trial 2: rps=174.6 mean_latency_ms=45.79 requests=3497 elapsed=20.0s
+  trial 3: rps=218.8 mean_latency_ms=36.55 requests=4380 elapsed=20.0s
+  trial 4: rps=282.7 mean_latency_ms=28.28 requests=5659 elapsed=20.0s
+  trial 5: rps=286.5 mean_latency_ms=27.91 requests=5735 elapsed=20.0s
+
+
+===== PASSTHROUGH SERVICE =====
+Prediction: HIGH (93 devirt, but I/O-bound)
+
+=== PASSTHROUGH BASELINE (no PGO) ===
+  trial 1: rps=3360.9 mean_latency_ms=2.38 requests=67222 elapsed=20.0s
+  trial 2: rps=3357.0 mean_latency_ms=2.38 requests=67148 elapsed=20.0s
+  trial 3: rps=3364.7 mean_latency_ms=2.38 requests=67301 elapsed=20.0s
+  trial 4: rps=3280.8 mean_latency_ms=2.44 requests=65634 elapsed=20.0s
+  trial 5: rps=3191.6 mean_latency_ms=2.51 requests=63841 elapsed=20.0s
+
+=== PASSTHROUGH WITH PGO ===
+  trial 1: rps=3032.6 mean_latency_ms=2.64 requests=60659 elapsed=20.0s
+  trial 2: rps=2770.8 mean_latency_ms=2.89 requests=55424 elapsed=20.0s
+  trial 3: rps=2980.8 mean_latency_ms=2.68 requests=59621 elapsed=20.0s
+  trial 4: rps=3266.8 mean_latency_ms=2.45 requests=65341 elapsed=20.0s
+  trial 5: rps=3340.5 mean_latency_ms=2.39 requests=66822 elapsed=20.0s

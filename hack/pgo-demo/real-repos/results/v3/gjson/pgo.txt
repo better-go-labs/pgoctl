@@ -1,0 +1,11 @@
+goos: linux
+goarch: amd64
+pkg: bench_gjson
+cpu: Intel Xeon Processor (Skylake, IBRS, no TSX)
+BenchmarkGJSON-2   	 2495368	      2235 ns/op
+BenchmarkGJSON-2   	 2482370	      2301 ns/op
+BenchmarkGJSON-2   	 2591620	      2361 ns/op
+BenchmarkGJSON-2   	 2676544	      2339 ns/op
+BenchmarkGJSON-2   	 2566851	      2349 ns/op
+PASS
+ok  	bench_gjson	41.599s

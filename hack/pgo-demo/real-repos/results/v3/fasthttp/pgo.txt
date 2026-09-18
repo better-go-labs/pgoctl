@@ -1,0 +1,11 @@
+goos: linux
+goarch: amd64
+pkg: bench_fasthttp
+cpu: Intel Xeon Processor (Skylake, IBRS, no TSX)
+BenchmarkFastHTTP-2   	  556582	      6443 ns/op
+BenchmarkFastHTTP-2   	  545510	      7681 ns/op
+BenchmarkFastHTTP-2   	  570693	      6560 ns/op
+BenchmarkFastHTTP-2   	  530335	      7711 ns/op
+BenchmarkFastHTTP-2   	  581312	      6282 ns/op
+PASS
+ok  	bench_fasthttp	19.624s

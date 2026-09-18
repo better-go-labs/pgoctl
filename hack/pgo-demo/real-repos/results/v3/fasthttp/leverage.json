@@ -1,0 +1,140 @@
+{
+  "profile_path": "/tmp/pgo-eval/fasthttp/profile.pprof",
+  "total_samples": 2331,
+  "top_functions": [
+    {
+      "function": "runtime.memclrNoHeapPointers",
+      "package": "runtime",
+      "flat_pct": 18.69,
+      "cum_pct": 18.69
+    },
+    {
+      "function": "runtime.scanobject",
+      "package": "runtime",
+      "flat_pct": 3.81,
+      "cum_pct": 9.12
+    },
+    {
+      "function": "indexbytebody",
+      "package": "indexbytebody",
+      "flat_pct": 2.94,
+      "cum_pct": 2.94
+    },
+    {
+      "function": "runtime.madvise",
+      "package": "runtime",
+      "flat_pct": 2.88,
+      "cum_pct": 2.88
+    },
+    {
+      "function": "runtime.typePointers.next",
+      "package": "runtime",
+      "flat_pct": 2.85,
+      "cum_pct": 3.55
+    },
+    {
+      "function": "runtime.growslice",
+      "package": "runtime",
+      "flat_pct": 2.77,
+      "cum_pct": 16.75
+    },
+    {
+      "function": "runtime.futex",
+      "package": "runtime",
+      "flat_pct": 2.74,
+      "cum_pct": 2.74
+    },
+    {
+      "function": "runtime.mallocgc",
+      "package": "runtime",
+      "flat_pct": 2.36,
+      "cum_pct": 43.55
+    },
+    {
+      "function": "runtime.scanblock",
+      "package": "runtime",
+      "flat_pct": 1.85,
+      "cum_pct": 2.5
+    },
+    {
+      "function": "github.com/valyala/fasthttp.(*RequestHeader).parseHeaders",
+      "package": "github.com/valyala/fasthttp",
+      "flat_pct": 1.81,
+      "cum_pct": 18.47
+    },
+    {
+      "function": "runtime.nextFreeFast",
+      "package": "runtime",
+      "flat_pct": 1.67,
+      "cum_pct": 1.67
+    },
+    {
+      "function": "runtime.(*mspan).base",
+      "package": "runtime",
+      "flat_pct": 1.61,
+      "cum_pct": 1.61
+    },
+    {
+      "function": "runtime.findObject",
+      "package": "runtime",
+      "flat_pct": 1.54,
+      "cum_pct": 2.79
+    },
+    {
+      "function": "runtime.memmove",
+      "package": "runtime",
+      "flat_pct": 1.45,
+      "cum_pct": 1.45
+    },
+    {
+      "function": "runtime.asyncPreempt",
+      "package": "runtime",
+      "flat_pct": 1.43,
+      "cum_pct": 1.43
+    },
+    {
+      "function": "github.com/valyala/fasthttp.(*headerScanner).next",
+      "package": "github.com/valyala/fasthttp",
+      "flat_pct": 1.29,
+      "cum_pct": 6.29
+    },
+    {
+      "function": "runtime.mallocgcTiny",
+      "package": "runtime",
+      "flat_pct": 1.29,
+      "cum_pct": 2.54
+    },
+    {
+      "function": "runtime.mallocgcSmallNoscan",
+      "package": "runtime",
+      "flat_pct": 1.14,
+      "cum_pct": 30.02
+    },
+    {
+      "function": "runtime.(*mspan).init",
+      "package": "runtime",
+      "flat_pct": 0.96,
+      "cum_pct": 0.96
+    },
+    {
+      "function": "runtime.mallocgcSmallScanNoHeader",
+      "package": "runtime",
+      "flat_pct": 0.91,
+      "cum_pct": 3.88
+    }
+  ],
+  "hot_interfaces": [
+    "github.com/valyala/fasthttp.(*RequestHeader).parseHeaders",
+    "runtime.(*mspan).base",
+    "github.com/valyala/fasthttp.(*headerScanner).next",
+    "runtime.(*mspan).init"
+  ],
+  "build_analysis": {
+    "devirt_decisions": 91,
+    "pgo_extra_inlines": 1766,
+    "baseline_inlines": 52655,
+    "pgo_inlines": 54421
+  },
+  "verdict": "HIGH",
+  "verdict_reason": "HIGH: strong PGO leverage — 91 devirtualization decision(s), 1766 extra inline(s) with PGO; run a full benchmark cycle"
+}

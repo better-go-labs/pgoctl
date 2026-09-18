@@ -1,0 +1,11 @@
+goos: linux
+goarch: amd64
+pkg: bench_goldmark
+cpu: Intel Xeon Processor (Skylake, IBRS, no TSX)
+BenchmarkGoldmark-2   	    1795	   3761724 ns/op
+BenchmarkGoldmark-2   	    1609	   3710063 ns/op
+BenchmarkGoldmark-2   	    2493	   3569052 ns/op
+BenchmarkGoldmark-2   	    1670	   3520605 ns/op
+BenchmarkGoldmark-2   	    2203	   3726541 ns/op
+PASS
+ok  	bench_goldmark	37.341s

@@ -1,0 +1,139 @@
+{
+  "profile_path": "/home/node/.openclaw/workspace/dev/pgoctl/hack/pgo-demo/results/passthrough-raw.pprof",
+  "total_samples": 379,
+  "top_functions": [
+    {
+      "function": "internal/runtime/syscall/linux.Syscall6",
+      "package": "internal/runtime/syscall/linux",
+      "flat_pct": 41.6,
+      "cum_pct": 41.6
+    },
+    {
+      "function": "runtime.futex",
+      "package": "runtime",
+      "flat_pct": 8.02,
+      "cum_pct": 8.02
+    },
+    {
+      "function": "indexbytebody",
+      "package": "indexbytebody",
+      "flat_pct": 1.5,
+      "cum_pct": 1.5
+    },
+    {
+      "function": "time.runtimeNow",
+      "package": "time",
+      "flat_pct": 1.5,
+      "cum_pct": 1.5
+    },
+    {
+      "function": "runtime.nanotime",
+      "package": "runtime",
+      "flat_pct": 1.25,
+      "cum_pct": 1.25
+    },
+    {
+      "function": "runtime.memclrNoHeapPointers",
+      "package": "runtime",
+      "flat_pct": 1.13,
+      "cum_pct": 1.13
+    },
+    {
+      "function": "internal/sync.(*Mutex).Lock",
+      "package": "internal/sync",
+      "flat_pct": 1,
+      "cum_pct": 1
+    },
+    {
+      "function": "net/http.DetectContentType",
+      "package": "net/http",
+      "flat_pct": 1,
+      "cum_pct": 1.75
+    },
+    {
+      "function": "net/textproto.canonicalMIMEHeaderKey",
+      "package": "net/textproto",
+      "flat_pct": 0.88,
+      "cum_pct": 1.88
+    },
+    {
+      "function": "runtime.unlock2",
+      "package": "runtime",
+      "flat_pct": 0.88,
+      "cum_pct": 0.88
+    },
+    {
+      "function": "main.handleSleep",
+      "package": "main",
+      "flat_pct": 0.63,
+      "cum_pct": 2.51
+    },
+    {
+      "function": "runtime.(*mspan).writeHeapBitsSmall",
+      "package": "runtime",
+      "flat_pct": 0.63,
+      "cum_pct": 0.75
+    },
+    {
+      "function": "runtime.mapaccess1_faststr",
+      "package": "runtime",
+      "flat_pct": 0.63,
+      "cum_pct": 1.63
+    },
+    {
+      "function": "runtime.memmove",
+      "package": "runtime",
+      "flat_pct": 0.63,
+      "cum_pct": 0.63
+    },
+    {
+      "function": "runtime.nextFreeFast",
+      "package": "runtime",
+      "flat_pct": 0.63,
+      "cum_pct": 0.63
+    },
+    {
+      "function": "runtime.typePointers.next",
+      "package": "runtime",
+      "flat_pct": 0.63,
+      "cum_pct": 0.63
+    },
+    {
+      "function": "runtime.write1",
+      "package": "runtime",
+      "flat_pct": 0.63,
+      "cum_pct": 0.63
+    },
+    {
+      "function": "time.Time.appendFormat",
+      "package": "time",
+      "flat_pct": 0.63,
+      "cum_pct": 1.25
+    },
+    {
+      "function": "aeshashbody",
+      "package": "aeshashbody",
+      "flat_pct": 0.5,
+      "cum_pct": 0.5
+    },
+    {
+      "function": "internal/runtime/maps.(*Map).Delete",
+      "package": "internal/runtime/maps",
+      "flat_pct": 0.5,
+      "cum_pct": 1.5
+    }
+  ],
+  "hot_interfaces": [
+    "internal/sync.(*Mutex).Lock",
+    "runtime.(*mspan).writeHeapBitsSmall",
+    "internal/runtime/maps.(*Map).Delete"
+  ],
+  "build_analysis": {
+    "devirt_decisions": 93,
+    "pgo_extra_inlines": 0,
+    "baseline_inlines": 43995,
+    "pgo_inlines": 43995
+  },
+  "verdict": "HIGH",
+  "verdict_reason": "HIGH: strong PGO leverage — 93 devirtualization decision(s); run a full benchmark cycle"
+}

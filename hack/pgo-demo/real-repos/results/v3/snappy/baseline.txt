@@ -1,0 +1,11 @@
+goos: linux
+goarch: amd64
+pkg: bench_snappy
+cpu: Intel Xeon Processor (Skylake, IBRS, no TSX)
+BenchmarkSnappy-2   	   17139	    307339 ns/op
+BenchmarkSnappy-2   	   10000	    538653 ns/op
+BenchmarkSnappy-2   	   10000	    641731 ns/op
+BenchmarkSnappy-2   	   24795	    213568 ns/op
+BenchmarkSnappy-2   	   26665	    254604 ns/op
+PASS
+ok  	bench_snappy	41.553s

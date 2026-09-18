@@ -1,0 +1,34 @@
+verdict        INCOMPLETE
+total_samples  2485
+
+INCOMPLETE: no build analysis run; use --dir to measure PGO-specific compiler decisions
+
+── Top functions by flat CPU share ──
+rank  function                                                               flat%
+1     github.com/goccy/go-json/internal/encoder/vm.Run                       7.25
+2     github.com/goccy/go-json/internal/decoder.decodeKeyByBitmapUint8       4.27
+3     runtime.asyncPreempt                                                   4.01
+4     runtime.memmove                                                        3.24
+5     github.com/goccy/go-json/internal/encoder.appendNormalizedHTMLString   3.14
+6     runtime.mallocgcSmallScanNoHeader                                      3.01
+7     runtime.nextFreeFast                                                   2.80
+8     github.com/goccy/go-json/internal/decoder.(*stringDecoder).Decode      2.45
+9     runtime.memclrNoHeapPointers                                           2.43
+10    runtime.(*mspan).writeHeapBitsSmall                                    2.40
+11    runtime.typePointers.next                                              2.22
+12    runtime.mallocgc                                                       2.19
+13    runtime.tryDeferToSpanScan                                             2.11
+14    github.com/goccy/go-json/internal/decoder.(*stringDecoder).decodeByte  1.98
+15    github.com/goccy/go-json/internal/decoder.(*structDecoder).Decode      1.64
+16    runtime.wbBufFlush1                                                    1.35
+17    runtime.scanObject                                                     1.29
+18    github.com/goccy/go-json/internal/decoder.(*sliceDecoder).Decode       1.24
+19    runtime.gcmarknewobject                                                1.24
+20    github.com/goccy/go-json/internal/encoder.AppendString                 1.21
+
+── Detected interface method calls in hot functions ──
+github.com/goccy/go-json/internal/decoder.(*stringDecoder).Decode
+runtime.(*mspan).writeHeapBitsSmall
+github.com/goccy/go-json/internal/decoder.(*stringDecoder).decodeByte
+github.com/goccy/go-json/internal/decoder.(*structDecoder).Decode
+github.com/goccy/go-json/internal/decoder.(*sliceDecoder).Decode

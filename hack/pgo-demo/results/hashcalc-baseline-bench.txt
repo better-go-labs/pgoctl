@@ -1,0 +1,12 @@
+=== hashcalc BASELINE (no PGO) ===
+2026/09/18 02:27:04 hashcalc-svc on :8080 (GOMAXPROCS=2)
+2026/09/18 02:27:04 pprof on :6060
+  trial 1: rps=172.1 mean_ms=46.458 n=2586
+2026/09/18 02:27:19 hashcalc-svc on :8080 (GOMAXPROCS=2)
+2026/09/18 02:27:19 pprof on :6060
+  trial 2: rps=254.5 mean_ms=31.410 n=3822
+2026/09/18 02:27:34 hashcalc-svc on :8080 (GOMAXPROCS=2)
+2026/09/18 02:27:34 pprof on :6060
+  trial 3: rps=318.8 mean_ms=25.074 n=4791
+2026/09/18 02:27:50 hashcalc-svc on :8080 (GOMAXPROCS=2)
+2026/09/18 02:27:50 pprof on :6060

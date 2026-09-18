@@ -1,0 +1,69 @@
+{
+  "baseline_samples": 2501,
+  "candidate_samples": 2827,
+  "top_deltas": [
+    {
+      "function": "internal/runtime/atomic.(*UnsafePointer).Load",
+      "base_pct": 0.02,
+      "cand_pct": 0.18,
+      "delta_pct": 650.15
+    },
+    {
+      "function": "main.(*hasherProc).Process",
+      "base_pct": 0.02,
+      "cand_pct": 0.12,
+      "delta_pct": 400.1
+    },
+    {
+      "function": "runtime.gcDrainN",
+      "base_pct": 0.02,
+      "cand_pct": 0.12,
+      "delta_pct": 400.1
+    },
+    {
+      "function": "slices.pdqsortOrdered[go.shape.string]",
+      "base_pct": 0.02,
+      "cand_pct": 0.08,
+      "delta_pct": 233.4
+    },
+    {
+      "function": "runtime.heapArenaOf",
+      "base_pct": 0.05,
+      "cand_pct": 0.16,
+      "delta_pct": 233.4
+    },
+    {
+      "function": "runtime.forEachG",
+      "base_pct": 0.02,
+      "cand_pct": 0.06,
+      "delta_pct": 150.05
+    },
+    {
+      "function": "runtime.(*mspan).divideByElemSize",
+      "base_pct": 0.05,
+      "cand_pct": 0.12,
+      "delta_pct": 150.05
+    },
+    {
+      "function": "runtime.(*mspan).base",
+      "base_pct": 0.05,
+      "cand_pct": 0.12,
+      "delta_pct": 150.05
+    },
+    {
+      "function": "runtime.mProf_FlushLocked",
+      "base_pct": 0.02,
+      "cand_pct": 0.06,
+      "delta_pct": 150.05
+    },
+    {
+      "function": "crypto/internal/fips140/sha512.(*Digest).Sum",
+      "base_pct": 0.02,
+      "cand_pct": 0.06,
+      "delta_pct": 150.05
+    }
+  ],
+  "summary_cpu_delta_pct": -0.3,
+  "filtered_functions": 0,
+  "verdict": "neutral"
+}
