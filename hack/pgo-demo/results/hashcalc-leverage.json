@@ -1,0 +1,140 @@
+{
+  "profile_path": "/home/node/.openclaw/workspace/dev/pgoctl/hack/pgo-demo/results/hashcalc-raw.pprof",
+  "total_samples": 2501,
+  "top_functions": [
+    {
+      "function": "crypto/internal/fips140/sha256.blockAVX2",
+      "package": "crypto/internal/fips140/sha256",
+      "flat_pct": 26.15,
+      "cum_pct": 26.15
+    },
+    {
+      "function": "crypto/internal/fips140/sha512.blockAVX2",
+      "package": "crypto/internal/fips140/sha512",
+      "flat_pct": 9.87,
+      "cum_pct": 9.87
+    },
+    {
+      "function": "strings.Fields",
+      "package": "strings",
+      "flat_pct": 8.93,
+      "cum_pct": 11.28
+    },
+    {
+      "function": "crypto/md5.block",
+      "package": "crypto/md5",
+      "flat_pct": 5.71,
+      "cum_pct": 5.71
+    },
+    {
+      "function": "encoding/base64.(*Encoding).Encode",
+      "package": "encoding/base64",
+      "flat_pct": 5.64,
+      "cum_pct": 5.71
+    },
+    {
+      "function": "crypto/sha1.blockAVX2",
+      "package": "crypto/sha1",
+      "flat_pct": 4.59,
+      "cum_pct": 4.59
+    },
+    {
+      "function": "main.(*reverseProc).Process",
+      "package": "main",
+      "flat_pct": 4.32,
+      "cum_pct": 6.99
+    },
+    {
+      "function": "runtime.memmove",
+      "package": "runtime",
+      "flat_pct": 3.07,
+      "cum_pct": 3.07
+    },
+    {
+      "function": "runtime.memclrNoHeapPointers",
+      "package": "runtime",
+      "flat_pct": 2.28,
+      "cum_pct": 2.28
+    },
+    {
+      "function": "internal/runtime/syscall/linux.Syscall6",
+      "package": "internal/runtime/syscall/linux",
+      "flat_pct": 1.56,
+      "cum_pct": 1.56
+    },
+    {
+      "function": "runtime.typePointers.next",
+      "package": "runtime",
+      "flat_pct": 1.22,
+      "cum_pct": 1.46
+    },
+    {
+      "function": "crypto/sha1.blockGeneric",
+      "package": "crypto/sha1",
+      "flat_pct": 1.08,
+      "cum_pct": 1.1
+    },
+    {
+      "function": "runtime.scanObject",
+      "package": "runtime",
+      "flat_pct": 1.08,
+      "cum_pct": 2.74
+    },
+    {
+      "function": "runtime.futex",
+      "package": "runtime",
+      "flat_pct": 0.96,
+      "cum_pct": 0.96
+    },
+    {
+      "function": "cmpbody",
+      "package": "cmpbody",
+      "flat_pct": 0.89,
+      "cum_pct": 0.89
+    },
+    {
+      "function": "runtime.madvise",
+      "package": "runtime",
+      "flat_pct": 0.89,
+      "cum_pct": 0.89
+    },
+    {
+      "function": "runtime.scanblock",
+      "package": "runtime",
+      "flat_pct": 0.82,
+      "cum_pct": 1.39
+    },
+    {
+      "function": "strings.(*Builder).WriteString",
+      "package": "strings",
+      "flat_pct": 0.67,
+      "cum_pct": 2.28
+    },
+    {
+      "function": "strings.Join",
+      "package": "strings",
+      "flat_pct": 0.65,
+      "cum_pct": 4.87
+    },
+    {
+      "function": "runtime.(*unwinder).resolveInternal",
+      "package": "runtime",
+      "flat_pct": 0.55,
+      "cum_pct": 0.91
+    }
+  ],
+  "hot_interfaces": [
+    "encoding/base64.(*Encoding).Encode",
+    "main.(*reverseProc).Process",
+    "strings.(*Builder).WriteString",
+    "runtime.(*unwinder).resolveInternal"
+  ],
+  "build_analysis": {
+    "devirt_decisions": 93,
+    "pgo_extra_inlines": 0,
+    "baseline_inlines": 45811,
+    "pgo_inlines": 45811
+  },
+  "verdict": "HIGH",
+  "verdict_reason": "HIGH: strong PGO leverage — 93 devirtualization decision(s); run a full benchmark cycle"
+}

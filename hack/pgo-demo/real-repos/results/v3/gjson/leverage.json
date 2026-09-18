@@ -1,0 +1,137 @@
+{
+  "profile_path": "/tmp/pgo-eval/gjson/profile.pprof",
+  "total_samples": 1142,
+  "top_functions": [
+    {
+      "function": "github.com/tidwall/gjson.parseObject",
+      "package": "github.com/tidwall/gjson",
+      "flat_pct": 13.66,
+      "cum_pct": 88.37
+    },
+    {
+      "function": "github.com/tidwall/gjson.parseSquash",
+      "package": "github.com/tidwall/gjson",
+      "flat_pct": 10.5,
+      "cum_pct": 12.95
+    },
+    {
+      "function": "github.com/tidwall/gjson.parseArray",
+      "package": "github.com/tidwall/gjson",
+      "flat_pct": 9.01,
+      "cum_pct": 60.2
+    },
+    {
+      "function": "runtime.asyncPreempt",
+      "package": "runtime",
+      "flat_pct": 8.47,
+      "cum_pct": 8.47
+    },
+    {
+      "function": "runtime.duffcopy",
+      "package": "runtime",
+      "flat_pct": 5.91,
+      "cum_pct": 5.91
+    },
+    {
+      "function": "runtime.memclrNoHeapPointers",
+      "package": "runtime",
+      "flat_pct": 4.95,
+      "cum_pct": 4.95
+    },
+    {
+      "function": "github.com/tidwall/gjson.parseObjectPath",
+      "package": "github.com/tidwall/gjson",
+      "flat_pct": 4.3,
+      "cum_pct": 6.98
+    },
+    {
+      "function": "runtime.duffzero",
+      "package": "runtime",
+      "flat_pct": 2.57,
+      "cum_pct": 2.57
+    },
+    {
+      "function": "github.com/tidwall/gjson.Get",
+      "package": "github.com/tidwall/gjson",
+      "flat_pct": 2.21,
+      "cum_pct": 91.83
+    },
+    {
+      "function": "runtime.growslice",
+      "package": "runtime",
+      "flat_pct": 2.03,
+      "cum_pct": 9.13
+    },
+    {
+      "function": "github.com/tidwall/gjson.parseAny",
+      "package": "github.com/tidwall/gjson",
+      "flat_pct": 1.97,
+      "cum_pct": 6.86
+    },
+    {
+      "function": "runtime.mallocgc",
+      "package": "runtime",
+      "flat_pct": 1.91,
+      "cum_pct": 19.45
+    },
+    {
+      "function": "runtime.mallocgcSmallNoscan",
+      "package": "runtime",
+      "flat_pct": 1.67,
+      "cum_pct": 14.02
+    },
+    {
+      "function": "runtime.nextFreeFast",
+      "package": "runtime",
+      "flat_pct": 1.49,
+      "cum_pct": 1.49
+    },
+    {
+      "function": "github.com/tidwall/gjson.Result.Get",
+      "package": "github.com/tidwall/gjson",
+      "flat_pct": 1.43,
+      "cum_pct": 11.1
+    },
+    {
+      "function": "runtime.(*mspan).base",
+      "package": "runtime",
+      "flat_pct": 1.25,
+      "cum_pct": 1.25
+    },
+    {
+      "function": "runtime.mallocgcTiny",
+      "package": "runtime",
+      "flat_pct": 1.19,
+      "cum_pct": 2.51
+    },
+    {
+      "function": "github.com/tidwall/gjson.parseArrayPath",
+      "package": "github.com/tidwall/gjson",
+      "flat_pct": 1.13,
+      "cum_pct": 1.79
+    },
+    {
+      "function": "github.com/tidwall/gjson.parseNumber",
+      "package": "github.com/tidwall/gjson",
+      "flat_pct": 1.13,
+      "cum_pct": 1.37
+    },
+    {
+      "function": "runtime.futex",
+      "package": "runtime",
+      "flat_pct": 1.13,
+      "cum_pct": 1.13
+    }
+  ],
+  "hot_interfaces": [
+    "runtime.(*mspan).base"
+  ],
+  "build_analysis": {
+    "devirt_decisions": 13,
+    "pgo_extra_inlines": 717,
+    "baseline_inlines": 19453,
+    "pgo_inlines": 20170
+  },
+  "verdict": "HIGH",
+  "verdict_reason": "HIGH: strong PGO leverage — 13 devirtualization decision(s), 717 extra inline(s) with PGO; run a full benchmark cycle"
+}

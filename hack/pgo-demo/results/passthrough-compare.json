@@ -1,0 +1,69 @@
+{
+  "baseline_samples": 379,
+  "candidate_samples": 556,
+  "top_deltas": [
+    {
+      "function": "net/http.(*response).finishRequest",
+      "base_pct": 0.13,
+      "cand_pct": 0.39,
+      "delta_pct": 214.67
+    },
+    {
+      "function": "internal/runtime/atomic.(*Uint32).CompareAndSwap",
+      "base_pct": 0.25,
+      "cand_pct": 0.79,
+      "delta_pct": 214.67
+    },
+    {
+      "function": "net/http.stripHostPort",
+      "base_pct": 0.13,
+      "cand_pct": 0.32,
+      "delta_pct": 151.74
+    },
+    {
+      "function": "internal/runtime/maps.(*Iter).Next",
+      "base_pct": 0.13,
+      "cand_pct": 0.32,
+      "delta_pct": 151.74
+    },
+    {
+      "function": "internal/runtime/maps.(*Map).getWithoutKeySmallFastStr",
+      "base_pct": 0.25,
+      "cand_pct": 0.55,
+      "delta_pct": 120.27
+    },
+    {
+      "function": "runtime.exitsyscall",
+      "base_pct": 0.25,
+      "cand_pct": 0.55,
+      "delta_pct": 120.27
+    },
+    {
+      "function": "sync/atomic.(*Int32).Add",
+      "base_pct": 0.13,
+      "cand_pct": 0,
+      "delta_pct": -100
+    },
+    {
+      "function": "runtime.netpollready",
+      "base_pct": 0.13,
+      "cand_pct": 0,
+      "delta_pct": -100
+    },
+    {
+      "function": "net.(*netFD).Write",
+      "base_pct": 0.25,
+      "cand_pct": 0,
+      "delta_pct": -100
+    },
+    {
+      "function": "runtime.netpollblockcommit",
+      "base_pct": 0.25,
+      "cand_pct": 0,
+      "delta_pct": -100
+    }
+  ],
+  "summary_cpu_delta_pct": -4.96,
+  "filtered_functions": 0,
+  "verdict": "neutral"
+}
