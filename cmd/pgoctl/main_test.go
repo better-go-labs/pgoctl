@@ -470,7 +470,10 @@ func TestCompare_Improvement(t *testing.T) {
 func TestCompare_MinCPUPercent(t *testing.T) {
 	p1 := generateProfile(t)
 	p2 := generateProfile(t)
-	_, _, err := executeCmd(t, "compare", "--min-cpu-percent=0.1", p1, p2)
+	// --min-regression=100 prevents a rollback verdict (exit 1) due to timing
+	// variance in synthetic profiles generated under load (e.g. -coverpkg runs).
+	// This test only verifies the flag is accepted and parsing succeeds.
+	_, _, err := executeCmd(t, "compare", "--min-cpu-percent=0.1", "--min-regression=100", p1, p2)
 	assert.NoError(t, err)
 }
 
