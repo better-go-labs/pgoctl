@@ -90,16 +90,24 @@ func TestPrintLeverageReport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Capture stdout
-			r, w, _ := os.Pipe()
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("failed to create pipe: %v", err)
+			}
 			oldStdout := os.Stdout
 			os.Stdout = w
 
 			printLeverageReport(tt.report)
 
-			_ = w.Close()
+			if err := w.Close(); err != nil {
+				t.Logf("failed to close pipe: %v", err)
+			}
 			os.Stdout = oldStdout
 
-			output, _ := io.ReadAll(r)
+			output, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("failed to read pipe: %v", err)
+			}
 			outputStr := string(output)
 
 			for _, shouldContain := range tt.shouldContain {
@@ -125,16 +133,24 @@ func TestNewLeverageCheckCmdJSON(t *testing.T) {
 	}
 
 	// Capture stdout
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("failed to create pipe: %v", pipeErr)
+	}
 	oldStdout := os.Stdout
 	os.Stdout = w
 
 	err = cmd.RunE(cmd, []string{profilePath})
 
-	_ = w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("failed to close pipe: %v", closeErr)
+	}
 	os.Stdout = oldStdout
 
-	output, _ := io.ReadAll(r)
+	output, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatalf("failed to read pipe: %v", readErr)
+	}
 	outputStr := string(output)
 
 	if err != nil {
@@ -170,15 +186,25 @@ func TestNewLeverageCheckCmdWithFormat(t *testing.T) {
 
 	// Capture stdout
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("failed to create pipe: %v", pipeErr)
+	}
 	os.Stdout = w
 
-	_ = cmd.RunE(cmd, []string{profilePath})
+	if runErr := cmd.RunE(cmd, []string{profilePath}); runErr != nil {
+		t.Logf("cmd.RunE returned error (may be expected): %v", runErr)
+	}
 
-	_ = w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("failed to close pipe: %v", closeErr)
+	}
 	os.Stdout = oldStdout
 
-	output, _ := io.ReadAll(r)
+	output, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatalf("failed to read pipe: %v", readErr)
+	}
 	outputStr := string(output)
 
 	// Verify it's valid JSON
@@ -211,16 +237,25 @@ func TestNewLeverageCheckCmdTopNFlag(t *testing.T) {
 	}
 
 	// Capture stdout
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("failed to create pipe: %v", pipeErr)
+	}
 	oldStdout := os.Stdout
 	os.Stdout = w
 
-	_ = cmd.RunE(cmd, []string{profilePath})
+	if runErr := cmd.RunE(cmd, []string{profilePath}); runErr != nil {
+		t.Logf("cmd.RunE returned error (may be expected): %v", runErr)
+	}
 
-	_ = w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("failed to close pipe: %v", closeErr)
+	}
 	os.Stdout = oldStdout
 
-	_, _ = io.ReadAll(r)
+	if _, readErr := io.ReadAll(r); readErr != nil {
+		t.Logf("failed to read pipe: %v", readErr)
+	}
 
 	// If we got here without panic, the flag was parsed correctly
 	if t.Failed() {
@@ -236,20 +271,28 @@ func TestNewLeverageCheckCmdInvalidProfile(t *testing.T) {
 	}
 
 	// Capture stderr
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("failed to create pipe: %v", pipeErr)
+	}
 	oldStderr := os.Stderr
 	os.Stderr = w
 
 	err := cmd.RunE(cmd, []string{"/nonexistent/path.pprof"})
 
-	_ = w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("failed to close pipe: %v", closeErr)
+	}
 	os.Stderr = oldStderr
 
 	if err == nil {
 		t.Error("expected error for nonexistent profile path")
 	}
 
-	output, _ := io.ReadAll(r)
+	output, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Logf("failed to read pipe: %v", readErr)
+	}
 	outputStr := string(output)
 
 	if !strings.Contains(outputStr, "error") && err == nil {
