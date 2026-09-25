@@ -13,16 +13,16 @@ import (
 
 func TestPrintLeverageReport(t *testing.T) {
 	tests := []struct {
-		name         string
-		report       *leverage.Report
+		name          string
+		report        *leverage.Report
 		shouldContain []string
 	}{
 		{
 			name: "profile only verdict",
 			report: &leverage.Report{
-				ProfilePath:  "test.pprof",
-				TotalSamples: 1000,
-				Verdict:      leverage.VerdictIncomplete,
+				ProfilePath:   "test.pprof",
+				TotalSamples:  1000,
+				Verdict:       leverage.VerdictIncomplete,
 				VerdictReason: "INCOMPLETE: no build analysis run; use --dir to measure PGO-specific compiler decisions",
 				TopFunctions: []leverage.FunctionEntry{
 					{Function: "foo.Bar", Package: "foo", FlatPct: 10.5},
@@ -40,9 +40,9 @@ func TestPrintLeverageReport(t *testing.T) {
 		{
 			name: "leverage found with devirt",
 			report: &leverage.Report{
-				ProfilePath:  "test.pprof",
-				TotalSamples: 1000,
-				Verdict:      leverage.VerdictHigh,
+				ProfilePath:   "test.pprof",
+				TotalSamples:  1000,
+				Verdict:       leverage.VerdictHigh,
 				VerdictReason: "HIGH: strong PGO leverage — 5 devirtualization decision(s), 3 extra inline(s) with PGO; run a full benchmark cycle",
 				BuildAnalysis: &leverage.BuildAnalysis{
 					DevirtDecisions: 5,
@@ -96,7 +96,7 @@ func TestPrintLeverageReport(t *testing.T) {
 
 			printLeverageReport(tt.report)
 
-			w.Close()
+			_ = w.Close()
 			os.Stdout = oldStdout
 
 			output, _ := io.ReadAll(r)
@@ -120,7 +120,8 @@ func TestNewLeverageCheckCmdJSON(t *testing.T) {
 
 	cmd := newLeverageCheckCmd()
 	if cmd == nil {
-		t.Fatal("newLeverageCheckCmd returned nil")
+		t.Errorf("newLeverageCheckCmd returned nil")
+		return
 	}
 
 	// Capture stdout
@@ -130,7 +131,7 @@ func TestNewLeverageCheckCmdJSON(t *testing.T) {
 
 	err = cmd.RunE(cmd, []string{profilePath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	output, _ := io.ReadAll(r)
@@ -158,20 +159,23 @@ func TestNewLeverageCheckCmdWithFormat(t *testing.T) {
 
 	cmd := newLeverageCheckCmd()
 	if cmd == nil {
-		t.Fatal("newLeverageCheckCmd returned nil")
+		t.Errorf("newLeverageCheckCmd returned nil")
+		return
 	}
 
 	// Set format to json
-	cmd.Flags().Set("format", "json")
+	if err := cmd.Flags().Set("format", "json"); err != nil {
+		t.Fatalf("failed to set format flag: %v", err)
+	}
 
 	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err = cmd.RunE(cmd, []string{profilePath})
+	_ = cmd.RunE(cmd, []string{profilePath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	output, _ := io.ReadAll(r)
@@ -197,20 +201,23 @@ func TestNewLeverageCheckCmdTopNFlag(t *testing.T) {
 
 	cmd := newLeverageCheckCmd()
 	if cmd == nil {
-		t.Fatal("newLeverageCheckCmd returned nil")
+		t.Errorf("newLeverageCheckCmd returned nil")
+		return
 	}
 
 	// Set top flag
-	cmd.Flags().Set("top", "5")
+	if err := cmd.Flags().Set("top", "5"); err != nil {
+		t.Fatalf("failed to set top flag: %v", err)
+	}
 
 	// Capture stdout
 	r, w, _ := os.Pipe()
 	oldStdout := os.Stdout
 	os.Stdout = w
 
-	err = cmd.RunE(cmd, []string{profilePath})
+	_ = cmd.RunE(cmd, []string{profilePath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	_, _ = io.ReadAll(r)
@@ -224,7 +231,8 @@ func TestNewLeverageCheckCmdTopNFlag(t *testing.T) {
 func TestNewLeverageCheckCmdInvalidProfile(t *testing.T) {
 	cmd := newLeverageCheckCmd()
 	if cmd == nil {
-		t.Fatal("newLeverageCheckCmd returned nil")
+		t.Errorf("newLeverageCheckCmd returned nil")
+		return
 	}
 
 	// Capture stderr
@@ -234,7 +242,7 @@ func TestNewLeverageCheckCmdInvalidProfile(t *testing.T) {
 
 	err := cmd.RunE(cmd, []string{"/nonexistent/path.pprof"})
 
-	w.Close()
+	_ = w.Close()
 	os.Stderr = oldStderr
 
 	if err == nil {
@@ -252,7 +260,8 @@ func TestNewLeverageCheckCmdInvalidProfile(t *testing.T) {
 func TestNewLeverageCheckCmdWrongArgCount(t *testing.T) {
 	cmd := newLeverageCheckCmd()
 	if cmd == nil {
-		t.Fatal("newLeverageCheckCmd returned nil")
+		t.Errorf("newLeverageCheckCmd returned nil")
+		return
 	}
 
 	// Test with no arguments - cobra validates args before calling RunE

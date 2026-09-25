@@ -219,10 +219,10 @@ func TestReadProfileFileAbsolute(t *testing.T) {
 
 func TestCPUSampleIndex(t *testing.T) {
 	tests := []struct {
-		name           string
-		filename       string
-		wantIdx        int
-		wantOk         bool
+		name     string
+		filename string
+		wantIdx  int
+		wantOk   bool
 	}{
 		{
 			name:     "cpu_valid.pprof has cpu samples",
