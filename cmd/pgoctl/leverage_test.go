@@ -346,7 +346,7 @@ func TestNewLeverageCheckCmdWrongArgCount(t *testing.T) {
 
 func TestNewLeverageCheckCmdJSON_Synthetic(t *testing.T) {
 	profilePath := makeCmdSyntheticProfile(t)
-	defer os.Remove(profilePath)
+	t.Cleanup(func() { _ = os.Remove(profilePath) })
 
 	cmd := newLeverageCheckCmd()
 	if err := cmd.Flags().Set("format", formatJSON); err != nil {
@@ -394,7 +394,7 @@ func TestNewLeverageCheckCmdVerdictNone_ExitCode(t *testing.T) {
 	}
 
 	profilePath := makeCmdSyntheticProfile(t)
-	defer os.Remove(profilePath)
+	t.Cleanup(func() { _ = os.Remove(profilePath) })
 
 	cmd := newLeverageCheckCmd()
 	if err := cmd.Flags().Set("dir", moduleDir); err != nil {
@@ -488,13 +488,18 @@ func TestPrintLeverageReport_WithoutBuildAnalysis(t *testing.T) {
 		HotInterfaces: []string{},
 	}
 
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("os.Pipe: %v", pipeErr)
+	}
 	oldStdout := os.Stdout
 	os.Stdout = w
 
 	printLeverageReport(report)
 
-	w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("close pipe: %v", closeErr)
+	}
 	os.Stdout = oldStdout
 	output, _ := io.ReadAll(r)
 	outputStr := string(output)
@@ -527,13 +532,18 @@ func TestPrintLeverageReport_WithAllFields(t *testing.T) {
 		},
 	}
 
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("os.Pipe: %v", pipeErr)
+	}
 	oldStdout := os.Stdout
 	os.Stdout = w
 
 	printLeverageReport(report)
 
-	w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("close pipe: %v", closeErr)
+	}
 	os.Stdout = oldStdout
 	output, _ := io.ReadAll(r)
 	outputStr := string(output)
@@ -566,13 +576,18 @@ func TestNewLeverageCheckCmdJSON_VerifyStructure(t *testing.T) {
 		t.Fatalf("failed to set format flag: %v", err)
 	}
 
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("os.Pipe: %v", pipeErr)
+	}
 	oldStdout := os.Stdout
 	os.Stdout = w
 
 	_ = cmd.RunE(cmd, []string{profilePath})
 
-	w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("close pipe: %v", closeErr)
+	}
 	os.Stdout = oldStdout
 	output, _ := io.ReadAll(r)
 
@@ -602,13 +617,18 @@ func TestNewLeverageCheckCmdFormat_TextFlag(t *testing.T) {
 		t.Fatalf("failed to set format flag: %v", err)
 	}
 
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("os.Pipe: %v", pipeErr)
+	}
 	oldStdout := os.Stdout
 	os.Stdout = w
 
 	_ = cmd.RunE(cmd, []string{profilePath})
 
-	w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("close pipe: %v", closeErr)
+	}
 	os.Stdout = oldStdout
 	output, _ := io.ReadAll(r)
 	outputStr := string(output)

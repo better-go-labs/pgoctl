@@ -150,35 +150,7 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		}
 		buildAnalysis = ba
 
-		switch {
-		case ba.DevirtDecisions >= 5 || ba.PGOExtraInlines >= 30:
-			verdict = VerdictHigh
-			parts := []string{}
-			if ba.DevirtDecisions > 0 {
-				parts = append(parts, fmt.Sprintf("%d devirtualization decision(s)", ba.DevirtDecisions))
-			}
-			if ba.PGOExtraInlines > 0 {
-				parts = append(parts, fmt.Sprintf("%d extra inline(s) with PGO", ba.PGOExtraInlines))
-			}
-			verdictReason = fmt.Sprintf("HIGH: strong PGO leverage — %s; run a full benchmark cycle", strings.Join(parts, ", "))
-		case ba.DevirtDecisions >= 1 || ba.PGOExtraInlines >= 5:
-			verdict = VerdictLow
-			parts := []string{}
-			if ba.DevirtDecisions > 0 {
-				parts = append(parts, fmt.Sprintf("%d devirtualization decision(s)", ba.DevirtDecisions))
-			}
-			if ba.PGOExtraInlines > 0 {
-				parts = append(parts, fmt.Sprintf("%d extra inline(s) with PGO", ba.PGOExtraInlines))
-			}
-			verdictReason = fmt.Sprintf("LOW: marginal PGO leverage — %s; benchmark may show modest gains", strings.Join(parts, ", "))
-		default:
-			verdict = VerdictNone
-			topFn := ""
-			if len(topEntries) > 0 {
-				topFn = fmt.Sprintf("; top hot function %s", topEntries[0].Function)
-			}
-			verdictReason = fmt.Sprintf("NONE: 0 PGO-specific compiler decisions — no codegen lever for this hot path%s", topFn)
-		}
+		verdict, verdictReason = verdictForAnalysis(ba, topEntries)
 	} else {
 		verdict = VerdictIncomplete
 		verdictReason = "INCOMPLETE: no build analysis run; use --dir to measure PGO-specific compiler decisions"
@@ -193,6 +165,36 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		Verdict:       verdict,
 		VerdictReason: verdictReason,
 	}, nil
+}
+
+// verdictForAnalysis maps build-analysis counts to a Verdict + human-readable reason.
+func verdictForAnalysis(ba *BuildAnalysis, topEntries []FunctionEntry) (Verdict, string) {
+	switch {
+	case ba.DevirtDecisions >= 5 || ba.PGOExtraInlines >= 30:
+		parts := []string{}
+		if ba.DevirtDecisions > 0 {
+			parts = append(parts, fmt.Sprintf("%d devirtualization decision(s)", ba.DevirtDecisions))
+		}
+		if ba.PGOExtraInlines > 0 {
+			parts = append(parts, fmt.Sprintf("%d extra inline(s) with PGO", ba.PGOExtraInlines))
+		}
+		return VerdictHigh, fmt.Sprintf("HIGH: strong PGO leverage — %s; run a full benchmark cycle", strings.Join(parts, ", "))
+	case ba.DevirtDecisions >= 1 || ba.PGOExtraInlines >= 5:
+		parts := []string{}
+		if ba.DevirtDecisions > 0 {
+			parts = append(parts, fmt.Sprintf("%d devirtualization decision(s)", ba.DevirtDecisions))
+		}
+		if ba.PGOExtraInlines > 0 {
+			parts = append(parts, fmt.Sprintf("%d extra inline(s) with PGO", ba.PGOExtraInlines))
+		}
+		return VerdictLow, fmt.Sprintf("LOW: marginal PGO leverage — %s; benchmark may show modest gains", strings.Join(parts, ", "))
+	default:
+		topFn := ""
+		if len(topEntries) > 0 {
+			topFn = fmt.Sprintf("; top hot function %s", topEntries[0].Function)
+		}
+		return VerdictNone, fmt.Sprintf("NONE: 0 PGO-specific compiler decisions — no codegen lever for this hot path%s", topFn)
+	}
 }
 
 func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, error) {
