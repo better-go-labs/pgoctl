@@ -10,6 +10,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	formatJSON = "json"
+	formatText = "text"
+)
+
 func newLeverageCheckCmd() *cobra.Command {
 	var topN int
 	var dir string
@@ -17,7 +22,7 @@ func newLeverageCheckCmd() *cobra.Command {
 	var format string
 
 	cmd := &cobra.Command{
-		Use:   "leverage-check <profile.pprof>",
+		Use:   "leverage-check [--dir DIR] [--package PKG] [--top N] [--format json|text] <profile.pprof>",
 		Short: "Check whether a Go module will benefit from PGO before optimizing",
 		Long: `Check if a CPU profile provides actionable PGO opportunities.
 
@@ -26,9 +31,15 @@ PGO optimization pipeline would provide measurable benefit. It helps avoid
 "running blindly" when PGO won't help (e.g., hot functions are too large to inline).
 
 Without --dir, only analyzes the profile statically (hot functions, interfaces).
-With --dir, runs build analysis to measure PGO-specific compiler decisions:
-  - Interface devirtualization (hot interface.Method calls → direct calls)
-  - Extra inlining decisions (functions inlined only with PGO profile guidance)
+With --dir, compiles the target package twice using 'go build -gcflags=all=-m=2':
+once with '-pgo=<profile>' and once as a baseline (no PGO). The compiler's
+optimization decisions are diffed to count:
+  - PGO-attributed devirtualizations: hot interface.Method calls rewritten to
+    direct calls by the compiler only when the PGO profile is present.
+  - PGO-only extra inlines: functions inlined in the PGO build but not the
+    baseline, indicating the profile guided the inliner beyond its defaults.
+
+Requires a buildable Go module at --dir. Without --dir the verdict is INCOMPLETE.
 
 Verdict taxonomy:
   HIGH        ≥5 devirt decisions or ≥30 extra inlines — run full benchmark
@@ -51,7 +62,7 @@ Exit codes: 0 = HIGH/LOW/INCOMPLETE, 2 = NONE (CI gate), 1 = error`,
 				return &exitError{1, err}
 			}
 
-			if format == "json" {
+			if format == formatJSON {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				return enc.Encode(rpt)
@@ -68,7 +79,7 @@ Exit codes: 0 = HIGH/LOW/INCOMPLETE, 2 = NONE (CI gate), 1 = error`,
 	cmd.Flags().IntVar(&topN, "top", 20, "number of top functions to show")
 	cmd.Flags().StringVar(&dir, "dir", "", "directory of the Go module to build-analyze (optional)")
 	cmd.Flags().StringVar(&pkg, "package", "./...", "package pattern to build")
-	cmd.Flags().StringVar(&format, "format", "text", "output format: text|json")
+	cmd.Flags().StringVar(&format, "format", formatText, "output format: text|json")
 	return cmd
 }
 
