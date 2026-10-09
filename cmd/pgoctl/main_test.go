@@ -462,7 +462,9 @@ func TestMerge_HalfLife(t *testing.T) {
 func TestCompare_Improvement(t *testing.T) {
 	p1 := generateProfile(t)
 	p2 := generateProfile(t)
-	_, _, err := executeCmd(t, "compare", "--min-improvement=0", p1, p2)
+	// --min-regression=100 prevents a rollback verdict (exit 1) due to timing
+	// variance in synthetic profiles generated under load (e.g. -coverpkg runs).
+	_, _, err := executeCmd(t, "compare", "--min-improvement=0", "--min-regression=100", p1, p2)
 	assert.NoError(t, err)
 }
 
