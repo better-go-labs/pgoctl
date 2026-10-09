@@ -652,3 +652,57 @@ func TestFormatConstants(t *testing.T) {
 		t.Errorf("formatText should be \"text\", got %q", formatText)
 	}
 }
+
+// TestNewLeverageCheckCmd_HappyCase is the positive-control test at the CLI
+// layer.  It uses testdata/cpu_happy.pprof — a fixture with 50 000 samples
+// that passes the quality gate — and asserts that the command produces valid
+// JSON output with a non-empty verdict field.
+func TestNewLeverageCheckCmd_HappyCase(t *testing.T) {
+	// cpu_happy.pprof lives in the repo-root testdata/; cmd tests run from
+	// cmd/pgoctl/, so the relative path is ../../testdata/cpu_happy.pprof.
+	profilePath := filepath.Join("..", "..", "testdata", "cpu_happy.pprof")
+	data, err := os.ReadFile(profilePath)
+	if err != nil || strings.Contains(string(data), "version https://git-lfs.github.com") {
+		t.Skipf("testdata/cpu_happy.pprof not available (LFS pointer or missing)")
+	}
+
+	cmd := newLeverageCheckCmd()
+	if err := cmd.Flags().Set("format", formatJSON); err != nil {
+		t.Fatalf("set format flag: %v", err)
+	}
+
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("os.Pipe: %v", pipeErr)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = w
+
+	_ = cmd.RunE(cmd, []string{profilePath})
+
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("close pipe: %v", closeErr)
+	}
+	os.Stdout = oldStdout
+	output, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatalf("read pipe: %v", readErr)
+	}
+
+	var result map[string]interface{}
+	if jsonErr := json.Unmarshal(output, &result); jsonErr != nil {
+		t.Fatalf("expected valid JSON output, got: %s (error: %v)", output, jsonErr)
+	}
+
+	verdict, ok := result["verdict"].(string)
+	if !ok || verdict == "" {
+		t.Errorf("expected non-empty verdict in JSON output; got: %v", result["verdict"])
+	}
+	// Profile-only run (no --dir) always yields INCOMPLETE, which is non-NONE.
+	if verdict == "NONE" {
+		t.Errorf("happy-case fixture produced NONE verdict; expected INCOMPLETE or higher")
+	}
+	if result["total_samples"] == nil {
+		t.Errorf("expected total_samples in JSON output")
+	}
+}

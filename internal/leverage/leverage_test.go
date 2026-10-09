@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Better-Go-Labs/pgoctl/internal/validate"
 	"github.com/google/pprof/profile"
 )
 
@@ -821,5 +822,51 @@ func TestCheckFile_WithDir_PGOExtraInlinesClamp(t *testing.T) {
 	v, _ := verdictForAnalysis(ba, nil)
 	if v != VerdictNone {
 		t.Errorf("expected NONE for no effective PGO gain, got %s", v)
+	}
+}
+
+// TestCheckFile_HappyCasePprof is the positive-control test for the
+// cpu_happy.pprof fixture.  It asserts that the fixture:
+//  1. Passes pgoctl's quality gate (validate.ValidateFile returns Valid=true).
+//  2. Is successfully parsed by CheckFile.
+//  3. Produces a non-NONE verdict (VerdictIncomplete in profile-only mode,
+//     confirming the profile is well-formed and ready for build analysis).
+func TestCheckFile_HappyCasePprof(t *testing.T) {
+	profilePath := filepath.Join("..", "..", "testdata", "cpu_happy.pprof")
+	data, err := os.ReadFile(profilePath)
+	if err != nil || strings.Contains(string(data), "version https://git-lfs.github.com") {
+		t.Skipf("testdata/cpu_happy.pprof not available (LFS pointer or missing)")
+	}
+
+	// 1. Quality gate: fixture must be valid with default thresholds.
+	opts := validate.DefaultOptions()
+	qr, err := validate.ValidateFile(profilePath, opts)
+	if err != nil {
+		t.Fatalf("validate.ValidateFile: %v", err)
+	}
+	if !qr.Valid {
+		t.Errorf("quality gate: expected Valid=true, got false; errors=%v score=%.3f samples=%d",
+			qr.Errors, qr.QualityScore, qr.Samples)
+	}
+	if qr.Samples < 10_000 {
+		t.Errorf("expected ≥10 000 samples, got %d", qr.Samples)
+	}
+
+	// 2. Leverage check: profile parses successfully.
+	rpt, err := CheckFile(profilePath, Options{TopN: 10})
+	if err != nil {
+		t.Fatalf("CheckFile: %v", err)
+	}
+
+	// 3. Verdict is non-NONE (INCOMPLETE in profile-only mode; VerdictNone would
+	//    mean the profile was empty or had no CPU samples at all).
+	if rpt.Verdict == VerdictNone {
+		t.Errorf("expected non-NONE verdict for happy-case fixture, got NONE (reason: %s)", rpt.VerdictReason)
+	}
+	if rpt.TotalSamples <= 0 {
+		t.Errorf("expected TotalSamples > 0, got %d", rpt.TotalSamples)
+	}
+	if len(rpt.TopFunctions) == 0 {
+		t.Errorf("expected TopFunctions to be populated for fixture with %d samples", rpt.TotalSamples)
 	}
 }
