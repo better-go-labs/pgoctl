@@ -825,15 +825,42 @@ func TestCheckFile_WithDir_PGOExtraInlinesClamp(t *testing.T) {
 	}
 }
 
-// TestCheckFile_WithDir_DevirtBaselineSubtracted verifies that devirtualization decisions
-// are baseline-subtracted so static (non-PGO) devirts are not mis-attributed to PGO.
-// The module has an interface call that the compiler will devirt in BOTH builds; the profile
-// has no functions matching the module, so PGO contributes nothing.
-// FAILS on the old code (devirtDecisions == 1, not baseline-subtracted); passes after fix.
-func TestCheckFile_WithDir_DevirtBaselineSubtracted(t *testing.T) {
+// TestCountLines_PGODevirtMarkerOnly locks the "pgo devirtualizing" vs plain "devirtualizing"
+// distinction at the counting level. A synthetic -m=2 output block with both line types must
+// count only the PGO-marker lines. This deterministically catches the 136-vs-135 class of
+// bug (static devirts exposed by PGO inlining inflating the count) without a real toolchain build.
+func TestCountLines_PGODevirtMarkerOnly(t *testing.T) {
+	output := strings.Join([]string{
+		"./foo.go:10:5: devirtualizing iface.Method to ConcreteType",     // plain static devirt — must NOT match
+		"./bar.go:20:8: PGO devirtualizing interface call x.F to (*T).F", // PGO-specific marker — must match
+		"./baz.go:30:3: inlining call to ConcreteType.Method",            // unrelated
+		"./qux.go:40:7: PGO devirtualizing interface call y.G to (*U).G", // second PGO marker — must match
+		"./zap.go:50:1: devirtualizing s.String to S",                    // another plain static devirt — must NOT match
+	}, "\n")
+
+	got := countLines(output, "pgo devirtualizing")
+	if got != 2 {
+		t.Errorf("countLines(\"pgo devirtualizing\") = %d, want 2 (plain devirt lines must not be counted)", got)
+	}
+
+	// Confirm the plain pattern still matches all devirt lines (sanity).
+	gotAll := countLines(output, "devirtualizing")
+	if gotAll != 4 {
+		t.Errorf("countLines(\"devirtualizing\") = %d, want 4", gotAll)
+	}
+}
+
+// TestCheckFile_WithDir_StaticDevirtNotCounted verifies that static (non-PGO) devirtualization
+// decisions — emitted as plain "devirtualizing" by the compiler — are NOT counted as
+// PGO-attributed devirts. Only the "PGO devirtualizing" marker is counted.
+// The module has an interface call the compiler will statically devirt; the profile has no
+// matching hot functions so no "PGO devirtualizing" markers appear.
+// Fails on pre-gen2 code (devirtDecisions == 1 from plain devirt); passes after the fix.
+func TestCheckFile_WithDir_StaticDevirtNotCounted(t *testing.T) {
 	moduleDir := t.TempDir()
-	goMod := []byte("module example.com/devirt-baseline\n\ngo 1.21\n")
-	// This interface call is statically devirtualized in both PGO and baseline builds.
+	goMod := []byte("module example.com/static-devirt\n\ngo 1.21\n")
+	// This interface call is statically devirtualized; the compiler emits plain "devirtualizing",
+	// not "PGO devirtualizing", so DevirtDecisions must be 0 regardless of the profile.
 	mainGo := []byte(`package main
 
 type Stringer interface {
@@ -854,7 +881,6 @@ func main() {
 		t.Fatalf("write main.go: %v", err)
 	}
 
-	// makeMinimalProfile builds a profile with "main.main" — no hot functions in the module above.
 	profilePath := makeMinimalProfile(t)
 	t.Cleanup(func() { _ = os.Remove(profilePath) })
 
@@ -868,16 +894,13 @@ func main() {
 	if rpt.BuildAnalysis == nil {
 		t.Fatal("expected BuildAnalysis to be set")
 	}
-	// PGO-attributed devirts must be 0: the interface devirt appears in both builds,
-	// so pgoDevirts - baselineDevirts == 0.
+	// Static devirts emit plain "devirtualizing" — the PGO-marker count must be 0.
 	if rpt.BuildAnalysis.DevirtDecisions != 0 {
-		t.Errorf("DevirtDecisions = %d, want 0 (baseline devirts mis-attributed to PGO)",
+		t.Errorf("DevirtDecisions = %d, want 0 (static devirts must not be counted as PGO devirts)",
 			rpt.BuildAnalysis.DevirtDecisions)
 	}
-	// Sanity: raw counts should be equal (same devirt in both builds).
-	if rpt.BuildAnalysis.PGODevirts != rpt.BuildAnalysis.BaselineDevirts {
-		t.Errorf("PGODevirts (%d) != BaselineDevirts (%d) for profile with no matching hot functions",
-			rpt.BuildAnalysis.PGODevirts, rpt.BuildAnalysis.BaselineDevirts)
+	if rpt.BuildAnalysis.PGODevirts != 0 {
+		t.Errorf("PGODevirts = %d, want 0", rpt.BuildAnalysis.PGODevirts)
 	}
 }
 

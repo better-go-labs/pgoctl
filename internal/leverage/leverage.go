@@ -42,7 +42,6 @@ type BuildAnalysis struct {
 	PGOExtraInlines int `json:"pgo_extra_inlines"`
 	BaselineInlines int `json:"baseline_inlines"`
 	PGOInlines      int `json:"pgo_inlines"`
-	BaselineDevirts int `json:"baseline_devirts"`
 	PGODevirts      int `json:"pgo_devirts"`
 }
 
@@ -215,12 +214,9 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 		return nil, fmt.Errorf("baseline build: %w", err)
 	}
 
-	pgoDevirts := countLines(pgoOutput, "devirtualizing")
-	baselineDevirts := countLines(baselineOutput, "devirtualizing")
-	devirtDecisions := pgoDevirts - baselineDevirts
-	if devirtDecisions < 0 {
-		devirtDecisions = 0
-	}
+	// Count only the PGO-specific speculative devirt marker; plain "devirtualizing" lines
+	// are static/type-based and appear in both builds regardless of the profile.
+	pgoDevirts := countLines(pgoOutput, "pgo devirtualizing")
 
 	pgoInlines := countLines(pgoOutput, "inlining call")
 	baselineInlines := countLines(baselineOutput, "inlining call")
@@ -231,11 +227,10 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 	}
 
 	return &BuildAnalysis{
-		DevirtDecisions: devirtDecisions,
+		DevirtDecisions: pgoDevirts,
 		PGOExtraInlines: pgoExtraInlines,
 		BaselineInlines: baselineInlines,
 		PGOInlines:      pgoInlines,
-		BaselineDevirts: baselineDevirts,
 		PGODevirts:      pgoDevirts,
 	}, nil
 }
