@@ -42,6 +42,8 @@ type BuildAnalysis struct {
 	PGOExtraInlines int `json:"pgo_extra_inlines"`
 	BaselineInlines int `json:"baseline_inlines"`
 	PGOInlines      int `json:"pgo_inlines"`
+	BaselineDevirts int `json:"baseline_devirts"`
+	PGODevirts      int `json:"pgo_devirts"`
 }
 
 // Report is the output of CheckFile: a structured summary of PGO leverage for a build target.
@@ -213,7 +215,13 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 		return nil, fmt.Errorf("baseline build: %w", err)
 	}
 
-	devirtDecisions := countLines(pgoOutput, "devirtualizing")
+	pgoDevirts := countLines(pgoOutput, "devirtualizing")
+	baselineDevirts := countLines(baselineOutput, "devirtualizing")
+	devirtDecisions := pgoDevirts - baselineDevirts
+	if devirtDecisions < 0 {
+		devirtDecisions = 0
+	}
+
 	pgoInlines := countLines(pgoOutput, "inlining call")
 	baselineInlines := countLines(baselineOutput, "inlining call")
 
@@ -227,6 +235,8 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 		PGOExtraInlines: pgoExtraInlines,
 		BaselineInlines: baselineInlines,
 		PGOInlines:      pgoInlines,
+		BaselineDevirts: baselineDevirts,
+		PGODevirts:      pgoDevirts,
 	}, nil
 }
 

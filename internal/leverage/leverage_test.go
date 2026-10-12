@@ -825,6 +825,62 @@ func TestCheckFile_WithDir_PGOExtraInlinesClamp(t *testing.T) {
 	}
 }
 
+// TestCheckFile_WithDir_DevirtBaselineSubtracted verifies that devirtualization decisions
+// are baseline-subtracted so static (non-PGO) devirts are not mis-attributed to PGO.
+// The module has an interface call that the compiler will devirt in BOTH builds; the profile
+// has no functions matching the module, so PGO contributes nothing.
+// FAILS on the old code (devirtDecisions == 1, not baseline-subtracted); passes after fix.
+func TestCheckFile_WithDir_DevirtBaselineSubtracted(t *testing.T) {
+	moduleDir := t.TempDir()
+	goMod := []byte("module example.com/devirt-baseline\n\ngo 1.21\n")
+	// This interface call is statically devirtualized in both PGO and baseline builds.
+	mainGo := []byte(`package main
+
+type Stringer interface {
+	String() string
+}
+type S struct{ v string }
+func (s S) String() string { return s.v }
+func use(s Stringer) string { return s.String() }
+func main() {
+	s := S{"hello"}
+	_ = use(s)
+}
+`)
+	if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), goMod, 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, "main.go"), mainGo, 0o644); err != nil {
+		t.Fatalf("write main.go: %v", err)
+	}
+
+	// makeMinimalProfile builds a profile with "main.main" — no hot functions in the module above.
+	profilePath := makeMinimalProfile(t)
+	t.Cleanup(func() { _ = os.Remove(profilePath) })
+
+	rpt, err := CheckFile(profilePath, Options{
+		Dir:     moduleDir,
+		Package: ".",
+	})
+	if err != nil {
+		t.Fatalf("CheckFile: %v", err)
+	}
+	if rpt.BuildAnalysis == nil {
+		t.Fatal("expected BuildAnalysis to be set")
+	}
+	// PGO-attributed devirts must be 0: the interface devirt appears in both builds,
+	// so pgoDevirts - baselineDevirts == 0.
+	if rpt.BuildAnalysis.DevirtDecisions != 0 {
+		t.Errorf("DevirtDecisions = %d, want 0 (baseline devirts mis-attributed to PGO)",
+			rpt.BuildAnalysis.DevirtDecisions)
+	}
+	// Sanity: raw counts should be equal (same devirt in both builds).
+	if rpt.BuildAnalysis.PGODevirts != rpt.BuildAnalysis.BaselineDevirts {
+		t.Errorf("PGODevirts (%d) != BaselineDevirts (%d) for profile with no matching hot functions",
+			rpt.BuildAnalysis.PGODevirts, rpt.BuildAnalysis.BaselineDevirts)
+	}
+}
+
 // TestCheckFile_HappyCasePprof is the positive-control test for the
 // cpu_happy.pprof fixture.  It asserts that the fixture:
 //  1. Passes pgoctl's quality gate (validate.ValidateFile returns Valid=true).
