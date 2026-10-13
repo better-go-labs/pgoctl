@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -414,16 +415,45 @@ func TestValidate_BadWeightDensity(t *testing.T) {
 	assert.Equal(t, 2, ee.code)
 }
 
+// makeTimePackageSyntheticProfile creates a minimal deterministic pprof where
+// time.Now is the leaf function on half the samples (~50% flat share to "time").
+// Samples have depth 2 to satisfy the internal min-stack-depth=2 floor that
+// cannot be disabled via the flag (0 is replaced with 2.0 internally).
+func makeTimePackageSyntheticProfile(t *testing.T) string {
+	t.Helper()
+	timeNow := &profile.Function{ID: 1, Name: "time.Now", SystemName: "time.Now", Filename: "time/time.go", StartLine: 1}
+	mainFn := &profile.Function{ID: 2, Name: "main.main", SystemName: "main.main", Filename: "main.go", StartLine: 1}
+	callerFn := &profile.Function{ID: 3, Name: "main.run", SystemName: "main.run", Filename: "main.go", StartLine: 10}
+	locTime := &profile.Location{ID: 1, Line: []profile.Line{{Function: timeNow, Line: 1}}}
+	locMain := &profile.Location{ID: 2, Line: []profile.Line{{Function: mainFn, Line: 5}}}
+	locCaller := &profile.Location{ID: 3, Line: []profile.Line{{Function: callerFn, Line: 15}}}
+	p := &profile.Profile{
+		SampleType: []*profile.ValueType{{Type: "cpu", Unit: "nanoseconds"}},
+		Function:   []*profile.Function{timeNow, mainFn, callerFn},
+		Location:   []*profile.Location{locTime, locMain, locCaller},
+		Sample: []*profile.Sample{
+			// time.Now called from main.run — depth 2, leaf = time package
+			{Location: []*profile.Location{locTime, locCaller}, Value: []int64{50_000_000}},
+			// main.main called from main.run — depth 2, leaf = main package
+			{Location: []*profile.Location{locMain, locCaller}, Value: []int64{50_000_000}},
+		},
+	}
+	f, err := os.CreateTemp(t.TempDir(), "synthetic-time-*.pprof")
+	require.NoError(t, err)
+	require.NoError(t, p.Write(f))
+	require.NoError(t, f.Close())
+	return f.Name()
+}
+
 // TestValidate_WeightedMinPackageShare tests with package share requirement.
 func TestValidate_WeightedMinPackageShare(t *testing.T) {
-	p := generateProfile(t)
+	p := makeTimePackageSyntheticProfile(t)
 	_, _, err := executeCmd(t,
 		"validate",
 		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
 		"--min-package-share=time:0.01",
 		p,
 	)
-	// This should pass because a real profile has time code
 	assert.NoError(t, err)
 }
 
