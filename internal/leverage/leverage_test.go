@@ -973,7 +973,7 @@ func TestCheckFile_WithDir_DefaultPGONotUsedByBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read profile: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(moduleDir, "default.pgo"), defaultPGO, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(moduleDir, "default.pgo"), defaultPGO, 0o644); err != nil { //nolint:gosec
 		t.Fatalf("write default.pgo: %v", err)
 	}
 
