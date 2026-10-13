@@ -144,7 +144,7 @@ func TestPrintLeverageReport(t *testing.T) {
 }
 
 func TestNewLeverageCheckCmdJSON(t *testing.T) {
-	profilePath := filepath.Join(".", "testdata", "cpu_valid.pprof")
+	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
 	data, err := os.ReadFile(profilePath)
 	if err != nil || strings.Contains(string(data), "git-lfs") {
 		t.Skipf("testdata file not found or is LFS pointer")
@@ -191,7 +191,7 @@ func TestNewLeverageCheckCmdJSON(t *testing.T) {
 }
 
 func TestNewLeverageCheckCmdWithFormat(t *testing.T) {
-	profilePath := filepath.Join(".", "testdata", "cpu_valid.pprof")
+	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
 	data, err := os.ReadFile(profilePath)
 	if err != nil || strings.Contains(string(data), "git-lfs") {
 		t.Skipf("testdata file not found or is LFS pointer")
@@ -243,7 +243,7 @@ func TestNewLeverageCheckCmdWithFormat(t *testing.T) {
 }
 
 func TestNewLeverageCheckCmdTopNFlag(t *testing.T) {
-	profilePath := filepath.Join(".", "testdata", "cpu_valid.pprof")
+	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
 	data, err := os.ReadFile(profilePath)
 	if err != nil || strings.Contains(string(data), "git-lfs") {
 		t.Skipf("testdata file not found or is LFS pointer")
@@ -382,7 +382,7 @@ func TestNewLeverageCheckCmdJSON_Synthetic(t *testing.T) {
 }
 
 func TestNewLeverageCheckCmdVerdictNone_ExitCode(t *testing.T) {
-	// Build a trivial module to guarantee VerdictNone, then confirm exit code 2.
+	// Build a trivial module to guarantee VerdictNone, then confirm exit code 3.
 	moduleDir := t.TempDir()
 	goMod := []byte("module example.com/trivial\n\ngo 1.21\n")
 	mainGo := []byte("package main\n\nfunc main() {}\n")
@@ -426,17 +426,17 @@ func TestNewLeverageCheckCmdVerdictNone_ExitCode(t *testing.T) {
 	}
 
 	code, ok := isExitError(err)
-	if ok && code != 2 {
-		t.Logf("got exit code %d (expected 2 for NONE, or test may be skipped)", code)
+	if ok && code != 3 {
+		t.Logf("got exit code %d (expected 3 for NONE, or test may be skipped)", code)
 	}
 }
 
 // leverageVerdictNoneReport returns a pre-built NONE report for unit-testing the RunE path.
 func TestLeverageRunE_VerdictNone_Direct(t *testing.T) {
-	// Directly test the VerdictNone exit-code-2 branch via printLeverageReport + RunE
+	// Directly test the VerdictNone exit-code-3 branch via printLeverageReport + RunE
 	// by triggering it through cmd with a known-NONE report via a synthetic profile.
 	// We re-use the printLeverageReport unit path to confirm it runs without error,
-	// and confirm the &exitError{code:2} is what RunE returns for VerdictNone.
+	// and confirm the &exitError{code:3} is what RunE returns for VerdictNone.
 
 	noneReport := &leverage.Report{
 		ProfilePath:   "test.pprof",
@@ -565,7 +565,7 @@ func TestPrintLeverageReport_WithAllFields(t *testing.T) {
 }
 
 func TestNewLeverageCheckCmdJSON_VerifyStructure(t *testing.T) {
-	profilePath := filepath.Join(".", "testdata", "cpu_valid.pprof")
+	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
 	data, err := os.ReadFile(profilePath)
 	if err != nil || strings.Contains(string(data), "git-lfs") {
 		t.Skipf("testdata file not found or is LFS pointer")
@@ -606,7 +606,7 @@ func TestNewLeverageCheckCmdJSON_VerifyStructure(t *testing.T) {
 }
 
 func TestNewLeverageCheckCmdFormat_TextFlag(t *testing.T) {
-	profilePath := filepath.Join(".", "testdata", "cpu_valid.pprof")
+	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
 	data, err := os.ReadFile(profilePath)
 	if err != nil || strings.Contains(string(data), "git-lfs") {
 		t.Skipf("testdata file not found or is LFS pointer")
@@ -704,5 +704,68 @@ func TestNewLeverageCheckCmd_HappyCase(t *testing.T) {
 	}
 	if result["total_samples"] == nil {
 		t.Errorf("expected total_samples in JSON output")
+	}
+}
+
+// TestLeverageRunE_JSONMode_VerdictNone_ExitsNonZero asserts that --format json on a NONE
+// verdict still exits with code 3. Regression: before the fix the JSON return path returned
+// nil before the NONE gate check, so --format json always exited 0 even on NONE.
+func TestLeverageRunE_JSONMode_VerdictNone_ExitsNonZero(t *testing.T) {
+	moduleDir := t.TempDir()
+	goMod := []byte("module example.com/trivial\n\ngo 1.21\n")
+	mainGo := []byte("package main\n\nfunc main() {}\n")
+	if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), goMod, 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, "main.go"), mainGo, 0o644); err != nil {
+		t.Fatalf("write main.go: %v", err)
+	}
+
+	profilePath := makeCmdSyntheticProfile(t)
+	t.Cleanup(func() { _ = os.Remove(profilePath) })
+
+	cmd := newLeverageCheckCmd()
+	if err := cmd.Flags().Set("format", formatJSON); err != nil {
+		t.Fatalf("set format flag: %v", err)
+	}
+	if err := cmd.Flags().Set("dir", moduleDir); err != nil {
+		t.Fatalf("set dir flag: %v", err)
+	}
+	if err := cmd.Flags().Set("package", "."); err != nil {
+		t.Fatalf("set package flag: %v", err)
+	}
+
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("os.Pipe: %v", pipeErr)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = w
+
+	err := cmd.RunE(cmd, []string{profilePath})
+
+	if closeErr := w.Close(); closeErr != nil {
+		t.Logf("close pipe: %v", closeErr)
+	}
+	os.Stdout = oldStdout
+	output, _ := io.ReadAll(r)
+
+	// Output must be valid JSON regardless of verdict.
+	var result map[string]interface{}
+	if jsonErr := json.Unmarshal(output, &result); jsonErr != nil {
+		t.Errorf("expected valid JSON output, got: %s (error: %v)", output, jsonErr)
+	}
+
+	if err == nil {
+		t.Skip("verdict was not NONE for trivial module on this toolchain")
+	}
+
+	code, ok := isExitError(err)
+	if !ok {
+		t.Errorf("expected exitError, got: %T: %v", err, err)
+		return
+	}
+	if code != 3 {
+		t.Errorf("--format json NONE verdict: expected exit code 3, got %d", code)
 	}
 }

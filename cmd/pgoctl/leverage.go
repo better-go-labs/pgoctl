@@ -44,10 +44,10 @@ Requires a buildable Go module at --dir. Without --dir the verdict is INCOMPLETE
 Verdict taxonomy:
   HIGH        ≥5 devirt decisions or ≥30 extra inlines — run full benchmark
   LOW         1–4 devirt or 5–29 extra inlines — benchmark; gains likely modest
-  NONE        0 decisions — no codegen lever; skip benchmark (exit 2)
+  NONE        0 decisions — no codegen lever; skip benchmark (exit 3)
   INCOMPLETE  no --dir provided — collect build analysis first
 
-Exit codes: 0 = HIGH/LOW/INCOMPLETE, 2 = NONE (CI gate), 1 = error`,
+Exit codes: 0 = HIGH/LOW/INCOMPLETE, 3 = NONE (CI gate), 2 = usage/parse error, 1 = error`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			opts := leverage.Options{
@@ -65,13 +65,16 @@ Exit codes: 0 = HIGH/LOW/INCOMPLETE, 2 = NONE (CI gate), 1 = error`,
 			if format == formatJSON {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
-				return enc.Encode(rpt)
+				if err := enc.Encode(rpt); err != nil {
+					return &exitError{1, err}
+				}
+			} else {
+				printLeverageReport(rpt)
 			}
 
-			printLeverageReport(rpt)
-
+			// NONE exits 3 regardless of format so CI gates work with --format json.
 			if rpt.Verdict == leverage.VerdictNone {
-				return &exitError{code: 2}
+				return &exitError{code: 3}
 			}
 			return nil
 		},
@@ -92,6 +95,9 @@ func printLeverageReport(rpt *leverage.Report) {
 	if rpt.BuildAnalysis != nil {
 		_, _ = fmt.Fprintf(w, "devirt_decisions\t%d\n", rpt.BuildAnalysis.DevirtDecisions)
 		_, _ = fmt.Fprintf(w, "pgo_extra_inlines\t%d\n", rpt.BuildAnalysis.PGOExtraInlines)
+		if rpt.BuildAnalysis.PGOExtraInlinesDeps > 0 {
+			_, _ = fmt.Fprintf(w, "pgo_extra_inlines_deps\t%d\n", rpt.BuildAnalysis.PGOExtraInlinesDeps)
+		}
 	}
 
 	_ = w.Flush()

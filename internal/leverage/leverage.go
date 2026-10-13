@@ -38,11 +38,12 @@ type FunctionEntry struct {
 
 // BuildAnalysis holds the raw counts from comparing a PGO build against a baseline build.
 type BuildAnalysis struct {
-	DevirtDecisions int `json:"devirt_decisions"`
-	PGOExtraInlines int `json:"pgo_extra_inlines"`
-	BaselineInlines int `json:"baseline_inlines"`
-	PGOInlines      int `json:"pgo_inlines"`
-	PGODevirts      int `json:"pgo_devirts"`
+	DevirtDecisions     int `json:"devirt_decisions"`
+	PGOExtraInlines     int `json:"pgo_extra_inlines"`      // module-scoped set diff (verdict-driving)
+	PGOExtraInlinesDeps int `json:"pgo_extra_inlines_deps"` // std/deps set diff (informational)
+	BaselineInlines     int `json:"baseline_inlines"`
+	PGOInlines          int `json:"pgo_inlines"`
+	PGODevirts          int `json:"pgo_devirts"`
 }
 
 // Report is the output of CheckFile: a structured summary of PGO leverage for a build target.
@@ -221,17 +222,21 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 	pgoInlines := countLines(pgoOutput, "inlining call")
 	baselineInlines := countLines(baselineOutput, "inlining call")
 
-	pgoExtraInlines := pgoInlines - baselineInlines
-	if pgoExtraInlines < 0 {
-		pgoExtraInlines = 0
-	}
+	// Set diff: new inline sites in PGO build, partitioned by origin.
+	// Lines starting with "./" are the user's module; absolute paths are std/deps.
+	// Using a set diff rather than a net count prevents std/runtime inlines from
+	// inflating the verdict (e.g. 594 runtime inlines masking 0 module inlines).
+	pgoSites := collectInlineSites(pgoOutput)
+	baselineSites := collectInlineSites(baselineOutput)
+	moduleExtra, depsExtra := extraInlinesByOrigin(pgoSites, baselineSites)
 
 	return &BuildAnalysis{
-		DevirtDecisions: pgoDevirts,
-		PGOExtraInlines: pgoExtraInlines,
-		BaselineInlines: baselineInlines,
-		PGOInlines:      pgoInlines,
-		PGODevirts:      pgoDevirts,
+		DevirtDecisions:     pgoDevirts,
+		PGOExtraInlines:     moduleExtra,
+		PGOExtraInlinesDeps: depsExtra,
+		BaselineInlines:     baselineInlines,
+		PGOInlines:          pgoInlines,
+		PGODevirts:          pgoDevirts,
 	}, nil
 }
 
@@ -239,6 +244,11 @@ func runBuild(dir, pkgPattern, profilePath string, withPGO bool) (string, error)
 	args := []string{"build", "-gcflags=all=-m=2", "-o", "/dev/null"}
 	if withPGO {
 		args = append(args, fmt.Sprintf("-pgo=%s", profilePath))
+	} else {
+		// Explicitly disable PGO so the baseline ignores any default.pgo present in
+		// the module directory; without this, -pgo=auto silently picks it up and
+		// produces a PGO-optimised "baseline", making the delta appear zero.
+		args = append(args, "-pgo=off")
 	}
 	args = append(args, pkgPattern)
 
@@ -260,6 +270,34 @@ func countLines(output, pattern string) int {
 		}
 	}
 	return count
+}
+
+// collectInlineSites returns a set of unique "inlining call" lines from compiler output.
+func collectInlineSites(output string) map[string]bool {
+	sites := make(map[string]bool)
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.Contains(strings.ToLower(line), "inlining call") {
+			sites[line] = true
+		}
+	}
+	return sites
+}
+
+// extraInlinesByOrigin counts PGO-only inline sites (present in pgo but not baseline),
+// split by origin: module (relative "./" paths) vs std/deps (absolute paths).
+func extraInlinesByOrigin(pgo, baseline map[string]bool) (module, deps int) {
+	for line := range pgo {
+		if !baseline[line] {
+			if strings.HasPrefix(line, "./") {
+				module++
+			} else {
+				deps++
+			}
+		}
+	}
+	return
 }
 
 func detectHotInterfaces(entries []FunctionEntry) []string {

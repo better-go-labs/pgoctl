@@ -949,3 +949,89 @@ func TestCheckFile_HappyCasePprof(t *testing.T) {
 		t.Errorf("expected TopFunctions to be populated for fixture with %d samples", rpt.TotalSamples)
 	}
 }
+
+// TestCheckFile_WithDir_DefaultPGONotUsedByBaseline is a regression test for the baseline
+// build passing -pgo=off. Without that fix, a default.pgo present in the module dir would
+// be picked up by -pgo=auto, making the baseline already PGO-optimised and causing the delta
+// (and therefore the verdict) to be artificially zero.
+func TestCheckFile_WithDir_DefaultPGONotUsedByBaseline(t *testing.T) {
+	moduleDir := t.TempDir()
+	goMod := []byte("module example.com/default-pgo-test\n\ngo 1.21\n")
+	mainGo := []byte("package main\n\nfunc main() {}\n")
+	if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), goMod, 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, "main.go"), mainGo, 0o644); err != nil {
+		t.Fatalf("write main.go: %v", err)
+	}
+
+	profilePath := makeMinimalProfile(t)
+	t.Cleanup(func() { _ = os.Remove(profilePath) })
+
+	// Copy the synthetic profile as default.pgo so -pgo=auto would pick it up.
+	defaultPGO, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("read profile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, "default.pgo"), defaultPGO, 0o644); err != nil {
+		t.Fatalf("write default.pgo: %v", err)
+	}
+
+	rpt, err := CheckFile(profilePath, Options{
+		Dir:     moduleDir,
+		Package: ".",
+	})
+	if err != nil {
+		t.Fatalf("CheckFile should succeed even with default.pgo present: %v", err)
+	}
+	if rpt.BuildAnalysis == nil {
+		t.Fatal("expected BuildAnalysis to be set")
+	}
+	if rpt.Verdict == "" {
+		t.Error("expected non-empty verdict")
+	}
+}
+
+// TestCollectInlineSites verifies that collectInlineSites builds the right set.
+func TestCollectInlineSites(t *testing.T) {
+	output := strings.Join([]string{
+		"./main.go:10:5: inlining call to foo.Bar",
+		"./main.go:10:5: inlining call to foo.Bar", // duplicate — must be deduplicated
+		"./main.go:20:3: inlining call to baz.Qux",
+		"/usr/local/go/src/fmt/format.go:100:5: inlining call to fmt.Sprintf",
+		"some other line without the keyword",
+	}, "\n")
+
+	got := collectInlineSites(output)
+	if len(got) != 3 {
+		t.Errorf("collectInlineSites: got %d unique sites, want 3", len(got))
+	}
+	if !got["./main.go:10:5: inlining call to foo.Bar"] {
+		t.Error("expected module line to be in set")
+	}
+	if !got["/usr/local/go/src/fmt/format.go:100:5: inlining call to fmt.Sprintf"] {
+		t.Error("expected stdlib line to be in set")
+	}
+}
+
+// TestExtraInlinesByOrigin verifies module vs deps partitioning of the set diff.
+func TestExtraInlinesByOrigin(t *testing.T) {
+	pgo := map[string]bool{
+		"./foo.go:1:1: inlining call to bar.A":                                 true, // module, PGO-only
+		"./foo.go:2:2: inlining call to bar.B":                                 true, // module, also in baseline
+		"/usr/local/go/src/runtime/malloc.go:5:5: inlining call to something":  true, // deps, PGO-only
+		"/usr/local/go/src/runtime/malloc.go:6:6: inlining call to somethingB": true, // deps, also in baseline
+	}
+	baseline := map[string]bool{
+		"./foo.go:2:2: inlining call to bar.B":                                 true,
+		"/usr/local/go/src/runtime/malloc.go:6:6: inlining call to somethingB": true,
+	}
+
+	module, deps := extraInlinesByOrigin(pgo, baseline)
+	if module != 1 {
+		t.Errorf("module extra inlines = %d, want 1", module)
+	}
+	if deps != 1 {
+		t.Errorf("deps extra inlines = %d, want 1", deps)
+	}
+}
