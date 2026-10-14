@@ -3,6 +3,7 @@ package validate
 
 import (
 	"fmt"
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 	"math"
 	"os"
 	"strconv"
@@ -52,28 +53,6 @@ func ParsePackageShareGates(values []string) ([]PackageShareGate, error) {
 		}
 	}
 	return gates, nil
-}
-
-// packageFromFunction extracts the package path from a pprof function name.
-// Examples:
-//
-//	github.com/prometheus/prometheus/tsdb.(*Head).Append   -> .../tsdb
-//	github.com/prometheus/prometheus/tsdb/wlog.(*Watcher).run -> .../tsdb/wlog
-//	github.com/prometheus/prometheus/promql.(*Engine).exec  -> .../promql
-//	runtime.main                                          -> runtime
-func packageFromFunction(name string) string {
-	slash := strings.LastIndex(name, "/")
-	start := slash + 1
-	rest := name[start:]
-	cut := len(rest)
-	if i := strings.IndexAny(rest, "(."); i >= 0 {
-		cut = i
-	}
-	pkg := name[:start+cut]
-	if pkg == "" {
-		return name
-	}
-	return pkg
 }
 
 // cpuSampleIndex returns the index of the CPU sample value (cpu/nanoseconds,
@@ -133,7 +112,7 @@ func computePackageShares(p *profile.Profile) (map[string]float64, error) {
 		return shares, nil
 	}
 	for fn, val := range funcTotal {
-		pkg := packageFromFunction(fn)
+		pkg := pprofutil.PackageOf(fn)
 		shares[pkg] += 100.0 * float64(val) / float64(total)
 	}
 	// Round to 2 decimals for stable output.

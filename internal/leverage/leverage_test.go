@@ -130,39 +130,6 @@ func TestDetectHotInterfaces(t *testing.T) {
 	}
 }
 
-func TestPackageFromFunction(t *testing.T) {
-	tests := []struct {
-		name string
-		fn   string
-		want string
-	}{
-		{
-			name: "simple function",
-			fn:   "github.com/foo/bar.Baz",
-			want: "github.com/foo/bar",
-		},
-		{
-			name: "method",
-			fn:   "github.com/foo/bar.(*Type).Method",
-			want: "github.com/foo/bar",
-		},
-		{
-			name: "interface method",
-			fn:   "github.com/foo/bar.(*Type).(Reader).Read",
-			want: "github.com/foo/bar",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := packageFromFunction(tt.fn)
-			if got != tt.want {
-				t.Errorf("packageFromFunction(%q) = %q, want %q", tt.fn, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestCheckFileDefaultOptions(t *testing.T) {
 	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
 	data, err := os.ReadFile(profilePath)
@@ -252,49 +219,6 @@ func TestCPUSampleIndex(t *testing.T) {
 			}
 			if ok && idx != tt.wantIdx {
 				t.Errorf("cpuSampleIndex() idx = %d, want %d", idx, tt.wantIdx)
-			}
-		})
-	}
-}
-
-func TestPackageFromFunctionEdgeCases(t *testing.T) {
-	tests := []struct {
-		name string
-		fn   string
-		want string
-	}{
-		{
-			name: "empty string",
-			fn:   "",
-			want: "",
-		},
-		{
-			name: "no slash",
-			fn:   "Foo",
-			want: "Foo",
-		},
-		{
-			name: "local package",
-			fn:   "main.Foo",
-			want: "main",
-		},
-		{
-			name: "nested with method",
-			fn:   "github.com/foo/bar/baz.(*Type).Method",
-			want: "github.com/foo/bar/baz",
-		},
-		{
-			name: "nested with paren in middle",
-			fn:   "github.com/foo/(bar)",
-			want: "github.com/foo/",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := packageFromFunction(tt.fn)
-			if got != tt.want {
-				t.Errorf("packageFromFunction(%q) = %q, want %q", tt.fn, got, tt.want)
 			}
 		})
 	}
