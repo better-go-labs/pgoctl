@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
 
       - uses: actions/setup-go@v7
         with:
@@ -129,6 +131,8 @@ jobs:
       pull-requests: write  # required for PR comments
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
 
       - uses: actions/setup-go@v7
         with:
@@ -204,6 +208,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
 
       - uses: actions/setup-go@v7
         with:
