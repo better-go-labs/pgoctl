@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.1.3] - 2026-09-02
+
+### Fixed
+
+- `action`: profile summary splits `quality score` and `valid` into separate table rows (#49)
+
+
 ## [0.1.2] - 2026-09-02
 
 ### Fixed
@@ -74,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `profile-collect.yml` — end-to-end profile-collection workflow: provisions a kind cluster with Prometheus, drives load via the built-in load generator, captures a CPU profile, validates coverage gates, and merges into `default.pgo`
 
 
-[Unreleased]: https://github.com/better-go-labs/pgoctl/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/better-go-labs/pgoctl/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/better-go-labs/pgoctl/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/better-go-labs/pgoctl/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/better-go-labs/pgoctl/compare/v0.1.0-alpha...v0.1.0
 [0.1.0-alpha]: https://github.com/better-go-labs/pgoctl/releases/tag/v0.1.0-alpha
