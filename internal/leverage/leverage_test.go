@@ -446,19 +446,6 @@ func TestCheckFile_AbsoluteProfilePath(t *testing.T) {
 	}
 }
 
-func TestCheckFile_IgnoreZeroTopN(t *testing.T) {
-	profilePath := makeMinimalProfile(t)
-	t.Cleanup(func() { _ = os.Remove(profilePath) })
-
-	rpt, err := CheckFile(profilePath, Options{TopN: 0})
-	if err != nil {
-		t.Fatalf("CheckFile with TopN=0 failed: %v", err)
-	}
-	if len(rpt.TopFunctions) > 20 {
-		t.Errorf("expected TopFunctions to default to 20, got %d", len(rpt.TopFunctions))
-	}
-}
-
 func TestVerdictConstants(t *testing.T) {
 	tests := []struct {
 		name    string

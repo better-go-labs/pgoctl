@@ -3,10 +3,11 @@ package explain
 
 import (
 	"fmt"
-	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 	"math"
 	"os"
 	"sort"
+
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 
 	internerrors "github.com/Better-Go-Labs/pgoctl/internal/errors"
 	"github.com/google/pprof/profile"

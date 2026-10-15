@@ -4,13 +4,14 @@ package leverage
 import (
 	"bufio"
 	"fmt"
-	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 
 	"github.com/google/pprof/profile"
 )

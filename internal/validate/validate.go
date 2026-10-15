@@ -3,11 +3,12 @@ package validate
 
 import (
 	"fmt"
-	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 	"math"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 
 	"github.com/Better-Go-Labs/pgoctl/internal/errors"
 	profiletypes "github.com/Better-Go-Labs/pgoctl/internal/profile"

@@ -3,10 +3,11 @@ package compare
 
 import (
 	"fmt"
-	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 	"math"
 	"os"
 	"sort"
+
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 
 	"github.com/google/pprof/profile"
 )
