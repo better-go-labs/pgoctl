@@ -56,7 +56,14 @@ jobs:
       - name: "Ctrl | Check leverage (--dir)"
         working-directory: scripts/pgo-leverage/positive-control
         run: |
+          set +e
           /tmp/pgoctl leverage-check --dir . --format json /tmp/ctrl.pprof > /tmp/ctrl-leverage.json
+          LEV_EXIT=$?
+          set -e
+          # exit 3 = NONE verdict (valid JSON); exit 1 or >3 = real error
+          if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
+            echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+          fi
           cat /tmp/ctrl-leverage.json
 
       - name: "Ctrl | Report"
@@ -107,10 +114,16 @@ jobs:
       - name: "Prometheus | Check leverage"
         working-directory: _prometheus
         run: |
+          set +e
           if [ "$HAS_PROFILE" = "true" ]; then
             /tmp/pgoctl leverage-check --dir . --format json "$PGO_FILE" > /tmp/prom-leverage.json
           else
             /tmp/pgoctl leverage-check --format json ./... > /tmp/prom-leverage.json || echo "{\"verdict\": \"INCOMPLETE\"}" > /tmp/prom-leverage.json
+          fi
+          LEV_EXIT=$?
+          set -e
+          if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
+            echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
           fi
           cat /tmp/prom-leverage.json
 
@@ -207,10 +220,17 @@ jobs:
       - name: "nats-server | Check leverage"
         working-directory: _nats-server
         run: |
+          set +e
           if [ "$HAS_PROFILE" = "true" ]; then
             /tmp/pgoctl leverage-check --dir . --format json "$NATS_PGO_FILE" > /tmp/nats-leverage.json
           else
             /tmp/pgoctl leverage-check --format json . > /tmp/nats-leverage.json || echo "{\"verdict\": \"INCOMPLETE\"}" > /tmp/nats-leverage.json
+          fi
+          LEV_EXIT=$?
+          set -e
+          # exit 3 = NONE verdict (expected for nats-server, valid JSON); exit 1 or >3 = real error
+          if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
+            echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
           fi
           cat /tmp/nats-leverage.json
 

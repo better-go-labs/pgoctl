@@ -247,7 +247,8 @@ runs:
         LEVERAGE_STATUS=$?
         cat /tmp/leverage.json
 
-        if [ $LEVERAGE_STATUS -ne 0 ] || [ ! -f /tmp/leverage.json ]; then
+        # exit 3 = NONE verdict (valid JSON output); only fallback on real error (exit 1 or >3)
+        if { [ $LEVERAGE_STATUS -ne 0 ] && [ $LEVERAGE_STATUS -ne 3 ]; } || [ ! -f /tmp/leverage.json ]; then
           # Fallback: run without build analysis
           echo "{\"verdict\": \"INCOMPLETE\", \"verdict_reason\": \"leverage-check failed; no build analysis available\"}" > /tmp/leverage.json
         fi
