@@ -769,3 +769,14 @@ func TestLeverageRunE_JSONMode_VerdictNone_ExitsNonZero(t *testing.T) {
 		t.Errorf("--format json NONE verdict: expected exit code 3, got %d", code)
 	}
 }
+
+func TestNewLeverageCheckCmd_NegativeTop(t *testing.T) {
+	cmd := newLeverageCheckCmd()
+	if err := cmd.Flags().Set("top", "-1"); err != nil {
+		t.Fatalf("set top: %v", err)
+	}
+	err := cmd.RunE(cmd, []string{filepath.Join("..", "..", "testdata", "cpu_happy.pprof")})
+	if err == nil || !strings.Contains(err.Error(), "--top must be >= 0") {
+		t.Fatalf("want --top validation error, got %v", err)
+	}
+}

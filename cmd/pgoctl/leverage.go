@@ -50,6 +50,11 @@ Verdict taxonomy:
 Exit codes: 0 = HIGH/LOW/INCOMPLETE, 3 = NONE (CI gate), 2 = usage/parse error, 1 = error`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if topN < 0 {
+				err := fmt.Errorf("--top must be >= 0, got %d", topN)
+				fmt.Fprintf(os.Stderr, "error: %s\n", err)
+				return &exitError{2, err}
+			}
 			opts := leverage.Options{
 				TopN:    topN,
 				Dir:     dir,
@@ -79,7 +84,7 @@ Exit codes: 0 = HIGH/LOW/INCOMPLETE, 3 = NONE (CI gate), 2 = usage/parse error, 
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&topN, "top", 20, "number of top functions to show")
+	cmd.Flags().IntVar(&topN, "top", 20, "number of top functions to show (0 = all)")
 	cmd.Flags().StringVar(&dir, "dir", "", "directory of the Go module to build-analyze (optional)")
 	cmd.Flags().StringVar(&pkg, "package", "./...", "package pattern to build")
 	cmd.Flags().StringVar(&format, "format", formatText, "output format: text|json")

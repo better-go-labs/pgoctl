@@ -1,6 +1,7 @@
 package leverage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -144,23 +145,6 @@ func TestCheckFileDefaultOptions(t *testing.T) {
 
 	if rpt.Verdict != VerdictIncomplete {
 		t.Errorf("expected VerdictIncomplete, got %s", rpt.Verdict)
-	}
-}
-
-func TestCheckFileDefaultTopN(t *testing.T) {
-	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
-	data, err := os.ReadFile(profilePath)
-	if err != nil || strings.Contains(string(data), "git-lfs") {
-		t.Skipf("testdata file not found or is LFS pointer")
-	}
-
-	rpt, err := CheckFile(profilePath, Options{TopN: 0})
-	if err != nil {
-		t.Fatalf("CheckFile with TopN=0 failed: %v", err)
-	}
-
-	if len(rpt.TopFunctions) > 20 {
-		t.Errorf("expected TopFunctions to be clamped at 20, got %d", len(rpt.TopFunctions))
 	}
 }
 
@@ -957,5 +941,55 @@ func TestExtraInlinesByOrigin(t *testing.T) {
 	}
 	if deps != 1 {
 		t.Errorf("deps extra inlines = %d, want 1", deps)
+	}
+}
+
+// makeManyFunctionProfile writes a pprof with n hot functions, one sample each.
+func makeManyFunctionProfile(t *testing.T, n int) string {
+	t.Helper()
+	p := &profile.Profile{
+		SampleType: []*profile.ValueType{{Type: "cpu", Unit: "nanoseconds"}},
+	}
+	for i := 0; i < n; i++ {
+		name := fmt.Sprintf("main.fn%d", i)
+		fn := &profile.Function{ID: uint64(i + 1), Name: name, SystemName: name, Filename: "main.go", StartLine: 1}
+		loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn, Line: 1}}}
+		p.Function = append(p.Function, fn)
+		p.Location = append(p.Location, loc)
+		p.Sample = append(p.Sample, &profile.Sample{Location: []*profile.Location{loc}, Value: []int64{1_000_000}})
+	}
+	f, err := os.CreateTemp(t.TempDir(), "many-*.pprof")
+	if err != nil {
+		t.Fatalf("create temp pprof: %v", err)
+	}
+	if werr := p.Write(f); werr != nil {
+		_ = f.Close()
+		t.Fatalf("write pprof: %v", werr)
+	}
+	_ = f.Close()
+	return f.Name()
+}
+
+func TestCheckFile_TopN(t *testing.T) {
+	path := makeManyFunctionProfile(t, 25)
+	tests := []struct {
+		name string
+		topN int
+		want int
+	}{
+		{"zero means all", 0, 25},
+		{"larger than available returns all", 100, 25},
+		{"positive limits", 5, 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rpt, err := CheckFile(path, Options{TopN: tt.topN})
+			if err != nil {
+				t.Fatalf("CheckFile: %v", err)
+			}
+			if got := len(rpt.TopFunctions); got != tt.want {
+				t.Errorf("TopN=%d returned %d functions, want %d", tt.topN, got, tt.want)
+			}
+		})
 	}
 }

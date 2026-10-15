@@ -60,6 +60,7 @@ type Report struct {
 
 // Options controls CheckFile behaviour.
 type Options struct {
+	// TopN limits TopFunctions; 0 means all.
 	TopN    int
 	Dir     string
 	Package string
@@ -77,9 +78,6 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		return nil, fmt.Errorf("parse profile: %w", err)
 	}
 
-	if opts.TopN <= 0 {
-		opts.TopN = 20
-	}
 	if opts.Package == "" {
 		opts.Package = "./..."
 	}
