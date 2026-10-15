@@ -223,7 +223,8 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 		return report, nil
 	}
 
-	sampleCount := int64(len(p.Sample))
+	sampleCount := pprofutil.SampleCount(p)
+	rowCount := int64(len(p.Sample))
 
 	stackSet := make(map[string]struct{})
 	var totalDepth int64
@@ -242,8 +243,8 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 	uniqueStacks := int64(len(stackSet))
 
 	var avgStackDepth float64
-	if sampleCount > 0 {
-		avgStackDepth = float64(totalDepth) / float64(sampleCount)
+	if rowCount > 0 {
+		avgStackDepth = float64(totalDepth) / float64(rowCount)
 	}
 
 	durationSec := p.DurationNanos / 1e9

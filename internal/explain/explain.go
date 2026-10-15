@@ -134,7 +134,7 @@ func analyze(path string, p *profile.Profile, topN int) *Report {
 
 	return &Report{
 		ProfilePath:   path,
-		TotalSamples:  int64(len(p.Sample)),
+		TotalSamples:  pprofutil.SampleCount(p),
 		DurationSec:   math.Round(float64(p.DurationNanos)/1e9*10) / 10,
 		TopFunctions:  topEntries,
 		PackageGroups: groups,
@@ -146,7 +146,7 @@ func analyze(path string, p *profile.Profile, topN int) *Report {
 // pgoVerdict gives a simple plain-English readiness verdict based on the
 // same signals used by validate: sample count and function diversity.
 func pgoVerdict(p *profile.Profile, _ int64, uniqueFunctions int) (Verdict, string) {
-	samples := int64(len(p.Sample))
+	samples := pprofutil.SampleCount(p)
 
 	const minSamples = 10000
 	const targetSamples = 50000

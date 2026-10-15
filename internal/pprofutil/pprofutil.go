@@ -4,6 +4,8 @@ package pprofutil
 import (
 	"regexp"
 	"strings"
+
+	"github.com/google/pprof/profile"
 )
 
 // versionSuffix matches a gopkg.in style ".v3" that belongs to the import path.
@@ -25,4 +27,26 @@ func PackageOf(fn string) string {
 		return pkg
 	}
 	return fn
+}
+
+// SampleCount sums the samples/count values. len(p.Sample) is the number of
+// unique stacks, not samples. Falls back to the row count without that type.
+func SampleCount(p *profile.Profile) int64 {
+	idx := -1
+	for i, st := range p.SampleType {
+		if st.Type == "samples" && st.Unit == "count" {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return int64(len(p.Sample))
+	}
+	var n int64
+	for _, s := range p.Sample {
+		if idx < len(s.Value) {
+			n += s.Value[idx]
+		}
+	}
+	return n
 }

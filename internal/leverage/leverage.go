@@ -161,7 +161,7 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 
 	return &Report{
 		ProfilePath:   profilePath,
-		TotalSamples:  int64(len(p.Sample)),
+		TotalSamples:  pprofutil.SampleCount(p),
 		TopFunctions:  topEntries,
 		HotInterfaces: hotInterfaces,
 		BuildAnalysis: buildAnalysis,
