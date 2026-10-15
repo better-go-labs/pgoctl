@@ -238,17 +238,20 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 	}, nil
 }
 
-func runBuild(dir, pkgPattern, profilePath string, withPGO bool) (string, error) {
-	args := []string{"build", "-gcflags=all=-m=2", "-o", "/dev/null"}
+// buildArgs builds the go build argv. The baseline uses -pgo=off so a
+// default.pgo in the module is not silently picked up.
+func buildArgs(pkgPattern, profilePath string, withPGO bool) []string {
+	args := []string{"build", "-gcflags=all=-m=2", "-o", os.DevNull}
 	if withPGO {
 		args = append(args, fmt.Sprintf("-pgo=%s", profilePath))
 	} else {
-		// Explicitly disable PGO so the baseline ignores any default.pgo present in
-		// the module directory; without this, -pgo=auto silently picks it up and
-		// produces a PGO-optimised "baseline", making the delta appear zero.
 		args = append(args, "-pgo=off")
 	}
-	args = append(args, pkgPattern)
+	return append(args, pkgPattern)
+}
+
+func runBuild(dir, pkgPattern, profilePath string, withPGO bool) (string, error) {
+	args := buildArgs(pkgPattern, profilePath, withPGO)
 
 	cmd := exec.Command("go", args...)
 	cmd.Dir = dir

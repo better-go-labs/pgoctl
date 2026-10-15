@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -959,5 +960,26 @@ func TestMatchingLines(t *testing.T) {
 	}
 	if got := matchingLines("no matches here", "pgo devirtualizing"); got != nil {
 		t.Errorf("matchingLines() on no match = %q, want nil", got)
+	}
+}
+
+func TestBuildArgs(t *testing.T) {
+	pgo := buildArgs("./cmd/app", "/tmp/p.pprof", true)
+	base := buildArgs("./cmd/app", "", false)
+
+	for name, args := range map[string][]string{"pgo": pgo, "base": base} {
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "-o "+os.DevNull) {
+			t.Errorf("%s args %q: want -o %s", name, joined, os.DevNull)
+		}
+		if args[len(args)-1] != "./cmd/app" {
+			t.Errorf("%s args %q: package pattern must be last", name, joined)
+		}
+	}
+	if !slices.Contains(pgo, "-pgo=/tmp/p.pprof") {
+		t.Errorf("pgo args %q: missing -pgo=/tmp/p.pprof", pgo)
+	}
+	if !slices.Contains(base, "-pgo=off") {
+		t.Errorf("baseline args %q: missing -pgo=off", base)
 	}
 }
