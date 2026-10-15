@@ -73,11 +73,9 @@ func TestPrintLeverageReport(t *testing.T) {
 					PGOExtraInlines: 3,
 					BaselineInlines: 10,
 					PGOInlines:      13,
+					DevirtSites:     []string{"foo.(*Bar).(Reader)"},
 				},
 				TopFunctions: []leverage.FunctionEntry{},
-				HotInterfaces: []string{
-					"foo.(*Bar).(Reader)",
-				},
 			},
 			shouldContain: []string{
 				"HIGH",
@@ -85,7 +83,7 @@ func TestPrintLeverageReport(t *testing.T) {
 				"5",
 				"pgo_extra_inlines",
 				"3",
-				"Detected interface method calls",
+				"PGO devirtualized call sites",
 				"foo.(*Bar).(Reader)",
 			},
 		},
@@ -485,7 +483,6 @@ func TestPrintLeverageReport_WithoutBuildAnalysis(t *testing.T) {
 		TopFunctions: []leverage.FunctionEntry{
 			{Function: "foo.Bar", Package: "foo", FlatPct: 25.5, CumPct: 35.0},
 		},
-		HotInterfaces: []string{},
 	}
 
 	r, w, pipeErr := os.Pipe()
@@ -523,12 +520,12 @@ func TestPrintLeverageReport_WithAllFields(t *testing.T) {
 			{Function: "pkg.hot1", Package: "pkg", FlatPct: 45.0, CumPct: 50.0},
 			{Function: "pkg.hot2", Package: "pkg", FlatPct: 30.0, CumPct: 40.0},
 		},
-		HotInterfaces: []string{"pkg.(*Type).(Reader)", "pkg.(*Type).(Writer)"},
 		BuildAnalysis: &leverage.BuildAnalysis{
 			DevirtDecisions: 10,
 			PGOExtraInlines: 50,
 			BaselineInlines: 100,
 			PGOInlines:      150,
+			DevirtSites:     []string{"pkg.(*Type).(Reader)", "pkg.(*Type).(Writer)"},
 		},
 	}
 
@@ -778,5 +775,31 @@ func TestNewLeverageCheckCmd_NegativeTop(t *testing.T) {
 	err := cmd.RunE(cmd, []string{filepath.Join("..", "..", "testdata", "cpu_happy.pprof")})
 	if err == nil || !strings.Contains(err.Error(), "--top must be >= 0") {
 		t.Fatalf("want --top validation error, got %v", err)
+	}
+}
+
+func TestPrintLeverageReport_NoDevirtSection(t *testing.T) {
+	rpt := &leverage.Report{
+		Verdict:       leverage.VerdictNone,
+		VerdictReason: "NONE",
+		BuildAnalysis: &leverage.BuildAnalysis{},
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	printLeverageReport(rpt)
+	_ = w.Close()
+	os.Stdout = old
+	out, _ := io.ReadAll(r)
+	if strings.Contains(string(out), "PGO devirtualized call sites") {
+		t.Errorf("devirt section printed with zero sites:\n%s", out)
+	}
+
+	b, _ := json.Marshal(rpt)
+	if strings.Contains(string(b), "devirt_sites") {
+		t.Errorf("devirt_sites present in JSON with zero sites: %s", b)
 	}
 }

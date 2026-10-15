@@ -121,11 +121,11 @@ func printLeverageReport(rpt *leverage.Report) {
 		_ = w2.Flush()
 	}
 
-	if len(rpt.HotInterfaces) > 0 {
+	if rpt.BuildAnalysis != nil && len(rpt.BuildAnalysis.DevirtSites) > 0 {
 		_, _ = fmt.Fprintln(os.Stdout)
-		_, _ = fmt.Fprintln(os.Stdout, "── Detected interface method calls in hot functions ──")
-		for _, iface := range rpt.HotInterfaces {
-			_, _ = fmt.Fprintf(os.Stdout, "%s\n", iface)
+		_, _ = fmt.Fprintln(os.Stdout, "── PGO devirtualized call sites ──")
+		for _, site := range rpt.BuildAnalysis.DevirtSites {
+			_, _ = fmt.Fprintln(os.Stdout, site)
 		}
 	}
 }

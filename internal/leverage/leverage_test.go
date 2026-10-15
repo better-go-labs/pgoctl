@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -95,42 +96,6 @@ func TestCountLines(t *testing.T) {
 	}
 }
 
-func TestDetectHotInterfaces(t *testing.T) {
-	tests := []struct {
-		name    string
-		entries []FunctionEntry
-		want    int
-	}{
-		{
-			name:    "no interfaces",
-			entries: []FunctionEntry{{Function: "foo.Bar"}},
-			want:    0,
-		},
-		{
-			name:    "one interface",
-			entries: []FunctionEntry{{Function: "foo.(*Bar).(Reader)"}},
-			want:    1,
-		},
-		{
-			name: "multiple interfaces",
-			entries: []FunctionEntry{
-				{Function: "foo.(*Bar).(Reader)"},
-				{Function: "baz.(*Qux).(Writer)"},
-			},
-			want: 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := detectHotInterfaces(tt.entries)
-			if len(got) != tt.want {
-				t.Errorf("detectHotInterfaces() = %d interfaces, want %d", len(got), tt.want)
-			}
-		})
-	}
-}
-
 func TestCheckFileDefaultOptions(t *testing.T) {
 	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
 	data, err := os.ReadFile(profilePath)
@@ -205,27 +170,6 @@ func TestCPUSampleIndex(t *testing.T) {
 				t.Errorf("cpuSampleIndex() idx = %d, want %d", idx, tt.wantIdx)
 			}
 		})
-	}
-}
-
-func TestDetectHotInterfacesWithDuplicates(t *testing.T) {
-	entries := []FunctionEntry{
-		{Function: "foo.(*Bar).(Reader)"},
-		{Function: "foo.(*Bar).(Reader)"},
-		{Function: "baz.(*Qux).(Writer)"},
-	}
-
-	got := detectHotInterfaces(entries)
-	if len(got) != 2 {
-		t.Errorf("detectHotInterfaces() = %d interfaces, want 2 (should dedup)", len(got))
-	}
-
-	seen := make(map[string]bool)
-	for _, iface := range got {
-		if seen[iface] {
-			t.Errorf("detectHotInterfaces() returned duplicate: %s", iface)
-		}
-		seen[iface] = true
 	}
 }
 
@@ -991,5 +935,29 @@ func TestCheckFile_TopN(t *testing.T) {
 				t.Errorf("TopN=%d returned %d functions, want %d", tt.topN, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMatchingLines(t *testing.T) {
+	out := strings.Join([]string{
+		"./a.go:10:5: inlining call to foo",
+		"./b.go:20:7: PGO devirtualizing interface call r.Read to *os.File.Read",
+		"../src/errors/wrap.go:50:55: devirtualizing .autotmp_4.Comparable to reflectlite.rtype",
+		"  ./c.go:30:2: PGO devirtualizing function call f to main.g  ",
+	}, "\n")
+
+	got := matchingLines(out, "pgo devirtualizing")
+	want := []string{
+		"./b.go:20:7: PGO devirtualizing interface call r.Read to *os.File.Read",
+		"./c.go:30:2: PGO devirtualizing function call f to main.g",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("matchingLines() = %q, want %q", got, want)
+	}
+	if n := countLines(out, "pgo devirtualizing"); n != 2 {
+		t.Errorf("countLines() = %d, want 2", n)
+	}
+	if got := matchingLines("no matches here", "pgo devirtualizing"); got != nil {
+		t.Errorf("matchingLines() on no match = %q, want nil", got)
 	}
 }
