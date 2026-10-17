@@ -1,8 +1,11 @@
 package leverage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -94,75 +97,6 @@ func TestCountLines(t *testing.T) {
 	}
 }
 
-func TestDetectHotInterfaces(t *testing.T) {
-	tests := []struct {
-		name    string
-		entries []FunctionEntry
-		want    int
-	}{
-		{
-			name:    "no interfaces",
-			entries: []FunctionEntry{{Function: "foo.Bar"}},
-			want:    0,
-		},
-		{
-			name:    "one interface",
-			entries: []FunctionEntry{{Function: "foo.(*Bar).(Reader)"}},
-			want:    1,
-		},
-		{
-			name: "multiple interfaces",
-			entries: []FunctionEntry{
-				{Function: "foo.(*Bar).(Reader)"},
-				{Function: "baz.(*Qux).(Writer)"},
-			},
-			want: 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := detectHotInterfaces(tt.entries)
-			if len(got) != tt.want {
-				t.Errorf("detectHotInterfaces() = %d interfaces, want %d", len(got), tt.want)
-			}
-		})
-	}
-}
-
-func TestPackageFromFunction(t *testing.T) {
-	tests := []struct {
-		name string
-		fn   string
-		want string
-	}{
-		{
-			name: "simple function",
-			fn:   "github.com/foo/bar.Baz",
-			want: "github.com/foo/bar",
-		},
-		{
-			name: "method",
-			fn:   "github.com/foo/bar.(*Type).Method",
-			want: "github.com/foo/bar",
-		},
-		{
-			name: "interface method",
-			fn:   "github.com/foo/bar.(*Type).(Reader).Read",
-			want: "github.com/foo/bar",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := packageFromFunction(tt.fn)
-			if got != tt.want {
-				t.Errorf("packageFromFunction(%q) = %q, want %q", tt.fn, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestCheckFileDefaultOptions(t *testing.T) {
 	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
 	data, err := os.ReadFile(profilePath)
@@ -177,23 +111,6 @@ func TestCheckFileDefaultOptions(t *testing.T) {
 
 	if rpt.Verdict != VerdictIncomplete {
 		t.Errorf("expected VerdictIncomplete, got %s", rpt.Verdict)
-	}
-}
-
-func TestCheckFileDefaultTopN(t *testing.T) {
-	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
-	data, err := os.ReadFile(profilePath)
-	if err != nil || strings.Contains(string(data), "git-lfs") {
-		t.Skipf("testdata file not found or is LFS pointer")
-	}
-
-	rpt, err := CheckFile(profilePath, Options{TopN: 0})
-	if err != nil {
-		t.Fatalf("CheckFile with TopN=0 failed: %v", err)
-	}
-
-	if len(rpt.TopFunctions) > 20 {
-		t.Errorf("expected TopFunctions to be clamped at 20, got %d", len(rpt.TopFunctions))
 	}
 }
 
@@ -254,70 +171,6 @@ func TestCPUSampleIndex(t *testing.T) {
 				t.Errorf("cpuSampleIndex() idx = %d, want %d", idx, tt.wantIdx)
 			}
 		})
-	}
-}
-
-func TestPackageFromFunctionEdgeCases(t *testing.T) {
-	tests := []struct {
-		name string
-		fn   string
-		want string
-	}{
-		{
-			name: "empty string",
-			fn:   "",
-			want: "",
-		},
-		{
-			name: "no slash",
-			fn:   "Foo",
-			want: "Foo",
-		},
-		{
-			name: "local package",
-			fn:   "main.Foo",
-			want: "main",
-		},
-		{
-			name: "nested with method",
-			fn:   "github.com/foo/bar/baz.(*Type).Method",
-			want: "github.com/foo/bar/baz",
-		},
-		{
-			name: "nested with paren in middle",
-			fn:   "github.com/foo/(bar)",
-			want: "github.com/foo/",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := packageFromFunction(tt.fn)
-			if got != tt.want {
-				t.Errorf("packageFromFunction(%q) = %q, want %q", tt.fn, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestDetectHotInterfacesWithDuplicates(t *testing.T) {
-	entries := []FunctionEntry{
-		{Function: "foo.(*Bar).(Reader)"},
-		{Function: "foo.(*Bar).(Reader)"},
-		{Function: "baz.(*Qux).(Writer)"},
-	}
-
-	got := detectHotInterfaces(entries)
-	if len(got) != 2 {
-		t.Errorf("detectHotInterfaces() = %d interfaces, want 2 (should dedup)", len(got))
-	}
-
-	seen := make(map[string]bool)
-	for _, iface := range got {
-		if seen[iface] {
-			t.Errorf("detectHotInterfaces() returned duplicate: %s", iface)
-		}
-		seen[iface] = true
 	}
 }
 
@@ -590,19 +443,6 @@ func TestCheckFile_AbsoluteProfilePath(t *testing.T) {
 	}
 	if rpt.ProfilePath != absProfilePath {
 		t.Errorf("ProfilePath mismatch: got %q, want %q", rpt.ProfilePath, absProfilePath)
-	}
-}
-
-func TestCheckFile_IgnoreZeroTopN(t *testing.T) {
-	profilePath := makeMinimalProfile(t)
-	t.Cleanup(func() { _ = os.Remove(profilePath) })
-
-	rpt, err := CheckFile(profilePath, Options{TopN: 0})
-	if err != nil {
-		t.Fatalf("CheckFile with TopN=0 failed: %v", err)
-	}
-	if len(rpt.TopFunctions) > 20 {
-		t.Errorf("expected TopFunctions to default to 20, got %d", len(rpt.TopFunctions))
 	}
 }
 
@@ -1033,5 +873,100 @@ func TestExtraInlinesByOrigin(t *testing.T) {
 	}
 	if deps != 1 {
 		t.Errorf("deps extra inlines = %d, want 1", deps)
+	}
+}
+
+// makeManyFunctionProfile writes a pprof with n hot functions, one sample each.
+func makeManyFunctionProfile(t *testing.T, n int) string {
+	t.Helper()
+	p := &profile.Profile{
+		SampleType: []*profile.ValueType{{Type: "cpu", Unit: "nanoseconds"}},
+	}
+	for i := 0; i < n; i++ {
+		name := fmt.Sprintf("main.fn%d", i)
+		fn := &profile.Function{ID: uint64(i + 1), Name: name, SystemName: name, Filename: "main.go", StartLine: 1}
+		loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn, Line: 1}}}
+		p.Function = append(p.Function, fn)
+		p.Location = append(p.Location, loc)
+		p.Sample = append(p.Sample, &profile.Sample{Location: []*profile.Location{loc}, Value: []int64{1_000_000}})
+	}
+	f, err := os.CreateTemp(t.TempDir(), "many-*.pprof")
+	if err != nil {
+		t.Fatalf("create temp pprof: %v", err)
+	}
+	if werr := p.Write(f); werr != nil {
+		_ = f.Close()
+		t.Fatalf("write pprof: %v", werr)
+	}
+	_ = f.Close()
+	return f.Name()
+}
+
+func TestCheckFile_TopN(t *testing.T) {
+	path := makeManyFunctionProfile(t, 25)
+	tests := []struct {
+		name string
+		topN int
+		want int
+	}{
+		{"zero means all", 0, 25},
+		{"larger than available returns all", 100, 25},
+		{"positive limits", 5, 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rpt, err := CheckFile(path, Options{TopN: tt.topN})
+			if err != nil {
+				t.Fatalf("CheckFile: %v", err)
+			}
+			if got := len(rpt.TopFunctions); got != tt.want {
+				t.Errorf("TopN=%d returned %d functions, want %d", tt.topN, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchingLines(t *testing.T) {
+	out := strings.Join([]string{
+		"./a.go:10:5: inlining call to foo",
+		"./b.go:20:7: PGO devirtualizing interface call r.Read to *os.File.Read",
+		"../src/errors/wrap.go:50:55: devirtualizing .autotmp_4.Comparable to reflectlite.rtype",
+		"  ./c.go:30:2: PGO devirtualizing function call f to main.g  ",
+	}, "\n")
+
+	got := matchingLines(out, "pgo devirtualizing")
+	want := []string{
+		"./b.go:20:7: PGO devirtualizing interface call r.Read to *os.File.Read",
+		"./c.go:30:2: PGO devirtualizing function call f to main.g",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("matchingLines() = %q, want %q", got, want)
+	}
+	if n := countLines(out, "pgo devirtualizing"); n != 2 {
+		t.Errorf("countLines() = %d, want 2", n)
+	}
+	if got := matchingLines("no matches here", "pgo devirtualizing"); got != nil {
+		t.Errorf("matchingLines() on no match = %q, want nil", got)
+	}
+}
+
+func TestBuildArgs(t *testing.T) {
+	pgo := buildArgs("./cmd/app", "/tmp/p.pprof", true)
+	base := buildArgs("./cmd/app", "", false)
+
+	for name, args := range map[string][]string{"pgo": pgo, "base": base} {
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "-o "+os.DevNull) {
+			t.Errorf("%s args %q: want -o %s", name, joined, os.DevNull)
+		}
+		if args[len(args)-1] != "./cmd/app" {
+			t.Errorf("%s args %q: package pattern must be last", name, joined)
+		}
+	}
+	if !slices.Contains(pgo, "-pgo=/tmp/p.pprof") {
+		t.Errorf("pgo args %q: missing -pgo=/tmp/p.pprof", pgo)
+	}
+	if !slices.Contains(base, "-pgo=off") {
+		t.Errorf("baseline args %q: missing -pgo=off", base)
 	}
 }

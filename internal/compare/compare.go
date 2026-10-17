@@ -7,6 +7,8 @@ import (
 	"os"
 	"sort"
 
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
+
 	"github.com/google/pprof/profile"
 )
 
@@ -152,8 +154,8 @@ func compareProfiles(base, cand *profile.Profile, gate GateConfig) *Report {
 	}
 
 	return &Report{
-		BaselineSamples:   int64(len(base.Sample)),
-		CandidateSamples:  int64(len(cand.Sample)),
+		BaselineSamples:   pprofutil.SampleCount(base),
+		CandidateSamples:  pprofutil.SampleCount(cand),
 		TopDeltas:         deltas[:top],
 		SummaryCPUDelta:   math.Round(summary*100) / 100,
 		FilteredFunctions: filtered,

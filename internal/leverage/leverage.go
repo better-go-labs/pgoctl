@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
+
 	"github.com/google/pprof/profile"
 )
 
@@ -38,12 +40,13 @@ type FunctionEntry struct {
 
 // BuildAnalysis holds the raw counts from comparing a PGO build against a baseline build.
 type BuildAnalysis struct {
-	DevirtDecisions     int `json:"devirt_decisions"`
-	PGOExtraInlines     int `json:"pgo_extra_inlines"`      // module-scoped set diff (verdict-driving)
-	PGOExtraInlinesDeps int `json:"pgo_extra_inlines_deps"` // std/deps set diff (informational)
-	BaselineInlines     int `json:"baseline_inlines"`
-	PGOInlines          int `json:"pgo_inlines"`
-	PGODevirts          int `json:"pgo_devirts"`
+	DevirtDecisions     int      `json:"devirt_decisions"`
+	PGOExtraInlines     int      `json:"pgo_extra_inlines"`      // module-scoped set diff (verdict-driving)
+	PGOExtraInlinesDeps int      `json:"pgo_extra_inlines_deps"` // std/deps set diff (informational)
+	BaselineInlines     int      `json:"baseline_inlines"`
+	PGOInlines          int      `json:"pgo_inlines"`
+	PGODevirts          int      `json:"pgo_devirts"`
+	DevirtSites         []string `json:"devirt_sites,omitempty"`
 }
 
 // Report is the output of CheckFile: a structured summary of PGO leverage for a build target.
@@ -51,7 +54,6 @@ type Report struct {
 	ProfilePath   string          `json:"profile_path"`
 	TotalSamples  int64           `json:"total_samples"`
 	TopFunctions  []FunctionEntry `json:"top_functions"`
-	HotInterfaces []string        `json:"hot_interfaces,omitempty"`
 	BuildAnalysis *BuildAnalysis  `json:"build_analysis,omitempty"`
 	Verdict       Verdict         `json:"verdict"`
 	VerdictReason string          `json:"verdict_reason"`
@@ -59,6 +61,7 @@ type Report struct {
 
 // Options controls CheckFile behaviour.
 type Options struct {
+	// TopN limits TopFunctions; 0 means all.
 	TopN    int
 	Dir     string
 	Package string
@@ -76,9 +79,6 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		return nil, fmt.Errorf("parse profile: %w", err)
 	}
 
-	if opts.TopN <= 0 {
-		opts.TopN = 20
-	}
 	if opts.Package == "" {
 		opts.Package = "./..."
 	}
@@ -121,7 +121,7 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		}
 		entries = append(entries, FunctionEntry{
 			Function: fn,
-			Package:  packageFromFunction(fn),
+			Package:  pprofutil.PackageOf(fn),
 			FlatPct:  flatPct,
 			CumPct:   cumPct,
 		})
@@ -138,8 +138,6 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		top = len(entries)
 	}
 	topEntries := entries[:top]
-
-	hotInterfaces := detectHotInterfaces(topEntries)
 
 	var buildAnalysis *BuildAnalysis
 	var verdict Verdict
@@ -160,9 +158,8 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 
 	return &Report{
 		ProfilePath:   profilePath,
-		TotalSamples:  int64(len(p.Sample)),
+		TotalSamples:  pprofutil.SampleCount(p),
 		TopFunctions:  topEntries,
-		HotInterfaces: hotInterfaces,
 		BuildAnalysis: buildAnalysis,
 		Verdict:       verdict,
 		VerdictReason: verdictReason,
@@ -217,7 +214,8 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 
 	// Count only the PGO-specific speculative devirt marker; plain "devirtualizing" lines
 	// are static/type-based and appear in both builds regardless of the profile.
-	pgoDevirts := countLines(pgoOutput, "pgo devirtualizing")
+	devirtSites := matchingLines(pgoOutput, "pgo devirtualizing")
+	pgoDevirts := len(devirtSites)
 
 	pgoInlines := countLines(pgoOutput, "inlining call")
 	baselineInlines := countLines(baselineOutput, "inlining call")
@@ -237,20 +235,24 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 		BaselineInlines:     baselineInlines,
 		PGOInlines:          pgoInlines,
 		PGODevirts:          pgoDevirts,
+		DevirtSites:         devirtSites,
 	}, nil
 }
 
-func runBuild(dir, pkgPattern, profilePath string, withPGO bool) (string, error) {
-	args := []string{"build", "-gcflags=all=-m=2", "-o", "/dev/null"}
+// buildArgs builds the go build argv. The baseline uses -pgo=off so a
+// default.pgo in the module is not silently picked up.
+func buildArgs(pkgPattern, profilePath string, withPGO bool) []string {
+	args := []string{"build", "-gcflags=all=-m=2", "-o", os.DevNull}
 	if withPGO {
 		args = append(args, fmt.Sprintf("-pgo=%s", profilePath))
 	} else {
-		// Explicitly disable PGO so the baseline ignores any default.pgo present in
-		// the module directory; without this, -pgo=auto silently picks it up and
-		// produces a PGO-optimised "baseline", making the delta appear zero.
 		args = append(args, "-pgo=off")
 	}
-	args = append(args, pkgPattern)
+	return append(args, pkgPattern)
+}
+
+func runBuild(dir, pkgPattern, profilePath string, withPGO bool) (string, error) {
+	args := buildArgs(pkgPattern, profilePath, withPGO)
 
 	cmd := exec.Command("go", args...)
 	cmd.Dir = dir
@@ -261,15 +263,21 @@ func runBuild(dir, pkgPattern, profilePath string, withPGO bool) (string, error)
 	return string(out), nil
 }
 
-func countLines(output, pattern string) int {
-	count := 0
+// matchingLines returns the trimmed lines of output containing pattern, case-insensitively.
+func matchingLines(output, pattern string) []string {
+	var lines []string
+	want := strings.ToLower(pattern)
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	for scanner.Scan() {
-		if strings.Contains(strings.ToLower(scanner.Text()), strings.ToLower(pattern)) {
-			count++
+		if strings.Contains(strings.ToLower(scanner.Text()), want) {
+			lines = append(lines, strings.TrimSpace(scanner.Text()))
 		}
 	}
-	return count
+	return lines
+}
+
+func countLines(output, pattern string) int {
+	return len(matchingLines(output, pattern))
 }
 
 // collectInlineSites returns a set of unique "inlining call" lines from compiler output.
@@ -300,18 +308,6 @@ func extraInlinesByOrigin(pgo, baseline map[string]bool) (module, deps int) {
 	return
 }
 
-func detectHotInterfaces(entries []FunctionEntry) []string {
-	var result []string
-	seen := make(map[string]bool)
-	for _, e := range entries {
-		if strings.Contains(e.Function, ".(") && !seen[e.Function] {
-			result = append(result, e.Function)
-			seen[e.Function] = true
-		}
-	}
-	return result
-}
-
 func cpuSampleIndex(p *profile.Profile) (int, bool) {
 	preferred, fallback := -1, -1
 	for i, st := range p.SampleType {
@@ -329,19 +325,4 @@ func cpuSampleIndex(p *profile.Profile) (int, bool) {
 		return fallback, true
 	}
 	return -1, false
-}
-
-func packageFromFunction(name string) string {
-	slash := strings.LastIndex(name, "/")
-	start := slash + 1
-	rest := name[start:]
-	cut := len(rest)
-	if i := strings.IndexAny(rest, "(."); i >= 0 {
-		cut = i
-	}
-	pkg := name[:start+cut]
-	if pkg == "" {
-		return name
-	}
-	return pkg
 }
