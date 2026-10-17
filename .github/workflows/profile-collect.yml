@@ -60,7 +60,7 @@ jobs:
           cluster_name: pgoctl-dev
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       # v4 fix 1: prometheus.prometheusSpec.enableRemoteWriteReceiver=true is the
       # operator CRD field that wires up --web.enable-remote-write-receiver on the
