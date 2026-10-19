@@ -40,6 +40,8 @@ optimization decisions are diffed to count:
     reported separately.
   - PGO-only extra inlines: functions inlined in the PGO build but not the
     baseline, indicating the profile guided the inliner beyond its defaults.
+    Only sites in the module's own packages drive the verdict; std/deps sites
+    are reported separately.
 
 Requires a buildable Go module at --dir. Without --dir the verdict is INCOMPLETE.
 
