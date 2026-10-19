@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -325,4 +326,63 @@ func cpuSampleIndex(p *profile.Profile) (int, bool) {
 		return fallback, true
 	}
 	return -1, false
+}
+
+// listFormat is the go list -f template parsed by parsePackageList.
+const listFormat = "{{.ImportPath}}\t{{.Dir}}\t{{if .Module}}{{.Module.Main}}\t{{.Module.Dir}}{{end}}"
+
+// modulePackages is what go list -deps reports for the build target.
+type modulePackages struct {
+	importPaths []string
+	root        string          // main module directory
+	dir         string          // the --dir the build runs in
+	mainDirs    map[string]bool // package directories inside the main module
+}
+
+// parsePackageList parses go list -deps -f listFormat output.
+func parsePackageList(out string) (*modulePackages, error) {
+	m := &modulePackages{mainDirs: make(map[string]bool)}
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		f := strings.Split(line, "\t")
+		if len(f) < 3 {
+			return nil, fmt.Errorf("unexpected go list line: %q", line)
+		}
+		m.importPaths = append(m.importPaths, f[0])
+		if len(f) >= 4 && f[2] == "true" {
+			m.mainDirs[filepath.Clean(f[1])] = true
+			m.root = filepath.Clean(f[3])
+		}
+	}
+	return m, nil
+}
+
+// sitePrefix matches the "file:line:col: " head of a compiler -m line.
+var sitePrefix = regexp.MustCompile(`^(.+?):\d+:\d+: `)
+
+// sitePath returns the file named by a compiler -m line, or "".
+func sitePath(line string) string {
+	if m := sitePrefix.FindStringSubmatch(line); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// isModuleSite reports whether a -m line names a file in a main-module
+// package. The compiler prints relative paths against the module root.
+func (m *modulePackages) isModuleSite(line string) bool {
+	if m == nil {
+		return false
+	}
+	file := sitePath(line)
+	if file == "" {
+		return false
+	}
+	if filepath.IsAbs(file) {
+		return m.mainDirs[filepath.Dir(file)]
+	}
+	return m.mainDirs[filepath.Dir(filepath.Join(m.root, file))] ||
+		m.mainDirs[filepath.Dir(filepath.Join(m.dir, file))]
 }
