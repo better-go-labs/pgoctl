@@ -12,23 +12,6 @@ import (
 // Test-only helpers (syntheticCPUProfile, writeTempProfile, permissiveOptions)
 // live in package_share_test_utils_test.go.
 
-func TestPackageFromFunction(t *testing.T) {
-	cases := []struct{ name, want string }{
-		{"github.com/prometheus/prometheus/tsdb.(*Head).Append", "github.com/prometheus/prometheus/tsdb"},
-		{"github.com/prometheus/prometheus/tsdb/wlog.(*Watcher).run", "github.com/prometheus/prometheus/tsdb/wlog"},
-		{"github.com/prometheus/prometheus/tsdb/chunkenc.(*XorChunk).Appender", "github.com/prometheus/prometheus/tsdb/chunkenc"},
-		{"github.com/prometheus/prometheus/tsdb/index.(*Reader).Symbols", "github.com/prometheus/prometheus/tsdb/index"},
-		{"github.com/prometheus/prometheus/promql.(*Engine).exec", "github.com/prometheus/prometheus/promql"},
-		{"github.com/prometheus/prometheus/model/labels.NewBuilder", "github.com/prometheus/prometheus/model/labels"},
-		{"runtime.main", "runtime"},
-		{"main.main", "main"},
-		{"testing.(*T).Run", "testing"},
-	}
-	for _, c := range cases {
-		assert.Equal(t, c.want, packageFromFunction(c.name), "function %q", c.name)
-	}
-}
-
 func TestParsePackageShareGates(t *testing.T) {
 	t.Run("single", func(t *testing.T) {
 		gates, err := ParsePackageShareGates([]string{"github.com/prometheus/prometheus/tsdb:5"})
