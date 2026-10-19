@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -801,5 +802,39 @@ func TestPrintLeverageReport_NoDevirtSection(t *testing.T) {
 	b, _ := json.Marshal(rpt)
 	if strings.Contains(string(b), "devirt_sites") {
 		t.Errorf("devirt_sites present in JSON with zero sites: %s", b)
+	}
+}
+
+func TestPrintLeverageReport_DevirtDeps(t *testing.T) {
+	capture := func(rpt *leverage.Report) string {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("os.Pipe: %v", err)
+		}
+		old := os.Stdout
+		os.Stdout = w
+		printLeverageReport(rpt)
+		_ = w.Close()
+		os.Stdout = old
+		out, _ := io.ReadAll(r)
+		return string(out)
+	}
+
+	withDeps := capture(&leverage.Report{
+		Verdict:       leverage.VerdictLow,
+		VerdictReason: "LOW",
+		BuildAnalysis: &leverage.BuildAnalysis{DevirtDecisions: 1, PGODevirts: 4, PGODevirtsDeps: 3},
+	})
+	if !regexp.MustCompile(`pgo_devirts_deps\s+3\n`).MatchString(withDeps) {
+		t.Errorf("pgo_devirts_deps 3 line missing:\n%s", withDeps)
+	}
+
+	withoutDeps := capture(&leverage.Report{
+		Verdict:       leverage.VerdictLow,
+		VerdictReason: "LOW",
+		BuildAnalysis: &leverage.BuildAnalysis{DevirtDecisions: 1, PGODevirts: 1},
+	})
+	if strings.Contains(withoutDeps, "pgo_devirts_deps") {
+		t.Errorf("pgo_devirts_deps printed with zero deps devirts:\n%s", withoutDeps)
 	}
 }

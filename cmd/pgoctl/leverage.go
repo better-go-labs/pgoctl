@@ -35,7 +35,9 @@ With --dir, compiles the target package twice using 'go build -gcflags=all=-m=2'
 once with '-pgo=<profile>' and once as a baseline (no PGO). The compiler's
 optimization decisions are diffed to count:
   - PGO-attributed devirtualizations: hot interface.Method calls rewritten to
-    direct calls by the compiler only when the PGO profile is present.
+    direct calls by the compiler only when the PGO profile is present. Only
+    sites in the module's own packages drive the verdict; std/deps sites are
+    reported separately.
   - PGO-only extra inlines: functions inlined in the PGO build but not the
     baseline, indicating the profile guided the inliner beyond its defaults.
 
@@ -99,6 +101,9 @@ func printLeverageReport(rpt *leverage.Report) {
 
 	if rpt.BuildAnalysis != nil {
 		_, _ = fmt.Fprintf(w, "devirt_decisions\t%d\n", rpt.BuildAnalysis.DevirtDecisions)
+		if rpt.BuildAnalysis.PGODevirtsDeps > 0 {
+			_, _ = fmt.Fprintf(w, "pgo_devirts_deps\t%d\n", rpt.BuildAnalysis.PGODevirtsDeps)
+		}
 		_, _ = fmt.Fprintf(w, "pgo_extra_inlines\t%d\n", rpt.BuildAnalysis.PGOExtraInlines)
 		if rpt.BuildAnalysis.PGOExtraInlinesDeps > 0 {
 			_, _ = fmt.Fprintf(w, "pgo_extra_inlines_deps\t%d\n", rpt.BuildAnalysis.PGOExtraInlinesDeps)
