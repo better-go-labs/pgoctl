@@ -121,6 +121,11 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		}
 	}
 
+	var resolver *pprofutil.Resolver
+	if mods != nil {
+		resolver = pprofutil.NewResolver(mods.importPaths)
+	}
+
 	entries := make([]FunctionEntry, 0, len(flatCounts))
 	for fn, c := range flatCounts {
 		flatPct := 0.0
@@ -131,7 +136,7 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		}
 		entries = append(entries, FunctionEntry{
 			Function: fn,
-			Package:  pprofutil.PackageOf(fn),
+			Package:  resolver.PackageOf(fn),
 			FlatPct:  flatPct,
 			CumPct:   cumPct,
 		})

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `leverage-check`: module vs dependency origin of each compiler decision now comes from `go list -deps` (main-module package directories) instead of a `./` path prefix. Subpackages were counted as dependencies, and a module cache under `$HOME` printed as `../..` was counted as module code
 - `leverage-check`: `devirt_decisions` is module-scoped like `pgo_extra_inlines`; the full count stays in `pgo_devirts` and the std/deps share is in the new `pgo_devirts_deps`
+- `leverage-check`: with `--dir`, function names resolve to real import paths from `go list -deps`, so dotted packages like `github.com/satori/go.uuid` no longer truncate to `github.com/satori/go`; without `--dir` the string heuristic still applies
 
 
 ## [0.1.3] - 2026-09-02

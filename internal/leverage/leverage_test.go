@@ -970,21 +970,20 @@ func TestListPackages_BadDir(t *testing.T) {
 	}
 }
 
-// makeManyFunctionProfile writes a pprof with n hot functions, one sample each.
-func makeManyFunctionProfile(t *testing.T, n int) string {
+// makeProfileWithFunctions writes a pprof with one sample per named function.
+func makeProfileWithFunctions(t *testing.T, names ...string) string {
 	t.Helper()
 	p := &profile.Profile{
 		SampleType: []*profile.ValueType{{Type: "cpu", Unit: "nanoseconds"}},
 	}
-	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("main.fn%d", i)
+	for i, name := range names {
 		fn := &profile.Function{ID: uint64(i + 1), Name: name, SystemName: name, Filename: "main.go", StartLine: 1}
 		loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn, Line: 1}}}
 		p.Function = append(p.Function, fn)
 		p.Location = append(p.Location, loc)
 		p.Sample = append(p.Sample, &profile.Sample{Location: []*profile.Location{loc}, Value: []int64{1_000_000}})
 	}
-	f, err := os.CreateTemp(t.TempDir(), "many-*.pprof")
+	f, err := os.CreateTemp(t.TempDir(), "named-*.pprof")
 	if err != nil {
 		t.Fatalf("create temp pprof: %v", err)
 	}
@@ -994,6 +993,38 @@ func makeManyFunctionProfile(t *testing.T, n int) string {
 	}
 	_ = f.Close()
 	return f.Name()
+}
+
+func TestCheckFile_WithDir_ResolvesDottedPackage(t *testing.T) {
+	dir := dottedModule(t)
+	profilePath := makeProfileWithFunctions(t, "example.com/m/go.uuid.New")
+
+	rpt, err := CheckFile(profilePath, Options{Dir: dir, Package: "./..."})
+	if err != nil {
+		t.Fatalf("CheckFile with dir: %v", err)
+	}
+	if got := rpt.TopFunctions[0].Package; got != "example.com/m/go.uuid" {
+		t.Errorf("Package with --dir = %q, want example.com/m/go.uuid", got)
+	}
+
+	// Without --dir there is no module context; the heuristic still truncates.
+	rpt, err = CheckFile(profilePath, Options{})
+	if err != nil {
+		t.Fatalf("CheckFile without dir: %v", err)
+	}
+	if got := rpt.TopFunctions[0].Package; got != "example.com/m/go" {
+		t.Errorf("Package without --dir = %q, want example.com/m/go", got)
+	}
+}
+
+// makeManyFunctionProfile writes a pprof with n hot functions, one sample each.
+func makeManyFunctionProfile(t *testing.T, n int) string {
+	t.Helper()
+	names := make([]string, n)
+	for i := range names {
+		names[i] = fmt.Sprintf("main.fn%d", i)
+	}
+	return makeProfileWithFunctions(t, names...)
 }
 
 func TestCheckFile_TopN(t *testing.T) {
