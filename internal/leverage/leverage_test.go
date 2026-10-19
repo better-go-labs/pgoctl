@@ -3,6 +3,7 @@ package leverage
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -1284,4 +1285,109 @@ func TestMatchingLines_IgnoresQuotedSource(t *testing.T) {
 	if sites := collectInlineSites(out); len(sites) != 2 {
 		t.Errorf("collectInlineSites = %d sites, want 2", len(sites))
 	}
+}
+
+// TestCheckFile_PgoctlSelfProfile runs the full --dir analysis of pgoctl on a
+// CPU profile of pgoctl itself (testdata/pgoctl_cpu.pprof, captured by
+// scripts/capture-pgoctl-profile.sh). Counts vary per capture and Go version,
+// so it checks invariants, not numbers.
+func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds ./cmd/pgoctl twice with -gcflags=all=-m=2")
+	}
+	profilePath := filepath.Join("..", "..", "testdata", "pgoctl_cpu.pprof")
+	data, err := os.ReadFile(profilePath)
+	if err != nil || strings.Contains(string(data), "version https://git-lfs.github.com") {
+		t.Skipf("testdata/pgoctl_cpu.pprof not available (LFS pointer or missing)")
+	}
+
+	qr, err := validate.ValidateFile(profilePath, validate.DefaultOptions())
+	if err != nil {
+		t.Fatalf("validate.ValidateFile: %v", err)
+	}
+	if !qr.Valid {
+		t.Errorf("self profile fails pgoctl's own quality gate: errors=%v score=%.3f samples=%d",
+			qr.Errors, qr.QualityScore, qr.Samples)
+	}
+
+	rpt, err := CheckFile(profilePath, Options{Dir: filepath.Join("..", ".."), Package: "./cmd/pgoctl"})
+	if err != nil {
+		t.Fatalf("CheckFile: %v", err)
+	}
+	ba := rpt.BuildAnalysis
+	if ba == nil {
+		t.Fatal("BuildAnalysis is nil with --dir set")
+	}
+
+	// Packages come from go list: every pgoctl function resolves to a full
+	// import path, and every entry's package is a prefix of its function.
+	const module = "github.com/Better-Go-Labs/pgoctl/"
+	pgoctlEntries := 0
+	for _, e := range rpt.TopFunctions {
+		if strings.Contains(e.Function, ".") && !strings.HasPrefix(e.Function, e.Package+".") {
+			t.Errorf("package %q is not a prefix of function %q", e.Package, e.Function)
+		}
+		if strings.HasPrefix(e.Function, module) {
+			pgoctlEntries++
+			if !strings.HasPrefix(e.Package, module) {
+				t.Errorf("pgoctl function %q resolved to %q", e.Function, e.Package)
+			}
+		}
+	}
+	if pgoctlEntries == 0 {
+		t.Error("no pgoctl functions in the profile; recapture with scripts/capture-pgoctl-profile.sh")
+	}
+
+	// Totals are consistent with the module/deps split.
+	if ba.PGODevirts != ba.DevirtDecisions+ba.PGODevirtsDeps {
+		t.Errorf("pgo_devirts %d != devirt_decisions %d + pgo_devirts_deps %d",
+			ba.PGODevirts, ba.DevirtDecisions, ba.PGODevirtsDeps)
+	}
+	if len(ba.DevirtSites) != ba.PGODevirts {
+		t.Errorf("devirt_sites len %d != pgo_devirts %d", len(ba.DevirtSites), ba.PGODevirts)
+	}
+
+	// Devirt sites under GOMODCACHE or GOROOT are dependencies by
+	// construction and must never count toward the verdict.
+	out, err := exec.Command("go", "env", "GOMODCACHE", "GOROOT").Output()
+	if err != nil {
+		t.Fatalf("go env: %v", err)
+	}
+	envDirs := strings.Split(strings.TrimSpace(string(out)), "\n")
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("abs repo root: %v", err)
+	}
+	knownDeps := 0
+	for _, s := range ba.DevirtSites {
+		f := sitePath(s)
+		if f == "" {
+			continue
+		}
+		if !filepath.IsAbs(f) {
+			f = filepath.Join(root, f)
+		}
+		for _, d := range envDirs {
+			if d != "" && strings.HasPrefix(filepath.Clean(f), filepath.Clean(d)+string(filepath.Separator)) {
+				knownDeps++
+				break
+			}
+		}
+	}
+	if ba.PGODevirtsDeps < knownDeps {
+		t.Errorf("pgo_devirts_deps = %d, but %d devirt sites are in GOMODCACHE or GOROOT", ba.PGODevirtsDeps, knownDeps)
+	}
+
+	// pgoctl is a thin layer over google/pprof, so PGO always finds
+	// something in dependencies. Those must never drive the verdict.
+	if ba.PGOExtraInlinesDeps+ba.PGODevirtsDeps == 0 {
+		t.Error("expected PGO decisions in dependencies for a pprof-parsing workload")
+	}
+	moduleDecisions := ba.DevirtDecisions > 0 || ba.PGOExtraInlines > 0
+	if moduleDecisions == (rpt.Verdict == VerdictNone) {
+		t.Errorf("verdict %s does not follow module-scoped counts (devirts=%d, extra inlines=%d); reason: %s",
+			rpt.Verdict, ba.DevirtDecisions, ba.PGOExtraInlines, rpt.VerdictReason)
+	}
+	t.Logf("verdict=%s devirts=%d/%d extra_inlines=%d/%d", rpt.Verdict,
+		ba.DevirtDecisions, ba.PGODevirts, ba.PGOExtraInlines, ba.PGOExtraInlines+ba.PGOExtraInlinesDeps)
 }

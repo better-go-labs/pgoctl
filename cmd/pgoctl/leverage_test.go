@@ -838,3 +838,32 @@ func TestPrintLeverageReport_DevirtDeps(t *testing.T) {
 		t.Errorf("pgo_devirts_deps printed with zero deps devirts:\n%s", withoutDeps)
 	}
 }
+
+func TestNewLeverageCheckCmd_SelfProfile(t *testing.T) {
+	profilePath := filepath.Join("..", "..", "testdata", "pgoctl_cpu.pprof")
+	data, err := os.ReadFile(profilePath)
+	if err != nil || strings.Contains(string(data), "version https://git-lfs.github.com") {
+		t.Skipf("testdata/pgoctl_cpu.pprof not available (LFS pointer or missing)")
+	}
+
+	rpt, err := leverage.CheckFile(profilePath, leverage.Options{TopN: 0})
+	if err != nil {
+		t.Fatalf("CheckFile: %v", err)
+	}
+	if rpt.Verdict != leverage.VerdictIncomplete {
+		t.Errorf("verdict without --dir = %s, want INCOMPLETE", rpt.Verdict)
+	}
+	if rpt.TotalSamples < 10_000 {
+		t.Errorf("total_samples = %d, want >= 10000 (fixture captured with BENCHTIME=75s)", rpt.TotalSamples)
+	}
+	found := false
+	for _, e := range rpt.TopFunctions {
+		if strings.HasPrefix(e.Function, "github.com/Better-Go-Labs/pgoctl/") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("no pgoctl functions in the self profile")
+	}
+}
