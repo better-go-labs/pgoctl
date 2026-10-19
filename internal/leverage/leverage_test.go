@@ -860,20 +860,113 @@ func TestExtraInlinesByOrigin(t *testing.T) {
 	pgo := map[string]bool{
 		"./foo.go:1:1: inlining call to bar.A":                                 true, // module, PGO-only
 		"./foo.go:2:2: inlining call to bar.B":                                 true, // module, also in baseline
-		"/usr/local/go/src/runtime/malloc.go:5:5: inlining call to something":  true, // deps, PGO-only
-		"/usr/local/go/src/runtime/malloc.go:6:6: inlining call to somethingB": true, // deps, also in baseline
+		"internal/sub/sub.go:7:28: inlining call to Small":                     true, // subpackage, PGO-only
+		"../../go/pkg/mod/github.com/x/y@v1/y.go:5:5: inlining call to Y":      true, // module cache, PGO-only
+		"/usr/local/go/src/runtime/malloc.go:6:6: inlining call to somethingB": true, // GOROOT, also in baseline
 	}
 	baseline := map[string]bool{
 		"./foo.go:2:2: inlining call to bar.B":                                 true,
 		"/usr/local/go/src/runtime/malloc.go:6:6: inlining call to somethingB": true,
 	}
 
-	module, deps := extraInlinesByOrigin(pgo, baseline)
-	if module != 1 {
-		t.Errorf("module extra inlines = %d, want 1", module)
+	module, deps := extraInlinesByOrigin(pgo, baseline, testMods())
+	if module != 2 {
+		t.Errorf("module extra inlines = %d, want 2 (subpackage must count as module)", module)
 	}
 	if deps != 1 {
-		t.Errorf("deps extra inlines = %d, want 1", deps)
+		t.Errorf("deps extra inlines = %d, want 1 (..-relative module cache is a dependency)", deps)
+	}
+}
+
+func TestAnalyzeBuildOutput_InlineSplit(t *testing.T) {
+	pgo := strings.Join([]string{
+		"./main.go:1:1: inlining call to A",
+		"internal/sub/sub.go:2:2: inlining call to B",
+		"../../go/pkg/mod/github.com/x/y@v1/y.go:3:3: inlining call to C",
+	}, "\n")
+	baseline := "./main.go:1:1: inlining call to A\n"
+
+	ba := analyzeBuildOutput(pgo, baseline, testMods())
+	if ba.PGOExtraInlines != 1 || ba.PGOExtraInlinesDeps != 1 {
+		t.Errorf("extra inlines = (%d, %d), want (1, 1)", ba.PGOExtraInlines, ba.PGOExtraInlinesDeps)
+	}
+	if ba.PGOInlines != 3 || ba.BaselineInlines != 1 {
+		t.Errorf("inline totals = (%d, %d), want (3, 1)", ba.PGOInlines, ba.BaselineInlines)
+	}
+}
+
+// writeTestModule writes files into a fresh temp dir and returns it.
+func writeTestModule(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, body := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	return dir
+}
+
+// dottedModule is a module whose only subpackage has a dot in its last path element.
+func dottedModule(t *testing.T) string {
+	t.Helper()
+	return writeTestModule(t, map[string]string{
+		"go.mod":          "module example.com/m\n\ngo 1.21\n",
+		"go.uuid/uuid.go": "package uuid\n\nfunc New() int { return 4 }\n",
+		"main.go":         "package main\n\nimport \"example.com/m/go.uuid\"\n\nfunc main() { _ = uuid.New() }\n",
+	})
+}
+
+// realPath resolves symlinks so macOS /var and /private/var compare equal.
+func realPath(t *testing.T, p string) string {
+	t.Helper()
+	r, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%s): %v", p, err)
+	}
+	return r
+}
+
+func TestListPackages(t *testing.T) {
+	dir := dottedModule(t)
+	m, err := listPackages(dir, "./...")
+	if err != nil {
+		t.Fatalf("listPackages: %v", err)
+	}
+	for _, want := range []string{"example.com/m", "example.com/m/go.uuid"} {
+		if !slices.Contains(m.importPaths, want) {
+			t.Errorf("importPaths missing %q: %v", want, m.importPaths)
+		}
+	}
+	for _, p := range m.importPaths {
+		if strings.ContainsAny(p, " \t:") {
+			t.Errorf("import path %q is not plain (stderr leaked into stdout?)", p)
+		}
+	}
+	if got, want := realPath(t, m.root), realPath(t, dir); got != want {
+		t.Errorf("root = %q, want %q", got, want)
+	}
+	if got, want := realPath(t, m.dir), realPath(t, dir); got != want {
+		t.Errorf("dir = %q, want %q", got, want)
+	}
+	wantMain := map[string]bool{realPath(t, dir): true, realPath(t, filepath.Join(dir, "go.uuid")): true}
+	if len(m.mainDirs) != len(wantMain) {
+		t.Errorf("mainDirs = %v, want %v", m.mainDirs, wantMain)
+	}
+	for d := range m.mainDirs {
+		if !wantMain[realPath(t, d)] {
+			t.Errorf("unexpected main dir %q", d)
+		}
+	}
+}
+
+func TestListPackages_BadDir(t *testing.T) {
+	if _, err := listPackages("/nonexistent/module/dir", "./..."); err == nil {
+		t.Error("expected error for missing dir")
 	}
 }
 

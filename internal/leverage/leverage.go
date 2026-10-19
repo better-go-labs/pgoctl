@@ -3,6 +3,7 @@ package leverage
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -112,6 +113,13 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 		}
 	}
 
+	var mods *modulePackages
+	if opts.Dir != "" {
+		if mods, err = listPackages(opts.Dir, opts.Package); err != nil {
+			return nil, fmt.Errorf("build analysis: %w", err)
+		}
+	}
+
 	entries := make([]FunctionEntry, 0, len(flatCounts))
 	for fn, c := range flatCounts {
 		flatPct := 0.0
@@ -145,7 +153,7 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 	var verdictReason string
 
 	if opts.Dir != "" {
-		ba, err := runBuildAnalysis(opts.Dir, opts.Package, profilePath)
+		ba, err := runBuildAnalysis(opts.Dir, opts.Package, profilePath, mods)
 		if err != nil {
 			return nil, fmt.Errorf("build analysis: %w", err)
 		}
@@ -197,7 +205,7 @@ func verdictForAnalysis(ba *BuildAnalysis, topEntries []FunctionEntry) (Verdict,
 	}
 }
 
-func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, error) {
+func runBuildAnalysis(dir, pkgPattern, profilePath string, mods *modulePackages) (*BuildAnalysis, error) {
 	absProfilePath, err := filepath.Abs(profilePath)
 	if err != nil {
 		return nil, fmt.Errorf("get absolute path: %w", err)
@@ -213,21 +221,24 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 		return nil, fmt.Errorf("baseline build: %w", err)
 	}
 
-	// Count only the PGO-specific speculative devirt marker; plain "devirtualizing" lines
-	// are static/type-based and appear in both builds regardless of the profile.
+	return analyzeBuildOutput(pgoOutput, baselineOutput, mods), nil
+}
+
+// analyzeBuildOutput diffs the -m=2 output of the PGO and baseline builds.
+func analyzeBuildOutput(pgoOutput, baselineOutput string, mods *modulePackages) *BuildAnalysis {
+	// Only the PGO-specific marker; plain "devirtualizing" is static and
+	// appears in both builds regardless of the profile.
 	devirtSites := matchingLines(pgoOutput, "pgo devirtualizing")
 	pgoDevirts := len(devirtSites)
 
 	pgoInlines := countLines(pgoOutput, "inlining call")
 	baselineInlines := countLines(baselineOutput, "inlining call")
 
-	// Set diff: new inline sites in PGO build, partitioned by origin.
-	// Lines starting with "./" are the user's module; absolute paths are std/deps.
-	// Using a set diff rather than a net count prevents std/runtime inlines from
-	// inflating the verdict (e.g. 594 runtime inlines masking 0 module inlines).
+	// Set diff: new inline sites in PGO build, split by origin so std/runtime
+	// inlines cannot inflate the verdict.
 	pgoSites := collectInlineSites(pgoOutput)
 	baselineSites := collectInlineSites(baselineOutput)
-	moduleExtra, depsExtra := extraInlinesByOrigin(pgoSites, baselineSites)
+	moduleExtra, depsExtra := extraInlinesByOrigin(pgoSites, baselineSites, mods)
 
 	return &BuildAnalysis{
 		DevirtDecisions:     pgoDevirts,
@@ -237,7 +248,29 @@ func runBuildAnalysis(dir, pkgPattern, profilePath string) (*BuildAnalysis, erro
 		PGOInlines:          pgoInlines,
 		PGODevirts:          pgoDevirts,
 		DevirtSites:         devirtSites,
-	}, nil
+	}
+}
+
+// listPackages runs go list -deps for pkgPattern inside dir.
+func listPackages(dir, pkgPattern string) (*modulePackages, error) {
+	cmd := exec.Command("go", "list", "-deps", "-f", listFormat, pkgPattern)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return nil, fmt.Errorf("go list: %w\noutput: %s", err, ee.Stderr)
+		}
+		return nil, fmt.Errorf("go list: %w", err)
+	}
+	m, err := parsePackageList(string(out))
+	if err != nil {
+		return nil, err
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		m.dir = abs
+	}
+	return m, nil
 }
 
 // buildArgs builds the go build argv. The baseline uses -pgo=off so a
@@ -294,16 +327,17 @@ func collectInlineSites(output string) map[string]bool {
 	return sites
 }
 
-// extraInlinesByOrigin counts PGO-only inline sites (present in pgo but not baseline),
-// split by origin: module (relative "./" paths) vs std/deps (absolute paths).
-func extraInlinesByOrigin(pgo, baseline map[string]bool) (module, deps int) {
+// extraInlinesByOrigin counts PGO-only inline sites (present in pgo but not
+// baseline), split into module vs std/deps.
+func extraInlinesByOrigin(pgo, baseline map[string]bool, mods *modulePackages) (module, deps int) {
 	for line := range pgo {
-		if !baseline[line] {
-			if strings.HasPrefix(line, "./") {
-				module++
-			} else {
-				deps++
-			}
+		if baseline[line] {
+			continue
+		}
+		if mods.isModuleSite(line) {
+			module++
+		} else {
+			deps++
 		}
 	}
 	return
