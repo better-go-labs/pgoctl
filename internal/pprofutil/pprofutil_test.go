@@ -88,3 +88,42 @@ func TestSampleCount(t *testing.T) {
 		})
 	}
 }
+
+func TestResolver_PackageOf(t *testing.T) {
+	r := NewResolver([]string{
+		"github.com/satori/go.uuid",
+		"github.com/nats-io/nats.go",
+		"example.com/m",
+		"example.com/m/sub",
+		"fmt",
+		"",
+	})
+	tests := []struct {
+		fn   string
+		want string
+	}{
+		{"github.com/satori/go.uuid.NewV4", "github.com/satori/go.uuid"},
+		{"github.com/nats-io/nats.go.(*Conn).Publish", "github.com/nats-io/nats.go"},
+		{"example.com/m/sub.Fn", "example.com/m/sub"}, // longest known prefix wins
+		{"example.com/m/sub.Map[go.shape.int]", "example.com/m/sub"},
+		{"example.com/m.Fn", "example.com/m"},
+		{"example.com/m/sub2.Fn", "example.com/m/sub2"}, // sibling name, not a prefix match
+		{"fmt.Sprintf", "fmt"},
+		{"example.com/m/unknown.Fn", "example.com/m/unknown"},     // not listed: heuristic
+		{"example.com/other/go.uuid.New", "example.com/other/go"}, // not listed: heuristic truncates
+		{"main.main", "main"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := r.PackageOf(tt.fn); got != tt.want {
+			t.Errorf("Resolver.PackageOf(%q) = %q, want %q", tt.fn, got, tt.want)
+		}
+	}
+}
+
+func TestResolver_NilFallsBack(t *testing.T) {
+	var r *Resolver
+	if got := r.PackageOf("gopkg.in/yaml.v3.Unmarshal"); got != "gopkg.in/yaml.v3" {
+		t.Errorf("nil Resolver.PackageOf = %q, want heuristic result", got)
+	}
+}

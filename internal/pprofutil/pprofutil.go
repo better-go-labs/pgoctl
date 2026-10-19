@@ -29,6 +29,36 @@ func PackageOf(fn string) string {
 	return fn
 }
 
+// Resolver maps pprof function names to import paths from a known package
+// set. A nil Resolver falls back to PackageOf.
+type Resolver struct {
+	paths map[string]bool
+}
+
+// NewResolver builds a Resolver from import paths, e.g. go list -deps output.
+func NewResolver(importPaths []string) *Resolver {
+	r := &Resolver{paths: make(map[string]bool, len(importPaths))}
+	for _, p := range importPaths {
+		if p != "" {
+			r.paths[p] = true
+		}
+	}
+	return r
+}
+
+// PackageOf returns the longest known import path that prefixes fn at a "."
+// boundary. Unknown names use the PackageOf heuristic.
+func (r *Resolver) PackageOf(fn string) string {
+	if r != nil {
+		for i := len(fn) - 1; i > 0; i-- {
+			if fn[i] == '.' && r.paths[fn[:i]] {
+				return fn[:i]
+			}
+		}
+	}
+	return PackageOf(fn)
+}
+
 // SampleCount sums the samples/count values. len(p.Sample) is the number of
 // unique stacks, not samples. Falls back to the row count without that type.
 func SampleCount(p *profile.Profile) int64 {
