@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -282,20 +283,13 @@ func listPackages(dir, pkgPattern string) (*modulePackages, error) {
 		}
 		return nil, fmt.Errorf("go list: %w", err)
 	}
-	m, err := parsePackageList(string(out))
-	if err != nil {
-		return nil, err
-	}
-	if abs, err := filepath.Abs(dir); err == nil {
-		m.dir = abs
-	}
-	return m, nil
+	return parsePackageList(string(out))
 }
 
-// buildArgs builds the go build argv. The baseline uses -pgo=off so a
-// default.pgo in the module is not silently picked up.
+// buildArgs builds the go build argv. -trimpath makes -m positions import-path based;
+// the baseline uses -pgo=off so a default.pgo is not picked up.
 func buildArgs(pkgPattern, profilePath string, withPGO bool) []string {
-	args := []string{"build", "-gcflags=all=-m=2", "-o", os.DevNull}
+	args := []string{"build", "-trimpath", "-gcflags=all=-m=2", "-o", os.DevNull}
 	if withPGO {
 		args = append(args, fmt.Sprintf("-pgo=%s", profilePath))
 	} else {
@@ -327,6 +321,9 @@ func matchingLines(output, pattern string) []string {
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		if !strings.Contains(strings.ToLower(line), want) {
+			continue
+		}
 		msg := line
 		if m := compilerMsg.FindStringSubmatch(line); m != nil {
 			msg = m[1]
@@ -387,31 +384,28 @@ func cpuSampleIndex(p *profile.Profile) (int, bool) {
 }
 
 // listFormat is the go list -f template parsed by parsePackageList.
-const listFormat = "{{.ImportPath}}\t{{.Dir}}\t{{if .Module}}{{.Module.Main}}\t{{.Module.Dir}}{{end}}"
+const listFormat = "{{.ImportPath}}\t{{if .Module}}{{.Module.Main}}{{end}}"
 
 // modulePackages is what go list -deps reports for the build target.
 type modulePackages struct {
 	importPaths []string
-	root        string          // main module directory
-	dir         string          // the --dir the build runs in
-	mainDirs    map[string]bool // package directories inside the main module
+	mainPaths   map[string]bool // import paths of main-module packages
 }
 
 // parsePackageList parses go list -deps -f listFormat output.
 func parsePackageList(out string) (*modulePackages, error) {
-	m := &modulePackages{mainDirs: make(map[string]bool)}
+	m := &modulePackages{mainPaths: make(map[string]bool)}
 	for _, line := range strings.Split(out, "\n") {
 		if line == "" {
 			continue
 		}
 		f := strings.Split(line, "\t")
-		if len(f) < 3 {
+		if len(f) != 2 {
 			return nil, fmt.Errorf("unexpected go list line: %q", line)
 		}
 		m.importPaths = append(m.importPaths, f[0])
-		if len(f) >= 4 && f[2] == "true" {
-			m.mainDirs[filepath.Clean(f[1])] = true
-			m.root = filepath.Clean(f[3])
+		if f[1] == "true" {
+			m.mainPaths[f[0]] = true
 		}
 	}
 	return m, nil
@@ -429,18 +423,11 @@ func sitePath(line string) string {
 }
 
 // isModuleSite reports whether a -m line names a file in a main-module
-// package. The compiler prints relative paths against the module root.
+// package. Builds use -trimpath, so the file is printed as importpath/file.go.
 func (m *modulePackages) isModuleSite(line string) bool {
 	if m == nil {
 		return false
 	}
 	file := sitePath(line)
-	if file == "" {
-		return false
-	}
-	if filepath.IsAbs(file) {
-		return m.mainDirs[filepath.Dir(file)]
-	}
-	return m.mainDirs[filepath.Dir(filepath.Join(m.root, file))] ||
-		m.mainDirs[filepath.Dir(filepath.Join(m.dir, file))]
+	return file != "" && m.mainPaths[path.Dir(filepath.ToSlash(file))]
 }

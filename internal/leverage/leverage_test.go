@@ -3,10 +3,8 @@ package leverage
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -859,15 +857,15 @@ func TestCollectInlineSites(t *testing.T) {
 // TestExtraInlinesByOrigin verifies module vs deps partitioning of the set diff.
 func TestExtraInlinesByOrigin(t *testing.T) {
 	pgo := map[string]bool{
-		"./foo.go:1:1: inlining call to bar.A":                                 true, // module, PGO-only
-		"./foo.go:2:2: inlining call to bar.B":                                 true, // module, also in baseline
-		"internal/sub/sub.go:7:28: inlining call to Small":                     true, // subpackage, PGO-only
-		"../../go/pkg/mod/github.com/x/y@v1/y.go:5:5: inlining call to Y":      true, // module cache, PGO-only
-		"/usr/local/go/src/runtime/malloc.go:6:6: inlining call to somethingB": true, // GOROOT, also in baseline
+		"example.com/m/foo.go:1:1: inlining call to bar.A":               true, // module, PGO-only
+		"example.com/m/foo.go:2:2: inlining call to bar.B":               true, // module, also in baseline
+		"example.com/m/internal/sub/sub.go:7:28: inlining call to Small": true, // subpackage, PGO-only
+		"github.com/x/y@v1/y.go:5:5: inlining call to Y":                 true, // module cache, PGO-only
+		"runtime/malloc.go:6:6: inlining call to somethingB":             true, // GOROOT, also in baseline
 	}
 	baseline := map[string]bool{
-		"./foo.go:2:2: inlining call to bar.B":                                 true,
-		"/usr/local/go/src/runtime/malloc.go:6:6: inlining call to somethingB": true,
+		"example.com/m/foo.go:2:2: inlining call to bar.B":   true,
+		"runtime/malloc.go:6:6: inlining call to somethingB": true,
 	}
 
 	module, deps := extraInlinesByOrigin(pgo, baseline, testMods())
@@ -875,17 +873,17 @@ func TestExtraInlinesByOrigin(t *testing.T) {
 		t.Errorf("module extra inlines = %d, want 2 (subpackage must count as module)", module)
 	}
 	if deps != 1 {
-		t.Errorf("deps extra inlines = %d, want 1 (..-relative module cache is a dependency)", deps)
+		t.Errorf("deps extra inlines = %d, want 1 (module cache path is a dependency)", deps)
 	}
 }
 
 func TestAnalyzeBuildOutput_InlineSplit(t *testing.T) {
 	pgo := strings.Join([]string{
-		"./main.go:1:1: inlining call to A",
-		"internal/sub/sub.go:2:2: inlining call to B",
-		"../../go/pkg/mod/github.com/x/y@v1/y.go:3:3: inlining call to C",
+		"example.com/m/main.go:1:1: inlining call to A",
+		"example.com/m/internal/sub/sub.go:2:2: inlining call to B",
+		"github.com/x/y@v1/y.go:3:3: inlining call to C",
 	}, "\n")
-	baseline := "./main.go:1:1: inlining call to A\n"
+	baseline := "example.com/m/main.go:1:1: inlining call to A\n"
 
 	ba := analyzeBuildOutput(pgo, baseline, testMods())
 	if ba.PGOExtraInlines != 1 || ba.PGOExtraInlinesDeps != 1 {
@@ -922,16 +920,6 @@ func dottedModule(t *testing.T) string {
 	})
 }
 
-// realPath resolves symlinks so macOS /var and /private/var compare equal.
-func realPath(t *testing.T, p string) string {
-	t.Helper()
-	r, err := filepath.EvalSymlinks(p)
-	if err != nil {
-		t.Fatalf("EvalSymlinks(%s): %v", p, err)
-	}
-	return r
-}
-
 func TestListPackages(t *testing.T) {
 	dir := dottedModule(t)
 	m, err := listPackages(dir, "./...")
@@ -948,20 +936,9 @@ func TestListPackages(t *testing.T) {
 			t.Errorf("import path %q is not plain (stderr leaked into stdout?)", p)
 		}
 	}
-	if got, want := realPath(t, m.root), realPath(t, dir); got != want {
-		t.Errorf("root = %q, want %q", got, want)
-	}
-	if got, want := realPath(t, m.dir), realPath(t, dir); got != want {
-		t.Errorf("dir = %q, want %q", got, want)
-	}
-	wantMain := map[string]bool{realPath(t, dir): true, realPath(t, filepath.Join(dir, "go.uuid")): true}
-	if len(m.mainDirs) != len(wantMain) {
-		t.Errorf("mainDirs = %v, want %v", m.mainDirs, wantMain)
-	}
-	for d := range m.mainDirs {
-		if !wantMain[realPath(t, d)] {
-			t.Errorf("unexpected main dir %q", d)
-		}
+	wantMain := map[string]bool{"example.com/m": true, "example.com/m/go.uuid": true}
+	if !reflect.DeepEqual(m.mainPaths, wantMain) {
+		t.Errorf("mainPaths = %v, want %v", m.mainPaths, wantMain)
 	}
 }
 
@@ -1085,6 +1062,9 @@ func TestBuildArgs(t *testing.T) {
 		if !strings.Contains(joined, "-o "+os.DevNull) {
 			t.Errorf("%s args %q: want -o %s", name, joined, os.DevNull)
 		}
+		if !slices.Contains(args, "-trimpath") {
+			t.Errorf("%s args %q: missing -trimpath", name, joined)
+		}
 		if args[len(args)-1] != "./cmd/app" {
 			t.Errorf("%s args %q: package pattern must be last", name, joined)
 		}
@@ -1097,25 +1077,20 @@ func TestBuildArgs(t *testing.T) {
 	}
 }
 
-// testMods is a fake go list result: module at /src/m with one subpackage.
+// testMods is a fake go list result: module example.com/m with one subpackage.
 func testMods() *modulePackages {
-	root := filepath.Clean("/src/m")
-	return &modulePackages{
-		root: root,
-		dir:  root,
-		mainDirs: map[string]bool{
-			root:                                   true,
-			filepath.Join(root, "internal", "sub"): true,
-		},
-	}
+	return &modulePackages{mainPaths: map[string]bool{
+		"example.com/m":              true,
+		"example.com/m/internal/sub": true,
+	}}
 }
 
 func TestParsePackageList(t *testing.T) {
 	out := strings.Join([]string{
-		"fmt\t/go/src/fmt\t",
-		"github.com/google/pprof/profile\t/home/u/go/pkg/mod/github.com/google/pprof@v1/profile\tfalse\t/home/u/go/pkg/mod/github.com/google/pprof@v1",
-		"example.com/m/internal/sub\t/src/m/internal/sub\ttrue\t/src/m",
-		"example.com/m\t/src/m\ttrue\t/src/m",
+		"fmt\t",
+		"github.com/google/pprof/profile\tfalse",
+		"example.com/m/internal/sub\ttrue",
+		"example.com/m\ttrue",
 		"",
 	}, "\n")
 
@@ -1127,11 +1102,9 @@ func TestParsePackageList(t *testing.T) {
 	if !slices.Equal(m.importPaths, wantPaths) {
 		t.Errorf("importPaths = %v, want %v", m.importPaths, wantPaths)
 	}
-	if m.root != filepath.Clean("/src/m") {
-		t.Errorf("root = %q, want /src/m", m.root)
-	}
-	if len(m.mainDirs) != 2 || !m.mainDirs[filepath.Clean("/src/m")] || !m.mainDirs[filepath.Clean("/src/m/internal/sub")] {
-		t.Errorf("mainDirs = %v, want /src/m and /src/m/internal/sub only", m.mainDirs)
+	wantMain := map[string]bool{"example.com/m": true, "example.com/m/internal/sub": true}
+	if !reflect.DeepEqual(m.mainPaths, wantMain) {
+		t.Errorf("mainPaths = %v, want %v", m.mainPaths, wantMain)
 	}
 }
 
@@ -1163,15 +1136,14 @@ func TestIsModuleSite(t *testing.T) {
 		line string
 		want bool
 	}{
-		{"./main.go:10:5: inlining call to foo.Bar", true},
-		{"internal/sub/sub.go:7:28: inlining call to Small", true},
-		{"/src/m/internal/sub/sub.go:7:28: inlining call to Small", true},
-		{"../../../../go/pkg/mod/github.com/x/y@v1.0.0/y.go:1:1: inlining call to Y", false},
-		{"../../../../go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/regexp/backtrack.go:216:22: PGO devirtualizing interface call i.step to (*inputString).step", false},
-		{"/usr/local/go/src/fmt/format.go:100:5: inlining call to fmt.Sprintf", false},
+		{"example.com/m/main.go:10:5: inlining call to foo.Bar", true},
+		{"example.com/m/internal/sub/sub.go:7:28: inlining call to Small", true},
+		{"example.com/m/internal/sub/sub.go:3:1: PGO devirtualizing interface call x.F to T.F", true},
+		{"example.com/m/internal/sub/deeper/d.go:1:1: inlining call to X", false}, // package not in the build graph
+		{"example.com/m/internal/other/o.go:1:1: inlining call to X", false},
+		{"github.com/x/y@v1.0.0/y.go:1:1: inlining call to Y", false},
+		{"runtime/proc.go:100:5: inlining call to fmt.Sprintf", false},
 		{"<autogenerated>:1: inlining call to (*File).Close", false},
-		{"vendor/github.com/x/y/y.go:1:1: inlining call to Y", false},
-		{"internal/other/o.go:1:1: inlining call to X", false}, // package not in the build graph
 		{"", false},
 	}
 	for _, tt := range tests {
@@ -1181,53 +1153,31 @@ func TestIsModuleSite(t *testing.T) {
 	}
 }
 
-func TestIsModuleSite_RelativeToDir(t *testing.T) {
-	// --dir points at a subdirectory; a line relative to that dir still resolves.
-	root := filepath.Clean("/src/m")
-	m := &modulePackages{
-		root:     root,
-		dir:      filepath.Join(root, "cmd", "app"),
-		mainDirs: map[string]bool{filepath.Join(root, "cmd", "app"): true},
-	}
-	if !m.isModuleSite("./main.go:1:1: inlining call to X") {
-		t.Error("line relative to --dir not recognised as module")
-	}
-}
-
 func TestIsModuleSite_NoMainModule(t *testing.T) {
-	m, err := parsePackageList("fmt\t/go/src/fmt\t\n")
+	m, err := parsePackageList("fmt\t\n")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.isModuleSite("./main.go:1:1: inlining call to X") {
+	if m.isModuleSite("example.com/m/main.go:1:1: inlining call to X") {
 		t.Error("with no main-module packages nothing may count as module")
 	}
 }
 
 func TestIsModuleSite_Nil(t *testing.T) {
 	var m *modulePackages
-	if m.isModuleSite("./main.go:1:1: inlining call to X") {
+	if m.isModuleSite("example.com/m/main.go:1:1: inlining call to X") {
 		t.Error("nil modulePackages must report false")
-	}
-}
-
-func TestIsModuleSite_WindowsPath(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("drive-letter paths only resolve on windows")
-	}
-	if testMods().isModuleSite(`C:\Go\src\fmt\print.go:1:1: inlining call to fmt.Sprintf`) {
-		t.Error("drive-letter path counted as module")
 	}
 }
 
 func TestAnalyzeBuildOutput_DevirtSplit(t *testing.T) {
 	pgo := strings.Join([]string{
-		"./main.go:12:9: PGO devirtualizing interface call s.Area to Sq.Area",
-		"internal/sub/sub.go:7:28: PGO devirtualizing interface call s.Area to Sq.Area",
-		"../../go/pkg/mod/github.com/google/pprof@v1/profile/proto.go:169:10: PGO devirtualizing interface call m.encode to (*Sample).encode",
-		"/usr/local/go/src/regexp/backtrack.go:216:22: PGO devirtualizing interface call i.step to (*inputString).step",
+		"example.com/m/main.go:12:9: PGO devirtualizing interface call s.Area to Sq.Area",
+		"example.com/m/internal/sub/sub.go:7:28: PGO devirtualizing interface call s.Area to Sq.Area",
+		"github.com/google/pprof@v1/profile/proto.go:169:10: PGO devirtualizing interface call m.encode to (*Sample).encode",
+		"regexp/backtrack.go:216:22: PGO devirtualizing interface call i.step to (*inputString).step",
 		"<autogenerated>:1: PGO devirtualizing interface call w.Write to (*File).Write",
-		"./main.go:20:3: devirtualizing s.String to S", // static, must not count
+		"example.com/m/main.go:20:3: devirtualizing s.String to S", // static, must not count
 	}, "\n")
 
 	ba := analyzeBuildOutput(pgo, "", testMods())
@@ -1246,7 +1196,7 @@ func TestAnalyzeBuildOutput_DevirtSplit(t *testing.T) {
 }
 
 func TestAnalyzeBuildOutput_DepsOnlyDevirtIsNone(t *testing.T) {
-	pgo := "../../go/pkg/mod/github.com/google/pprof@v1/profile/proto.go:169:10: PGO devirtualizing interface call m.encode to (*Sample).encode"
+	pgo := "github.com/google/pprof@v1/profile/proto.go:169:10: PGO devirtualizing interface call m.encode to (*Sample).encode"
 	ba := analyzeBuildOutput(pgo, "", testMods())
 	if ba.DevirtDecisions != 0 {
 		t.Fatalf("DevirtDecisions = %d, want 0", ba.DevirtDecisions)
@@ -1258,9 +1208,9 @@ func TestAnalyzeBuildOutput_DepsOnlyDevirtIsNone(t *testing.T) {
 
 func TestDevirtsByOrigin(t *testing.T) {
 	module, deps := devirtsByOrigin([]string{
-		"./a.go:1:1: PGO devirtualizing interface call x.F to T.F",
-		"internal/sub/b.go:1:1: PGO devirtualizing interface call x.F to T.F",
-		"/go/src/c.go:1:1: PGO devirtualizing interface call x.F to T.F",
+		"example.com/m/a.go:1:1: PGO devirtualizing interface call x.F to T.F",
+		"example.com/m/internal/sub/b.go:1:1: PGO devirtualizing interface call x.F to T.F",
+		"c/c.go:1:1: PGO devirtualizing interface call x.F to T.F",
 	}, testMods())
 	if module != 2 || deps != 1 {
 		t.Errorf("devirtsByOrigin = (%d, %d), want (2, 1)", module, deps)
@@ -1347,35 +1297,19 @@ func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
 		t.Errorf("devirt_sites len %d != pgo_devirts %d", len(ba.DevirtSites), ba.PGODevirts)
 	}
 
-	// Devirt sites under GOMODCACHE or GOROOT are dependencies by
+	// Devirt sites outside pgoctl's own import path are dependencies by
 	// construction and must never count toward the verdict.
-	out, err := exec.Command("go", "env", "GOMODCACHE", "GOROOT").Output()
-	if err != nil {
-		t.Fatalf("go env: %v", err)
-	}
-	envDirs := strings.Split(strings.TrimSpace(string(out)), "\n")
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatalf("abs repo root: %v", err)
-	}
 	knownDeps := 0
 	for _, s := range ba.DevirtSites {
-		f := sitePath(s)
-		if f == "" {
-			continue
+		if !strings.Contains(s, ": PGO devirtualizing ") {
+			t.Errorf("devirt site %q is not a PGO devirtualizing message", s)
 		}
-		if !filepath.IsAbs(f) {
-			f = filepath.Join(root, f)
-		}
-		for _, d := range envDirs {
-			if d != "" && strings.HasPrefix(filepath.Clean(f), filepath.Clean(d)+string(filepath.Separator)) {
-				knownDeps++
-				break
-			}
+		if f := sitePath(s); f != "" && !strings.HasPrefix(f, module) {
+			knownDeps++
 		}
 	}
 	if ba.PGODevirtsDeps < knownDeps {
-		t.Errorf("pgo_devirts_deps = %d, but %d devirt sites are in GOMODCACHE or GOROOT", ba.PGODevirtsDeps, knownDeps)
+		t.Errorf("pgo_devirts_deps = %d, but %d devirt sites are outside %s", ba.PGODevirtsDeps, knownDeps, module)
 	}
 
 	// pgoctl is a thin layer over google/pprof, so PGO always finds
@@ -1390,4 +1324,39 @@ func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
 	}
 	t.Logf("verdict=%s devirts=%d/%d extra_inlines=%d/%d", rpt.Verdict,
 		ba.DevirtDecisions, ba.PGODevirts, ba.PGOExtraInlines, ba.PGOExtraInlines+ba.PGOExtraInlinesDeps)
+}
+
+// TestModuleSites_IndependentOfDirAndCache builds the same target from a
+// subdirectory and then from the module root on one build cache. The second
+// build replays cached -m output, so classification must not depend on cwd.
+func TestModuleSites_IndependentOfDirAndCache(t *testing.T) {
+	t.Setenv("GOCACHE", t.TempDir())
+	root := writeTestModule(t, map[string]string{
+		"go.mod":              "module example.com/p\n\ngo 1.21\n",
+		"internal/sub/sub.go": "package sub\n\nfunc Small() int { return 1 }\n\nfunc Use() int { return Small() + 1 }\n",
+		"cmd/app/main.go":     "package main\n\nimport \"example.com/p/internal/sub\"\n\nfunc main() { println(sub.Use()) }\n",
+	})
+	moduleSites := func(dir, pkg string) int {
+		t.Helper()
+		mods, err := listPackages(dir, pkg)
+		if err != nil {
+			t.Fatalf("listPackages(%s): %v", dir, err)
+		}
+		out, err := runBuild(dir, pkg, "", false)
+		if err != nil {
+			t.Fatalf("runBuild(%s): %v", dir, err)
+		}
+		n := 0
+		for _, l := range matchingLines(out, "inlining call") {
+			if mods.isModuleSite(l) {
+				n++
+			}
+		}
+		return n
+	}
+	fromSub := moduleSites(filepath.Join(root, "cmd", "app"), ".")
+	fromRoot := moduleSites(root, "./cmd/app")
+	if fromSub == 0 || fromSub != fromRoot {
+		t.Errorf("module inline sites: from cmd/app = %d, from root = %d; want equal and > 0", fromSub, fromRoot)
+	}
 }
