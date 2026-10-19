@@ -36,6 +36,14 @@ linters:
       - linters: [gosec]
         path: "_test\\.go"
         text: "G204:"
+      # leverage-check runs the fixed "go" binary without a shell; only the package pattern varies
+      - linters: [gosec]
+        path: "internal/leverage/"
+        text: "G204:"
+      # tests and benchmarks read fixture paths from env vars they control
+      - linters: [gosec]
+        path: "_test\\.go"
+        text: "G703:"
       # loadgen uses math/rand for synthetic metric noise; crypto-safe random is not needed
       - linters: [gosec]
         path: "hack/loadgen/"
