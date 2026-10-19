@@ -42,12 +42,13 @@ type FunctionEntry struct {
 
 // BuildAnalysis holds the raw counts from comparing a PGO build against a baseline build.
 type BuildAnalysis struct {
-	DevirtDecisions     int      `json:"devirt_decisions"`
+	DevirtDecisions     int      `json:"devirt_decisions"`       // module-scoped PGO devirts (verdict-driving)
 	PGOExtraInlines     int      `json:"pgo_extra_inlines"`      // module-scoped set diff (verdict-driving)
 	PGOExtraInlinesDeps int      `json:"pgo_extra_inlines_deps"` // std/deps set diff (informational)
 	BaselineInlines     int      `json:"baseline_inlines"`
 	PGOInlines          int      `json:"pgo_inlines"`
-	PGODevirts          int      `json:"pgo_devirts"`
+	PGODevirts          int      `json:"pgo_devirts"`      // all PGO devirts, module + std/deps (informational)
+	PGODevirtsDeps      int      `json:"pgo_devirts_deps"` // std/deps PGO devirts (informational)
 	DevirtSites         []string `json:"devirt_sites,omitempty"`
 }
 
@@ -70,7 +71,7 @@ type Options struct {
 }
 
 // CheckFile parses the pprof at profilePath, identifies hot functions, and optionally
-// runs a PGO build (when opts.Dir is set) to count devirtualization and extra-inline decisions.
+// runs a PGO build (when opts.Dir is set) to count module-scoped devirtualization and extra-inline decisions.
 func CheckFile(profilePath string, opts Options) (*Report, error) {
 	data, err := os.ReadFile(profilePath)
 	if err != nil {
@@ -229,7 +230,7 @@ func analyzeBuildOutput(pgoOutput, baselineOutput string, mods *modulePackages) 
 	// Only the PGO-specific marker; plain "devirtualizing" is static and
 	// appears in both builds regardless of the profile.
 	devirtSites := matchingLines(pgoOutput, "pgo devirtualizing")
-	pgoDevirts := len(devirtSites)
+	moduleDevirts, depsDevirts := devirtsByOrigin(devirtSites, mods)
 
 	pgoInlines := countLines(pgoOutput, "inlining call")
 	baselineInlines := countLines(baselineOutput, "inlining call")
@@ -241,14 +242,27 @@ func analyzeBuildOutput(pgoOutput, baselineOutput string, mods *modulePackages) 
 	moduleExtra, depsExtra := extraInlinesByOrigin(pgoSites, baselineSites, mods)
 
 	return &BuildAnalysis{
-		DevirtDecisions:     pgoDevirts,
+		DevirtDecisions:     moduleDevirts,
 		PGOExtraInlines:     moduleExtra,
 		PGOExtraInlinesDeps: depsExtra,
 		BaselineInlines:     baselineInlines,
 		PGOInlines:          pgoInlines,
-		PGODevirts:          pgoDevirts,
+		PGODevirts:          moduleDevirts + depsDevirts,
+		PGODevirtsDeps:      depsDevirts,
 		DevirtSites:         devirtSites,
 	}
+}
+
+// devirtsByOrigin splits PGO devirt sites into module vs std/deps.
+func devirtsByOrigin(sites []string, mods *modulePackages) (module, deps int) {
+	for _, s := range sites {
+		if mods.isModuleSite(s) {
+			module++
+		} else {
+			deps++
+		}
+	}
+	return
 }
 
 // listPackages runs go list -deps for pkgPattern inside dir.
