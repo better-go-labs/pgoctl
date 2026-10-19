@@ -894,7 +894,6 @@ func TestAnalyzeBuildOutput_InlineSplit(t *testing.T) {
 	}
 }
 
-// writeTestModule writes files into a fresh temp dir and returns it.
 func writeTestModule(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -910,7 +909,7 @@ func writeTestModule(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-// dottedModule is a module whose only subpackage has a dot in its last path element.
+// The dotted subpackage is exactly what the PackageOf heuristic truncates.
 func dottedModule(t *testing.T) string {
 	t.Helper()
 	return writeTestModule(t, map[string]string{
@@ -948,7 +947,6 @@ func TestListPackages_BadDir(t *testing.T) {
 	}
 }
 
-// makeProfileWithFunctions writes a pprof with one sample per named function.
 func makeProfileWithFunctions(t *testing.T, names ...string) string {
 	t.Helper()
 	p := &profile.Profile{
@@ -995,7 +993,6 @@ func TestCheckFile_WithDir_ResolvesDottedPackage(t *testing.T) {
 	}
 }
 
-// makeManyFunctionProfile writes a pprof with n hot functions, one sample each.
 func makeManyFunctionProfile(t *testing.T, n int) string {
 	t.Helper()
 	names := make([]string, n)
@@ -1077,7 +1074,6 @@ func TestBuildArgs(t *testing.T) {
 	}
 }
 
-// testMods is a fake go list result: module example.com/m with one subpackage.
 func testMods() *modulePackages {
 	return &modulePackages{mainPaths: map[string]bool{
 		"example.com/m":              true,
@@ -1237,8 +1233,7 @@ func TestMatchingLines_IgnoresQuotedSource(t *testing.T) {
 	}
 }
 
-// TestCheckFile_PgoctlSelfProfile runs --dir analysis on a profile of pgoctl itself.
-// Counts vary per capture and Go version, so it checks invariants only.
+// Counts vary per capture and Go version, so only invariants are asserted.
 func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds ./cmd/pgoctl twice with -gcflags=all=-m=2")
@@ -1267,8 +1262,6 @@ func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
 		t.Fatal("BuildAnalysis is nil with --dir set")
 	}
 
-	// Packages come from go list: every pgoctl function resolves to a full
-	// import path, and every entry's package is a prefix of its function.
 	const module = "github.com/Better-Go-Labs/pgoctl/"
 	pgoctlEntries := 0
 	for _, e := range rpt.TopFunctions {
@@ -1286,7 +1279,6 @@ func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
 		t.Error("no pgoctl functions in the profile; recapture with scripts/capture-pgoctl-profile.sh")
 	}
 
-	// Totals are consistent with the module/deps split.
 	if ba.PGODevirts != ba.DevirtDecisions+ba.PGODevirtsDeps {
 		t.Errorf("pgo_devirts %d != devirt_decisions %d + pgo_devirts_deps %d",
 			ba.PGODevirts, ba.DevirtDecisions, ba.PGODevirtsDeps)
@@ -1324,8 +1316,7 @@ func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
 		ba.DevirtDecisions, ba.PGODevirts, ba.PGOExtraInlines, ba.PGOExtraInlines+ba.PGOExtraInlinesDeps)
 }
 
-// TestModuleSites_IndependentOfDirAndCache builds one target from two dirs on one
-// cache; the second build replays cached -m output, so results must match.
+// Cached -m output once replayed cwd-relative paths, flipping the verdict by --dir.
 func TestModuleSites_IndependentOfDirAndCache(t *testing.T) {
 	t.Setenv("GOCACHE", t.TempDir())
 	root := writeTestModule(t, map[string]string{

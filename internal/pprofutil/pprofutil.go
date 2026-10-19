@@ -29,13 +29,13 @@ func PackageOf(fn string) string {
 	return fn
 }
 
-// Resolver maps pprof function names to import paths from a known package
-// set. A nil Resolver falls back to PackageOf.
+// Resolver exists because a name alone cannot tell go.uuid from a method;
+// a nil Resolver falls back to PackageOf.
 type Resolver struct {
 	paths map[string]bool
 }
 
-// NewResolver builds a Resolver from import paths, e.g. go list -deps output.
+// NewResolver drops empty paths so a name starting with "." never matches.
 func NewResolver(importPaths []string) *Resolver {
 	r := &Resolver{paths: make(map[string]bool, len(importPaths))}
 	for _, p := range importPaths {
@@ -46,8 +46,7 @@ func NewResolver(importPaths []string) *Resolver {
 	return r
 }
 
-// PackageOf returns the longest known import path that prefixes fn at a "."
-// boundary. Unknown names use the PackageOf heuristic.
+// PackageOf scans from the right so the longest known import path wins.
 func (r *Resolver) PackageOf(fn string) string {
 	if r != nil {
 		for i := len(fn) - 1; i > 0; i-- {
