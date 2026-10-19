@@ -127,3 +127,10 @@ func TestResolver_NilFallsBack(t *testing.T) {
 		t.Errorf("nil Resolver.PackageOf = %q, want heuristic result", got)
 	}
 }
+
+func TestResolver_LongestOfTwoDottedCandidates(t *testing.T) {
+	r := NewResolver([]string{"example.com/x/go", "example.com/x/go.uuid"})
+	if got := r.PackageOf("example.com/x/go.uuid.New"); got != "example.com/x/go.uuid" {
+		t.Errorf("PackageOf = %q, want example.com/x/go.uuid (longest known prefix)", got)
+	}
+}
