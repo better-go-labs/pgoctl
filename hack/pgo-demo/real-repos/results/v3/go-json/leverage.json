@@ -1,0 +1,141 @@
+{
+  "profile_path": "/tmp/pgo-eval/go-json/profile.pprof",
+  "total_samples": 2127,
+  "top_functions": [
+    {
+      "function": "github.com/goccy/go-json/internal/encoder/vm.Run",
+      "package": "github.com/goccy/go-json/internal/encoder/vm",
+      "flat_pct": 6.52,
+      "cum_pct": 27.49
+    },
+    {
+      "function": "runtime.asyncPreempt",
+      "package": "runtime",
+      "flat_pct": 6.03,
+      "cum_pct": 6.03
+    },
+    {
+      "function": "runtime.memclrNoHeapPointers",
+      "package": "runtime",
+      "flat_pct": 5.09,
+      "cum_pct": 5.09
+    },
+    {
+      "function": "runtime.mallocgcSmallScanNoHeader",
+      "package": "runtime",
+      "flat_pct": 4.34,
+      "cum_pct": 24.25
+    },
+    {
+      "function": "runtime.memmove",
+      "package": "runtime",
+      "flat_pct": 3.21,
+      "cum_pct": 3.21
+    },
+    {
+      "function": "runtime.(*mspan).writeHeapBitsSmall",
+      "package": "runtime",
+      "flat_pct": 3.08,
+      "cum_pct": 3.57
+    },
+    {
+      "function": "runtime.nextFreeFast",
+      "package": "runtime",
+      "flat_pct": 3.01,
+      "cum_pct": 3.01
+    },
+    {
+      "function": "runtime.mallocgc",
+      "package": "runtime",
+      "flat_pct": 2.79,
+      "cum_pct": 31.7
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/decoder.decodeKeyByBitmapUint8",
+      "package": "github.com/goccy/go-json/internal/decoder",
+      "flat_pct": 2.46,
+      "cum_pct": 3.5
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/decoder.(*sliceDecoder).Decode",
+      "package": "github.com/goccy/go-json/internal/decoder",
+      "flat_pct": 2.07,
+      "cum_pct": 19.45
+    },
+    {
+      "function": "runtime.(*mspan).base",
+      "package": "runtime",
+      "flat_pct": 2.04,
+      "cum_pct": 2.04
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/encoder.appendNormalizedHTMLString",
+      "package": "github.com/goccy/go-json/internal/encoder",
+      "flat_pct": 2.01,
+      "cum_pct": 2.43
+    },
+    {
+      "function": "runtime.findObject",
+      "package": "runtime",
+      "flat_pct": 2.01,
+      "cum_pct": 4.08
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/decoder.(*stringDecoder).Decode",
+      "package": "github.com/goccy/go-json/internal/decoder",
+      "flat_pct": 1.88,
+      "cum_pct": 5.38
+    },
+    {
+      "function": "runtime.typePointers.next",
+      "package": "runtime",
+      "flat_pct": 1.65,
+      "cum_pct": 2.04
+    },
+    {
+      "function": "runtime.bulkBarrierPreWrite",
+      "package": "runtime",
+      "flat_pct": 1.62,
+      "cum_pct": 4.6
+    },
+    {
+      "function": "runtime.wbBufFlush1",
+      "package": "runtime",
+      "flat_pct": 1.49,
+      "cum_pct": 5.67
+    },
+    {
+      "function": "gcWriteBarrier",
+      "package": "gcWriteBarrier",
+      "flat_pct": 1.36,
+      "cum_pct": 5.32
+    },
+    {
+      "function": "runtime.scanobject",
+      "package": "runtime",
+      "flat_pct": 1.26,
+      "cum_pct": 3.44
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/decoder.(*stringDecoder).decodeByte",
+      "package": "github.com/goccy/go-json/internal/decoder",
+      "flat_pct": 1.17,
+      "cum_pct": 1.39
+    }
+  ],
+  "hot_interfaces": [
+    "runtime.(*mspan).writeHeapBitsSmall",
+    "github.com/goccy/go-json/internal/decoder.(*sliceDecoder).Decode",
+    "runtime.(*mspan).base",
+    "github.com/goccy/go-json/internal/decoder.(*stringDecoder).Decode",
+    "github.com/goccy/go-json/internal/decoder.(*stringDecoder).decodeByte"
+  ],
+  "build_analysis": {
+    "devirt_decisions": 24,
+    "pgo_extra_inlines": 1113,
+    "baseline_inlines": 29925,
+    "pgo_inlines": 31038
+  },
+  "verdict": "HIGH",
+  "verdict_reason": "HIGH: strong PGO leverage — 24 devirtualization decision(s), 1113 extra inline(s) with PGO; run a full benchmark cycle"
+}

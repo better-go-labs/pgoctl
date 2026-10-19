@@ -1,0 +1,27 @@
+verdict        INCOMPLETE
+total_samples  1249
+
+INCOMPLETE: no build analysis run; use --dir to measure PGO-specific compiler decisions
+
+── Top functions by flat CPU share ──
+rank  function                              flat%
+1     github.com/golang/snappy.decode       25.36
+2     runtime.memclrNoHeapPointers          11.70
+3     github.com/golang/snappy.encodeBlock  11.19
+4     runtime.madvise                       5.85
+5     runtime.typePointers.next             5.56
+6     runtime.futex                         4.03
+7     runtime.scanObject                    3.60
+8     runtime.scanblock                     3.18
+9     runtime.tgkill                        2.05
+10    runtime.lock2                         1.07
+11    runtime.tryDeferToSpanScan            0.93
+12    runtime.unlock2                       0.91
+13    runtime.nanotime                      0.87
+14    runtime.memmove                       0.82
+15    runtime.typePointers.nextFast         0.78
+16    runtime.scanObjectsSmall              0.76
+17    runtime.pcvalue                       0.67
+18    runtime.osyield                       0.65
+19    encoding/binary.PutUvarint            0.49
+20    runtime.step                          0.49

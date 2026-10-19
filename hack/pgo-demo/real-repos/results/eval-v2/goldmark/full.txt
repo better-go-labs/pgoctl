@@ -1,0 +1,40 @@
+verdict            NONE
+total_samples      4091
+devirt_decisions   0
+pgo_extra_inlines  0
+
+NONE: 0 PGO-specific compiler decisions — no codegen lever for this hot path; top hot function github.com/yuin/goldmark/parser.(*parser).parseBlock
+
+── Top functions by flat CPU share ──
+rank  function                                                       flat%
+1     github.com/yuin/goldmark/parser.(*parser).parseBlock           5.21
+2     github.com/yuin/goldmark/parser.(*parser).openBlocks           3.61
+3     github.com/yuin/goldmark/renderer.(*renderer).Render.func2     3.15
+4     runtime.memclrNoHeapPointers                                   3.12
+5     github.com/yuin/goldmark/ast.(*BaseNode).AppendChild           2.82
+6     runtime.tryDeferToSpanScan                                     2.56
+7     runtime.asyncPreempt                                           2.33
+8     runtime.scanObject                                             1.78
+9     github.com/yuin/goldmark/extension.(*linkifyParser).Parse      1.58
+10    runtime.typePointers.next                                      1.42
+11    runtime.(*mspan).writeHeapBitsSmall                            1.40
+12    runtime.madvise                                                1.34
+13    runtime.mallocgcSmallScanNoHeader                              1.34
+14    runtime.nextFreeFast                                           1.32
+15    github.com/yuin/goldmark/ast.walkHelper                        1.29
+16    runtime.futex                                                  1.25
+17    github.com/yuin/goldmark/parser.(*parser).parseBlocks          1.24
+18    github.com/yuin/goldmark/renderer/html.(*defaultWriter).Write  1.24
+19    github.com/yuin/goldmark/ast.(*BaseNode).RemoveChild           1.19
+20    runtime.scanObjectsSmall                                       1.19
+
+── Detected interface method calls in hot functions ──
+github.com/yuin/goldmark/parser.(*parser).parseBlock
+github.com/yuin/goldmark/parser.(*parser).openBlocks
+github.com/yuin/goldmark/renderer.(*renderer).Render.func2
+github.com/yuin/goldmark/ast.(*BaseNode).AppendChild
+github.com/yuin/goldmark/extension.(*linkifyParser).Parse
+runtime.(*mspan).writeHeapBitsSmall
+github.com/yuin/goldmark/parser.(*parser).parseBlocks
+github.com/yuin/goldmark/renderer/html.(*defaultWriter).Write
+github.com/yuin/goldmark/ast.(*BaseNode).RemoveChild

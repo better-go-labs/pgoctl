@@ -1,0 +1,134 @@
+{
+  "profile_path": "/tmp/pgo-eval/snappy/profile_new.pprof",
+  "total_samples": 610,
+  "top_functions": [
+    {
+      "function": "runtime.memclrNoHeapPointers",
+      "package": "runtime",
+      "flat_pct": 30,
+      "cum_pct": 30
+    },
+    {
+      "function": "github.com/golang/snappy.decode",
+      "package": "github.com/golang/snappy",
+      "flat_pct": 13.36,
+      "cum_pct": 13.36
+    },
+    {
+      "function": "github.com/golang/snappy.encodeBlock",
+      "package": "github.com/golang/snappy",
+      "flat_pct": 8.52,
+      "cum_pct": 8.65
+    },
+    {
+      "function": "runtime.madvise",
+      "package": "runtime",
+      "flat_pct": 7.26,
+      "cum_pct": 7.26
+    },
+    {
+      "function": "runtime.scanobject",
+      "package": "runtime",
+      "flat_pct": 4.58,
+      "cum_pct": 11.15
+    },
+    {
+      "function": "runtime.typePointers.next",
+      "package": "runtime",
+      "flat_pct": 3.8,
+      "cum_pct": 4.76
+    },
+    {
+      "function": "runtime.futex",
+      "package": "runtime",
+      "flat_pct": 3.42,
+      "cum_pct": 3.42
+    },
+    {
+      "function": "runtime.unlock2",
+      "package": "runtime",
+      "flat_pct": 2.94,
+      "cum_pct": 3.33
+    },
+    {
+      "function": "runtime.lock2",
+      "package": "runtime",
+      "flat_pct": 2.72,
+      "cum_pct": 3.2
+    },
+    {
+      "function": "runtime.scanblock",
+      "package": "runtime",
+      "flat_pct": 2.72,
+      "cum_pct": 3.24
+    },
+    {
+      "function": "runtime.tgkill",
+      "package": "runtime",
+      "flat_pct": 2.16,
+      "cum_pct": 2.16
+    },
+    {
+      "function": "runtime.nanotime",
+      "package": "runtime",
+      "flat_pct": 0.91,
+      "cum_pct": 0.91
+    },
+    {
+      "function": "runtime.osyield",
+      "package": "runtime",
+      "flat_pct": 0.91,
+      "cum_pct": 0.91
+    },
+    {
+      "function": "runtime.findObject",
+      "package": "runtime",
+      "flat_pct": 0.78,
+      "cum_pct": 1.3
+    },
+    {
+      "function": "runtime.typePointers.nextFast",
+      "package": "runtime",
+      "flat_pct": 0.65,
+      "cum_pct": 0.65
+    },
+    {
+      "function": "runtime.newArenaMayUnlock",
+      "package": "runtime",
+      "flat_pct": 0.56,
+      "cum_pct": 0.56
+    },
+    {
+      "function": "runtime.sweepone",
+      "package": "runtime",
+      "flat_pct": 0.56,
+      "cum_pct": 2.38
+    },
+    {
+      "function": "runtime.getpid",
+      "package": "runtime",
+      "flat_pct": 0.43,
+      "cum_pct": 0.43
+    },
+    {
+      "function": "runtime.spanOf",
+      "package": "runtime",
+      "flat_pct": 0.43,
+      "cum_pct": 0.48
+    },
+    {
+      "function": "runtime.step",
+      "package": "runtime",
+      "flat_pct": 0.43,
+      "cum_pct": 0.48
+    }
+  ],
+  "build_analysis": {
+    "devirt_decisions": 7,
+    "pgo_extra_inlines": 1164,
+    "baseline_inlines": 18186,
+    "pgo_inlines": 19350
+  },
+  "verdict": "HIGH",
+  "verdict_reason": "HIGH: strong PGO leverage — 7 devirtualization decision(s), 1164 extra inline(s) with PGO; run a full benchmark cycle"
+}

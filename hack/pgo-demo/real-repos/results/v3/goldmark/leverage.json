@@ -1,0 +1,144 @@
+{
+  "profile_path": "/tmp/pgo-eval/goldmark/profile_new.pprof",
+  "total_samples": 1154,
+  "top_functions": [
+    {
+      "function": "runtime.asyncPreempt",
+      "package": "runtime",
+      "flat_pct": 9.74,
+      "cum_pct": 9.74
+    },
+    {
+      "function": "runtime.memclrNoHeapPointers",
+      "package": "runtime",
+      "flat_pct": 5.02,
+      "cum_pct": 5.02
+    },
+    {
+      "function": "github.com/yuin/goldmark/ast.(*BaseNode).AppendChild",
+      "package": "github.com/yuin/goldmark/ast",
+      "flat_pct": 4.49,
+      "cum_pct": 9.59
+    },
+    {
+      "function": "github.com/yuin/goldmark/renderer.(*renderer).Render.func2",
+      "package": "github.com/yuin/goldmark/renderer",
+      "flat_pct": 3.42,
+      "cum_pct": 17.12
+    },
+    {
+      "function": "github.com/yuin/goldmark/parser.(*parser).openBlocks",
+      "package": "github.com/yuin/goldmark/parser",
+      "flat_pct": 3.35,
+      "cum_pct": 19.86
+    },
+    {
+      "function": "github.com/yuin/goldmark/parser.(*parser).parseBlock",
+      "package": "github.com/yuin/goldmark/parser",
+      "flat_pct": 3.2,
+      "cum_pct": 33.71
+    },
+    {
+      "function": "github.com/yuin/goldmark/ast.walkHelper",
+      "package": "github.com/yuin/goldmark/ast",
+      "flat_pct": 1.9,
+      "cum_pct": 20.02
+    },
+    {
+      "function": "runtime.(*mspan).base",
+      "package": "runtime",
+      "flat_pct": 1.9,
+      "cum_pct": 1.9
+    },
+    {
+      "function": "runtime.mallocgcSmallScanNoHeader",
+      "package": "runtime",
+      "flat_pct": 1.83,
+      "cum_pct": 14.92
+    },
+    {
+      "function": "runtime.scanobject",
+      "package": "runtime",
+      "flat_pct": 1.67,
+      "cum_pct": 3.88
+    },
+    {
+      "function": "runtime.nextFreeFast",
+      "package": "runtime",
+      "flat_pct": 1.52,
+      "cum_pct": 1.52
+    },
+    {
+      "function": "github.com/yuin/goldmark/ast.(*BaseNode).RemoveChild",
+      "package": "github.com/yuin/goldmark/ast",
+      "flat_pct": 1.37,
+      "cum_pct": 2.74
+    },
+    {
+      "function": "runtime.findObject",
+      "package": "runtime",
+      "flat_pct": 1.37,
+      "cum_pct": 3.81
+    },
+    {
+      "function": "runtime.spanOf",
+      "package": "runtime",
+      "flat_pct": 1.29,
+      "cum_pct": 1.37
+    },
+    {
+      "function": "gcWriteBarrier",
+      "package": "gcWriteBarrier",
+      "flat_pct": 1.22,
+      "cum_pct": 5.71
+    },
+    {
+      "function": "runtime.(*mspan).writeHeapBitsSmall",
+      "package": "runtime",
+      "flat_pct": 1.22,
+      "cum_pct": 1.29
+    },
+    {
+      "function": "runtime.memmove",
+      "package": "runtime",
+      "flat_pct": 1.14,
+      "cum_pct": 1.14
+    },
+    {
+      "function": "github.com/yuin/goldmark/parser.(*parser).closeBlocks",
+      "package": "github.com/yuin/goldmark/parser",
+      "flat_pct": 0.99,
+      "cum_pct": 9.82
+    },
+    {
+      "function": "runtime.growslice",
+      "package": "runtime",
+      "flat_pct": 0.99,
+      "cum_pct": 5.02
+    },
+    {
+      "function": "runtime.unlock2",
+      "package": "runtime",
+      "flat_pct": 0.99,
+      "cum_pct": 1.07
+    }
+  ],
+  "hot_interfaces": [
+    "github.com/yuin/goldmark/ast.(*BaseNode).AppendChild",
+    "github.com/yuin/goldmark/renderer.(*renderer).Render.func2",
+    "github.com/yuin/goldmark/parser.(*parser).openBlocks",
+    "github.com/yuin/goldmark/parser.(*parser).parseBlock",
+    "runtime.(*mspan).base",
+    "github.com/yuin/goldmark/ast.(*BaseNode).RemoveChild",
+    "runtime.(*mspan).writeHeapBitsSmall",
+    "github.com/yuin/goldmark/parser.(*parser).closeBlocks"
+  ],
+  "build_analysis": {
+    "devirt_decisions": 65,
+    "pgo_extra_inlines": 1022,
+    "baseline_inlines": 22787,
+    "pgo_inlines": 23809
+  },
+  "verdict": "HIGH",
+  "verdict_reason": "HIGH: strong PGO leverage — 65 devirtualization decision(s), 1022 extra inline(s) with PGO; run a full benchmark cycle"
+}
