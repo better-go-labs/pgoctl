@@ -63,11 +63,25 @@ jobs:
           cat /tmp/ctrl-leverage.json
 
       - name: "Ctrl | Report"
-        env:
-          TARGET_NAME: "positive-control (interface dispatch)"
-          LEVERAGE_JSON: /tmp/ctrl-leverage.json
-          REPORT_OUT: /tmp/ctrl-report.md
-        run: python3 scripts/pgo-leverage/report.py
+        shell: bash
+        run: |
+          VERDICT=$(jq -r '.verdict // "INCOMPLETE"' /tmp/ctrl-leverage.json)
+          REASON=$(jq -r '.verdict_reason // ""' /tmp/ctrl-leverage.json)
+          SAMPLES=$(jq -r '.total_samples // 0' /tmp/ctrl-leverage.json)
+          DEVIRT=$(jq -r '.build_analysis.devirt_decisions // "-"' /tmp/ctrl-leverage.json)
+          INLINES=$(jq -r '.build_analysis.pgo_extra_inlines // "-"' /tmp/ctrl-leverage.json)
+          {
+            echo "### PGO Leverage: \`${VERDICT}\`"
+            echo ""
+            echo "> **Target:** \`positive-control (interface dispatch)\`  "
+            echo "> **Samples:** ${SAMPLES}"
+            echo ""
+            [ -n "${REASON}" ] && echo "${REASON}" && echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| PGO devirt decisions | \`${DEVIRT}\` |"
+            echo "| PGO extra inlines | \`${INLINES}\` |"
+          } | tee /tmp/ctrl-report.md
 
       - name: "Ctrl | Job summary"
         run: |
@@ -124,11 +138,25 @@ jobs:
           cat /tmp/prom-leverage.json
 
       - name: "Prometheus | Generate leverage report"
-        env:
-          TARGET_NAME: "prometheus/prometheus"
-          LEVERAGE_JSON: /tmp/prom-leverage.json
-          REPORT_OUT: /tmp/prom-leverage-report.md
-        run: python3 scripts/pgo-leverage/report.py
+        shell: bash
+        run: |
+          VERDICT=$(jq -r '.verdict // "INCOMPLETE"' /tmp/prom-leverage.json)
+          REASON=$(jq -r '.verdict_reason // ""' /tmp/prom-leverage.json)
+          SAMPLES=$(jq -r '.total_samples // 0' /tmp/prom-leverage.json)
+          DEVIRT=$(jq -r '.build_analysis.devirt_decisions // "-"' /tmp/prom-leverage.json)
+          INLINES=$(jq -r '.build_analysis.pgo_extra_inlines // "-"' /tmp/prom-leverage.json)
+          {
+            echo "### PGO Leverage: \`${VERDICT}\`"
+            echo ""
+            echo "> **Target:** \`prometheus/prometheus\`  "
+            echo "> **Samples:** ${SAMPLES}"
+            echo ""
+            [ -n "${REASON}" ] && echo "${REASON}" && echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| PGO devirt decisions | \`${DEVIRT}\` |"
+            echo "| PGO extra inlines | \`${INLINES}\` |"
+          } | tee /tmp/prom-leverage-report.md
 
       - name: "Prometheus | Job summary"
         run: |
@@ -231,11 +259,25 @@ jobs:
           cat /tmp/nats-leverage.json
 
       - name: "nats-server | Generate leverage report"
-        env:
-          TARGET_NAME: "nats-io/nats-server"
-          LEVERAGE_JSON: /tmp/nats-leverage.json
-          REPORT_OUT: /tmp/nats-leverage-report.md
-        run: python3 scripts/pgo-leverage/report.py
+        shell: bash
+        run: |
+          VERDICT=$(jq -r '.verdict // "INCOMPLETE"' /tmp/nats-leverage.json)
+          REASON=$(jq -r '.verdict_reason // ""' /tmp/nats-leverage.json)
+          SAMPLES=$(jq -r '.total_samples // 0' /tmp/nats-leverage.json)
+          DEVIRT=$(jq -r '.build_analysis.devirt_decisions // "-"' /tmp/nats-leverage.json)
+          INLINES=$(jq -r '.build_analysis.pgo_extra_inlines // "-"' /tmp/nats-leverage.json)
+          {
+            echo "### PGO Leverage: \`${VERDICT}\`"
+            echo ""
+            echo "> **Target:** \`nats-io/nats-server\`  "
+            echo "> **Samples:** ${SAMPLES}"
+            echo ""
+            [ -n "${REASON}" ] && echo "${REASON}" && echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| PGO devirt decisions | \`${DEVIRT}\` |"
+            echo "| PGO extra inlines | \`${INLINES}\` |"
+          } | tee /tmp/nats-leverage-report.md
 
       - name: "nats-server | Job summary"
         run: |

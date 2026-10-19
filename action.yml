@@ -236,35 +236,36 @@ runs:
       shell: bash
       run: |
         set +e
-        TARGET="${{ inputs.leverage-probe-target }}"
-        SCRIPT_DIR="${{ github.action_path }}/scripts/pgo-leverage"
+        echo "=== PGO leverage probe ==="
 
-        echo "=== PGO leverage probe: $TARGET ==="
-
-        # Run pgoctl leverage-check with --dir for build analysis
-        pgoctl leverage-check --dir . --format json --package "$TARGET" cpu.pprof \
+        # pgoctl leverage-check handles module-scoped devirt detection internally
+        pgoctl leverage-check --dir . --format json cpu.pprof \
           > /tmp/leverage.json 2>&1
         LEVERAGE_STATUS=$?
         cat /tmp/leverage.json
 
-        # exit 3 = NONE verdict (valid JSON output); only fallback on real error (exit 1 or >3)
-        if { [ $LEVERAGE_STATUS -ne 0 ] && [ $LEVERAGE_STATUS -ne 3 ]; } || [ ! -f /tmp/leverage.json ]; then
-          # Fallback: run without build analysis
-          echo "{\"verdict\": \"INCOMPLETE\", \"verdict_reason\": \"leverage-check failed; no build analysis available\"}" > /tmp/leverage.json
+        # exit 3 = NONE verdict (valid JSON); only fallback on real error (exit 1 or >3)
+        if { [ $LEVERAGE_STATUS -ne 0 ] && [ $LEVERAGE_STATUS -ne 3 ]; } || [ ! -s /tmp/leverage.json ]; then
+          printf '{"verdict":"INCOMPLETE","verdict_reason":"leverage-check failed; no build analysis available"}\n' > /tmp/leverage.json
         fi
 
-        # Generate report from JSON
-        LEVERAGE_JSON="/tmp/leverage.json" \
-        TARGET_NAME="$TARGET" \
-        REPORT_OUT="/tmp/leverage-report.md" \
-          python3 "$SCRIPT_DIR/report.py"
-
         VERDICT=$(python3 -c "import json; d=json.load(open('/tmp/leverage.json')); print(d.get('verdict','INCOMPLETE'))" 2>/dev/null || echo "INCOMPLETE")
+        REASON=$(python3 -c "import json; d=json.load(open('/tmp/leverage.json')); print(d.get('verdict_reason',''))" 2>/dev/null || echo "")
+        SAMPLES=$(python3 -c "import json; d=json.load(open('/tmp/leverage.json')); print(d.get('total_samples',0))" 2>/dev/null || echo "0")
+        DEVIRT=$(python3 -c "import json; ba=json.load(open('/tmp/leverage.json')).get('build_analysis') or {}; print(ba.get('devirt_decisions','-'))" 2>/dev/null || echo "-")
+        INLINES=$(python3 -c "import json; ba=json.load(open('/tmp/leverage.json')).get('build_analysis') or {}; print(ba.get('pgo_extra_inlines','-'))" 2>/dev/null || echo "-")
+
         echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
-        cat /tmp/leverage-report.md >> "$GITHUB_STEP_SUMMARY"
+
+        {
+          echo "### PGO Leverage: \`${VERDICT}\`"
+          echo ""
+          echo "> Samples: ${SAMPLES} | Devirt decisions: ${DEVIRT} | Extra inlines: ${INLINES}"
+          [ -n "$REASON" ] && echo "" && echo "$REASON"
+        } >> "$GITHUB_STEP_SUMMARY"
 
         if [ "$VERDICT" = "NONE" ]; then
-          echo "::warning::PGO-leverage = NONE — no codegen lever found on this hot path. Consider skipping the full benchmark cycle."
+          echo "::warning::PGO-leverage = NONE — no codegen lever found. Consider skipping the full benchmark cycle."
         fi
         set -e
 
