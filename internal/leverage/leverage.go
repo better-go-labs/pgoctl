@@ -316,14 +316,23 @@ func runBuild(dir, pkgPattern, profilePath string, withPGO bool) (string, error)
 	return string(out), nil
 }
 
-// matchingLines returns the trimmed lines of output containing pattern, case-insensitively.
+// compilerMsg splits a -m line into its file:line[:col] head and message.
+var compilerMsg = regexp.MustCompile(`^.+?:\d+(?::\d+)?: (.*)$`)
+
+// matchingLines returns the trimmed lines whose compiler message starts with
+// pattern, case-insensitively. Lines without a position head match on the whole line.
 func matchingLines(output, pattern string) []string {
 	var lines []string
 	want := strings.ToLower(pattern)
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	for scanner.Scan() {
-		if strings.Contains(strings.ToLower(scanner.Text()), want) {
-			lines = append(lines, strings.TrimSpace(scanner.Text()))
+		line := strings.TrimSpace(scanner.Text())
+		msg := line
+		if m := compilerMsg.FindStringSubmatch(line); m != nil {
+			msg = m[1]
+		}
+		if strings.HasPrefix(strings.ToLower(msg), want) {
+			lines = append(lines, line)
 		}
 	}
 	return lines
@@ -336,12 +345,8 @@ func countLines(output, pattern string) int {
 // collectInlineSites returns a set of unique "inlining call" lines from compiler output.
 func collectInlineSites(output string) map[string]bool {
 	sites := make(map[string]bool)
-	scanner := bufio.NewScanner(strings.NewReader(output))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.Contains(strings.ToLower(line), "inlining call") {
-			sites[line] = true
-		}
+	for _, line := range matchingLines(output, "inlining call") {
+		sites[line] = true
 	}
 	return sites
 }
