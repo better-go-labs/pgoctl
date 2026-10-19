@@ -1237,10 +1237,8 @@ func TestMatchingLines_IgnoresQuotedSource(t *testing.T) {
 	}
 }
 
-// TestCheckFile_PgoctlSelfProfile runs the full --dir analysis of pgoctl on a
-// CPU profile of pgoctl itself (testdata/pgoctl_cpu.pprof, captured by
-// scripts/capture-pgoctl-profile.sh). Counts vary per capture and Go version,
-// so it checks invariants, not numbers.
+// TestCheckFile_PgoctlSelfProfile runs --dir analysis on a profile of pgoctl itself.
+// Counts vary per capture and Go version, so it checks invariants only.
 func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds ./cmd/pgoctl twice with -gcflags=all=-m=2")
@@ -1326,9 +1324,8 @@ func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
 		ba.DevirtDecisions, ba.PGODevirts, ba.PGOExtraInlines, ba.PGOExtraInlines+ba.PGOExtraInlinesDeps)
 }
 
-// TestModuleSites_IndependentOfDirAndCache builds the same target from a
-// subdirectory and then from the module root on one build cache. The second
-// build replays cached -m output, so classification must not depend on cwd.
+// TestModuleSites_IndependentOfDirAndCache builds one target from two dirs on one
+// cache; the second build replays cached -m output, so results must match.
 func TestModuleSites_IndependentOfDirAndCache(t *testing.T) {
 	t.Setenv("GOCACHE", t.TempDir())
 	root := writeTestModule(t, map[string]string{
