@@ -1,8 +1,11 @@
 package leverage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -94,75 +97,6 @@ func TestCountLines(t *testing.T) {
 	}
 }
 
-func TestDetectHotInterfaces(t *testing.T) {
-	tests := []struct {
-		name    string
-		entries []FunctionEntry
-		want    int
-	}{
-		{
-			name:    "no interfaces",
-			entries: []FunctionEntry{{Function: "foo.Bar"}},
-			want:    0,
-		},
-		{
-			name:    "one interface",
-			entries: []FunctionEntry{{Function: "foo.(*Bar).(Reader)"}},
-			want:    1,
-		},
-		{
-			name: "multiple interfaces",
-			entries: []FunctionEntry{
-				{Function: "foo.(*Bar).(Reader)"},
-				{Function: "baz.(*Qux).(Writer)"},
-			},
-			want: 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := detectHotInterfaces(tt.entries)
-			if len(got) != tt.want {
-				t.Errorf("detectHotInterfaces() = %d interfaces, want %d", len(got), tt.want)
-			}
-		})
-	}
-}
-
-func TestPackageFromFunction(t *testing.T) {
-	tests := []struct {
-		name string
-		fn   string
-		want string
-	}{
-		{
-			name: "simple function",
-			fn:   "github.com/foo/bar.Baz",
-			want: "github.com/foo/bar",
-		},
-		{
-			name: "method",
-			fn:   "github.com/foo/bar.(*Type).Method",
-			want: "github.com/foo/bar",
-		},
-		{
-			name: "interface method",
-			fn:   "github.com/foo/bar.(*Type).(Reader).Read",
-			want: "github.com/foo/bar",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := packageFromFunction(tt.fn)
-			if got != tt.want {
-				t.Errorf("packageFromFunction(%q) = %q, want %q", tt.fn, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestCheckFileDefaultOptions(t *testing.T) {
 	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
 	data, err := os.ReadFile(profilePath)
@@ -177,23 +111,6 @@ func TestCheckFileDefaultOptions(t *testing.T) {
 
 	if rpt.Verdict != VerdictIncomplete {
 		t.Errorf("expected VerdictIncomplete, got %s", rpt.Verdict)
-	}
-}
-
-func TestCheckFileDefaultTopN(t *testing.T) {
-	profilePath := filepath.Join("..", "..", "testdata", "cpu_valid.pprof")
-	data, err := os.ReadFile(profilePath)
-	if err != nil || strings.Contains(string(data), "git-lfs") {
-		t.Skipf("testdata file not found or is LFS pointer")
-	}
-
-	rpt, err := CheckFile(profilePath, Options{TopN: 0})
-	if err != nil {
-		t.Fatalf("CheckFile with TopN=0 failed: %v", err)
-	}
-
-	if len(rpt.TopFunctions) > 20 {
-		t.Errorf("expected TopFunctions to be clamped at 20, got %d", len(rpt.TopFunctions))
 	}
 }
 
@@ -254,70 +171,6 @@ func TestCPUSampleIndex(t *testing.T) {
 				t.Errorf("cpuSampleIndex() idx = %d, want %d", idx, tt.wantIdx)
 			}
 		})
-	}
-}
-
-func TestPackageFromFunctionEdgeCases(t *testing.T) {
-	tests := []struct {
-		name string
-		fn   string
-		want string
-	}{
-		{
-			name: "empty string",
-			fn:   "",
-			want: "",
-		},
-		{
-			name: "no slash",
-			fn:   "Foo",
-			want: "Foo",
-		},
-		{
-			name: "local package",
-			fn:   "main.Foo",
-			want: "main",
-		},
-		{
-			name: "nested with method",
-			fn:   "github.com/foo/bar/baz.(*Type).Method",
-			want: "github.com/foo/bar/baz",
-		},
-		{
-			name: "nested with paren in middle",
-			fn:   "github.com/foo/(bar)",
-			want: "github.com/foo/",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := packageFromFunction(tt.fn)
-			if got != tt.want {
-				t.Errorf("packageFromFunction(%q) = %q, want %q", tt.fn, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestDetectHotInterfacesWithDuplicates(t *testing.T) {
-	entries := []FunctionEntry{
-		{Function: "foo.(*Bar).(Reader)"},
-		{Function: "foo.(*Bar).(Reader)"},
-		{Function: "baz.(*Qux).(Writer)"},
-	}
-
-	got := detectHotInterfaces(entries)
-	if len(got) != 2 {
-		t.Errorf("detectHotInterfaces() = %d interfaces, want 2 (should dedup)", len(got))
-	}
-
-	seen := make(map[string]bool)
-	for _, iface := range got {
-		if seen[iface] {
-			t.Errorf("detectHotInterfaces() returned duplicate: %s", iface)
-		}
-		seen[iface] = true
 	}
 }
 
@@ -593,19 +446,6 @@ func TestCheckFile_AbsoluteProfilePath(t *testing.T) {
 	}
 }
 
-func TestCheckFile_IgnoreZeroTopN(t *testing.T) {
-	profilePath := makeMinimalProfile(t)
-	t.Cleanup(func() { _ = os.Remove(profilePath) })
-
-	rpt, err := CheckFile(profilePath, Options{TopN: 0})
-	if err != nil {
-		t.Fatalf("CheckFile with TopN=0 failed: %v", err)
-	}
-	if len(rpt.TopFunctions) > 20 {
-		t.Errorf("expected TopFunctions to default to 20, got %d", len(rpt.TopFunctions))
-	}
-}
-
 func TestVerdictConstants(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -843,10 +683,10 @@ func TestCountLines_PGODevirtMarkerOnly(t *testing.T) {
 		t.Errorf("countLines(\"pgo devirtualizing\") = %d, want 2 (plain devirt lines must not be counted)", got)
 	}
 
-	// Confirm the plain pattern still matches all devirt lines (sanity).
+	// Plain marker matches only static devirt lines, not the PGO ones.
 	gotAll := countLines(output, "devirtualizing")
-	if gotAll != 4 {
-		t.Errorf("countLines(\"devirtualizing\") = %d, want 4", gotAll)
+	if gotAll != 2 {
+		t.Errorf("countLines(\"devirtualizing\") = %d, want 2", gotAll)
 	}
 }
 
@@ -1017,21 +857,494 @@ func TestCollectInlineSites(t *testing.T) {
 // TestExtraInlinesByOrigin verifies module vs deps partitioning of the set diff.
 func TestExtraInlinesByOrigin(t *testing.T) {
 	pgo := map[string]bool{
-		"./foo.go:1:1: inlining call to bar.A":                                 true, // module, PGO-only
-		"./foo.go:2:2: inlining call to bar.B":                                 true, // module, also in baseline
-		"/usr/local/go/src/runtime/malloc.go:5:5: inlining call to something":  true, // deps, PGO-only
-		"/usr/local/go/src/runtime/malloc.go:6:6: inlining call to somethingB": true, // deps, also in baseline
+		"example.com/m/foo.go:1:1: inlining call to bar.A":               true, // module, PGO-only
+		"example.com/m/foo.go:2:2: inlining call to bar.B":               true, // module, also in baseline
+		"example.com/m/internal/sub/sub.go:7:28: inlining call to Small": true, // subpackage, PGO-only
+		"github.com/x/y@v1/y.go:5:5: inlining call to Y":                 true, // module cache, PGO-only
+		"runtime/malloc.go:6:6: inlining call to somethingB":             true, // GOROOT, also in baseline
 	}
 	baseline := map[string]bool{
-		"./foo.go:2:2: inlining call to bar.B":                                 true,
-		"/usr/local/go/src/runtime/malloc.go:6:6: inlining call to somethingB": true,
+		"example.com/m/foo.go:2:2: inlining call to bar.B":   true,
+		"runtime/malloc.go:6:6: inlining call to somethingB": true,
 	}
 
-	module, deps := extraInlinesByOrigin(pgo, baseline)
-	if module != 1 {
-		t.Errorf("module extra inlines = %d, want 1", module)
+	module, deps := extraInlinesByOrigin(pgo, baseline, testMods())
+	if module != 2 {
+		t.Errorf("module extra inlines = %d, want 2 (subpackage must count as module)", module)
 	}
 	if deps != 1 {
-		t.Errorf("deps extra inlines = %d, want 1", deps)
+		t.Errorf("deps extra inlines = %d, want 1 (module cache path is a dependency)", deps)
+	}
+}
+
+func TestAnalyzeBuildOutput_InlineSplit(t *testing.T) {
+	pgo := strings.Join([]string{
+		"example.com/m/main.go:1:1: inlining call to A",
+		"example.com/m/internal/sub/sub.go:2:2: inlining call to B",
+		"github.com/x/y@v1/y.go:3:3: inlining call to C",
+	}, "\n")
+	baseline := "example.com/m/main.go:1:1: inlining call to A\n"
+
+	ba := analyzeBuildOutput(pgo, baseline, testMods())
+	if ba.PGOExtraInlines != 1 || ba.PGOExtraInlinesDeps != 1 {
+		t.Errorf("extra inlines = (%d, %d), want (1, 1)", ba.PGOExtraInlines, ba.PGOExtraInlinesDeps)
+	}
+	if ba.PGOInlines != 3 || ba.BaselineInlines != 1 {
+		t.Errorf("inline totals = (%d, %d), want (3, 1)", ba.PGOInlines, ba.BaselineInlines)
+	}
+}
+
+func writeTestModule(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, body := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	return dir
+}
+
+// The dotted subpackage is exactly what the PackageOf heuristic truncates.
+func dottedModule(t *testing.T) string {
+	t.Helper()
+	return writeTestModule(t, map[string]string{
+		"go.mod":          "module example.com/m\n\ngo 1.21\n",
+		"go.uuid/uuid.go": "package uuid\n\nfunc New() int { return 4 }\n",
+		"main.go":         "package main\n\nimport \"example.com/m/go.uuid\"\n\nfunc main() { _ = uuid.New() }\n",
+	})
+}
+
+func TestListPackages(t *testing.T) {
+	dir := dottedModule(t)
+	m, err := listPackages(dir, "./...")
+	if err != nil {
+		t.Fatalf("listPackages: %v", err)
+	}
+	for _, want := range []string{"example.com/m", "example.com/m/go.uuid"} {
+		if !slices.Contains(m.importPaths, want) {
+			t.Errorf("importPaths missing %q: %v", want, m.importPaths)
+		}
+	}
+	for _, p := range m.importPaths {
+		if strings.ContainsAny(p, " \t:") {
+			t.Errorf("import path %q is not plain (stderr leaked into stdout?)", p)
+		}
+	}
+	wantMain := map[string]bool{"example.com/m": true, "example.com/m/go.uuid": true}
+	if !reflect.DeepEqual(m.mainPaths, wantMain) {
+		t.Errorf("mainPaths = %v, want %v", m.mainPaths, wantMain)
+	}
+}
+
+func TestListPackages_BadDir(t *testing.T) {
+	if _, err := listPackages("/nonexistent/module/dir", "./..."); err == nil {
+		t.Error("expected error for missing dir")
+	}
+}
+
+func makeProfileWithFunctions(t *testing.T, names ...string) string {
+	t.Helper()
+	p := &profile.Profile{
+		SampleType: []*profile.ValueType{{Type: "cpu", Unit: "nanoseconds"}},
+	}
+	for i, name := range names {
+		fn := &profile.Function{ID: uint64(i + 1), Name: name, SystemName: name, Filename: "main.go", StartLine: 1}
+		loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn, Line: 1}}}
+		p.Function = append(p.Function, fn)
+		p.Location = append(p.Location, loc)
+		p.Sample = append(p.Sample, &profile.Sample{Location: []*profile.Location{loc}, Value: []int64{1_000_000}})
+	}
+	f, err := os.CreateTemp(t.TempDir(), "named-*.pprof")
+	if err != nil {
+		t.Fatalf("create temp pprof: %v", err)
+	}
+	if werr := p.Write(f); werr != nil {
+		_ = f.Close()
+		t.Fatalf("write pprof: %v", werr)
+	}
+	_ = f.Close()
+	return f.Name()
+}
+
+func TestCheckFile_WithDir_ResolvesDottedPackage(t *testing.T) {
+	dir := dottedModule(t)
+	profilePath := makeProfileWithFunctions(t, "example.com/m/go.uuid.New")
+
+	rpt, err := CheckFile(profilePath, Options{Dir: dir, Package: "./..."})
+	if err != nil {
+		t.Fatalf("CheckFile with dir: %v", err)
+	}
+	if got := rpt.TopFunctions[0].Package; got != "example.com/m/go.uuid" {
+		t.Errorf("Package with --dir = %q, want example.com/m/go.uuid", got)
+	}
+
+	// Without --dir there is no module context; the heuristic still truncates.
+	rpt, err = CheckFile(profilePath, Options{})
+	if err != nil {
+		t.Fatalf("CheckFile without dir: %v", err)
+	}
+	if got := rpt.TopFunctions[0].Package; got != "example.com/m/go" {
+		t.Errorf("Package without --dir = %q, want example.com/m/go", got)
+	}
+}
+
+func makeManyFunctionProfile(t *testing.T, n int) string {
+	t.Helper()
+	names := make([]string, n)
+	for i := range names {
+		names[i] = fmt.Sprintf("main.fn%d", i)
+	}
+	return makeProfileWithFunctions(t, names...)
+}
+
+func TestCheckFile_TopN(t *testing.T) {
+	path := makeManyFunctionProfile(t, 25)
+	tests := []struct {
+		name string
+		topN int
+		want int
+	}{
+		{"zero means all", 0, 25},
+		{"larger than available returns all", 100, 25},
+		{"positive limits", 5, 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rpt, err := CheckFile(path, Options{TopN: tt.topN})
+			if err != nil {
+				t.Fatalf("CheckFile: %v", err)
+			}
+			if got := len(rpt.TopFunctions); got != tt.want {
+				t.Errorf("TopN=%d returned %d functions, want %d", tt.topN, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchingLines(t *testing.T) {
+	out := strings.Join([]string{
+		"./a.go:10:5: inlining call to foo",
+		"./b.go:20:7: PGO devirtualizing interface call r.Read to *os.File.Read",
+		"../src/errors/wrap.go:50:55: devirtualizing .autotmp_4.Comparable to reflectlite.rtype",
+		"  ./c.go:30:2: PGO devirtualizing function call f to main.g  ",
+	}, "\n")
+
+	got := matchingLines(out, "pgo devirtualizing")
+	want := []string{
+		"./b.go:20:7: PGO devirtualizing interface call r.Read to *os.File.Read",
+		"./c.go:30:2: PGO devirtualizing function call f to main.g",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("matchingLines() = %q, want %q", got, want)
+	}
+	if n := countLines(out, "pgo devirtualizing"); n != 2 {
+		t.Errorf("countLines() = %d, want 2", n)
+	}
+	if got := matchingLines("no matches here", "pgo devirtualizing"); got != nil {
+		t.Errorf("matchingLines() on no match = %q, want nil", got)
+	}
+}
+
+func TestBuildArgs(t *testing.T) {
+	pgo := buildArgs("./cmd/app", "/tmp/p.pprof", true)
+	base := buildArgs("./cmd/app", "", false)
+
+	for name, args := range map[string][]string{"pgo": pgo, "base": base} {
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "-o "+os.DevNull) {
+			t.Errorf("%s args %q: want -o %s", name, joined, os.DevNull)
+		}
+		if !slices.Contains(args, "-trimpath") {
+			t.Errorf("%s args %q: missing -trimpath", name, joined)
+		}
+		if args[len(args)-1] != "./cmd/app" {
+			t.Errorf("%s args %q: package pattern must be last", name, joined)
+		}
+	}
+	if !slices.Contains(pgo, "-pgo=/tmp/p.pprof") {
+		t.Errorf("pgo args %q: missing -pgo=/tmp/p.pprof", pgo)
+	}
+	if !slices.Contains(base, "-pgo=off") {
+		t.Errorf("baseline args %q: missing -pgo=off", base)
+	}
+}
+
+func testMods() *modulePackages {
+	return &modulePackages{mainPaths: map[string]bool{
+		"example.com/m":              true,
+		"example.com/m/internal/sub": true,
+	}}
+}
+
+func TestParsePackageList(t *testing.T) {
+	out := strings.Join([]string{
+		"fmt\t",
+		"github.com/google/pprof/profile\tfalse",
+		"example.com/m/internal/sub\ttrue",
+		"example.com/m\ttrue",
+		"",
+	}, "\n")
+
+	m, err := parsePackageList(out)
+	if err != nil {
+		t.Fatalf("parsePackageList: %v", err)
+	}
+	wantPaths := []string{"fmt", "github.com/google/pprof/profile", "example.com/m/internal/sub", "example.com/m"}
+	if !slices.Equal(m.importPaths, wantPaths) {
+		t.Errorf("importPaths = %v, want %v", m.importPaths, wantPaths)
+	}
+	wantMain := map[string]bool{"example.com/m": true, "example.com/m/internal/sub": true}
+	if !reflect.DeepEqual(m.mainPaths, wantMain) {
+		t.Errorf("mainPaths = %v, want %v", m.mainPaths, wantMain)
+	}
+}
+
+func TestParsePackageList_Malformed(t *testing.T) {
+	if _, err := parsePackageList("go: downloading example.com/x v1.0.0\n"); err == nil {
+		t.Error("expected error for a line without tab-separated fields")
+	}
+}
+
+func TestSitePath(t *testing.T) {
+	tests := []struct{ line, want string }{
+		{"./main.go:10:5: inlining call to foo.Bar", "./main.go"},
+		{"internal/sub/sub.go:7:28: PGO devirtualizing interface call x.F to T.F", "internal/sub/sub.go"},
+		{"../../go/pkg/mod/x@v1/y.go:1:1: inlining call to Y", "../../go/pkg/mod/x@v1/y.go"},
+		{"<autogenerated>:1: inlining call to (*File).Close", ""},
+		{"# example.com/m", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := sitePath(tt.line); got != tt.want {
+			t.Errorf("sitePath(%q) = %q, want %q", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestIsModuleSite(t *testing.T) {
+	m := testMods()
+	tests := []struct {
+		line string
+		want bool
+	}{
+		{"example.com/m/main.go:10:5: inlining call to foo.Bar", true},
+		{"example.com/m/internal/sub/sub.go:7:28: inlining call to Small", true},
+		{"example.com/m/internal/sub/sub.go:3:1: PGO devirtualizing interface call x.F to T.F", true},
+		{"example.com/m/internal/sub/deeper/d.go:1:1: inlining call to X", false}, // package not in the build graph
+		{"example.com/m/internal/other/o.go:1:1: inlining call to X", false},
+		{"github.com/x/y@v1.0.0/y.go:1:1: inlining call to Y", false},
+		{"runtime/proc.go:100:5: inlining call to fmt.Sprintf", false},
+		{"<autogenerated>:1: inlining call to (*File).Close", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := m.isModuleSite(tt.line); got != tt.want {
+			t.Errorf("isModuleSite(%q) = %v, want %v", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestIsModuleSite_NoMainModule(t *testing.T) {
+	m, err := parsePackageList("fmt\t\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.isModuleSite("example.com/m/main.go:1:1: inlining call to X") {
+		t.Error("with no main-module packages nothing may count as module")
+	}
+}
+
+func TestIsModuleSite_Nil(t *testing.T) {
+	var m *modulePackages
+	if m.isModuleSite("example.com/m/main.go:1:1: inlining call to X") {
+		t.Error("nil modulePackages must report false")
+	}
+}
+
+func TestAnalyzeBuildOutput_DevirtSplit(t *testing.T) {
+	pgo := strings.Join([]string{
+		"example.com/m/main.go:12:9: PGO devirtualizing interface call s.Area to Sq.Area",
+		"example.com/m/internal/sub/sub.go:7:28: PGO devirtualizing interface call s.Area to Sq.Area",
+		"github.com/google/pprof@v1/profile/proto.go:169:10: PGO devirtualizing interface call m.encode to (*Sample).encode",
+		"regexp/backtrack.go:216:22: PGO devirtualizing interface call i.step to (*inputString).step",
+		"<autogenerated>:1: PGO devirtualizing interface call w.Write to (*File).Write",
+		"example.com/m/main.go:20:3: devirtualizing s.String to S", // static, must not count
+	}, "\n")
+
+	ba := analyzeBuildOutput(pgo, "", testMods())
+	if ba.DevirtDecisions != 2 {
+		t.Errorf("DevirtDecisions = %d, want 2 (module lines only)", ba.DevirtDecisions)
+	}
+	if ba.PGODevirtsDeps != 3 {
+		t.Errorf("PGODevirtsDeps = %d, want 3", ba.PGODevirtsDeps)
+	}
+	if ba.PGODevirts != 5 {
+		t.Errorf("PGODevirts = %d, want 5 (total)", ba.PGODevirts)
+	}
+	if len(ba.DevirtSites) != 5 {
+		t.Errorf("DevirtSites len = %d, want 5", len(ba.DevirtSites))
+	}
+}
+
+func TestAnalyzeBuildOutput_DepsOnlyDevirtIsNone(t *testing.T) {
+	pgo := "github.com/google/pprof@v1/profile/proto.go:169:10: PGO devirtualizing interface call m.encode to (*Sample).encode"
+	ba := analyzeBuildOutput(pgo, "", testMods())
+	if ba.DevirtDecisions != 0 {
+		t.Fatalf("DevirtDecisions = %d, want 0", ba.DevirtDecisions)
+	}
+	if v, _ := verdictForAnalysis(ba, nil); v != VerdictNone {
+		t.Errorf("verdict = %s, want NONE when the only devirt is in a dependency", v)
+	}
+}
+
+func TestDevirtsByOrigin(t *testing.T) {
+	module, deps := devirtsByOrigin([]string{
+		"example.com/m/a.go:1:1: PGO devirtualizing interface call x.F to T.F",
+		"example.com/m/internal/sub/b.go:1:1: PGO devirtualizing interface call x.F to T.F",
+		"c/c.go:1:1: PGO devirtualizing interface call x.F to T.F",
+	}, testMods())
+	if module != 2 || deps != 1 {
+		t.Errorf("devirtsByOrigin = (%d, %d), want (2, 1)", module, deps)
+	}
+}
+
+func TestMatchingLines_IgnoresQuotedSource(t *testing.T) {
+	out := strings.Join([]string{
+		"internal/leverage/leverage.go:234:25:     from matchingLines(pgoOutput, \"pgo devirtualizing\") (call parameter) at internal/leverage/leverage.go:237:30",
+		"internal/leverage/leverage.go:240:22:     from countLines(pgoOutput, \"inlining call\") (call parameter) at internal/leverage/leverage.go:240:21",
+		"./b.go:20:7: PGO devirtualizing interface call r.Read to *os.File.Read",
+		"<autogenerated>:1: inlining call to (*File).Close",
+		"./a.go:10:5: inlining call to foo",
+	}, "\n")
+
+	if got := matchingLines(out, "pgo devirtualizing"); len(got) != 1 || !strings.HasPrefix(got[0], "./b.go:20:7:") {
+		t.Errorf("devirt lines = %q, want only ./b.go:20:7", got)
+	}
+	if n := countLines(out, "inlining call"); n != 2 {
+		t.Errorf("inline lines = %d, want 2 (autogenerated + ./a.go, not the quoted flow line)", n)
+	}
+	if sites := collectInlineSites(out); len(sites) != 2 {
+		t.Errorf("collectInlineSites = %d sites, want 2", len(sites))
+	}
+}
+
+// Counts vary per capture and Go version, so only invariants are asserted.
+func TestCheckFile_PgoctlSelfProfile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds ./cmd/pgoctl twice with -gcflags=all=-m=2")
+	}
+	profilePath := filepath.Join("..", "..", "testdata", "pgoctl_cpu.pprof")
+	data, err := os.ReadFile(profilePath)
+	if err != nil || strings.Contains(string(data), "version https://git-lfs.github.com") {
+		t.Skipf("testdata/pgoctl_cpu.pprof not available (LFS pointer or missing)")
+	}
+
+	qr, err := validate.ValidateFile(profilePath, validate.DefaultOptions())
+	if err != nil {
+		t.Fatalf("validate.ValidateFile: %v", err)
+	}
+	if !qr.Valid {
+		t.Errorf("self profile fails pgoctl's own quality gate: errors=%v score=%.3f samples=%d",
+			qr.Errors, qr.QualityScore, qr.Samples)
+	}
+
+	rpt, err := CheckFile(profilePath, Options{Dir: filepath.Join("..", ".."), Package: "./cmd/pgoctl"})
+	if err != nil {
+		t.Fatalf("CheckFile: %v", err)
+	}
+	ba := rpt.BuildAnalysis
+	if ba == nil {
+		t.Fatal("BuildAnalysis is nil with --dir set")
+	}
+
+	const module = "github.com/Better-Go-Labs/pgoctl/"
+	pgoctlEntries := 0
+	for _, e := range rpt.TopFunctions {
+		if strings.Contains(e.Function, ".") && !strings.HasPrefix(e.Function, e.Package+".") {
+			t.Errorf("package %q is not a prefix of function %q", e.Package, e.Function)
+		}
+		if strings.HasPrefix(e.Function, module) {
+			pgoctlEntries++
+			if !strings.HasPrefix(e.Package, module) {
+				t.Errorf("pgoctl function %q resolved to %q", e.Function, e.Package)
+			}
+		}
+	}
+	if pgoctlEntries == 0 {
+		t.Error("no pgoctl functions in the profile; recapture with scripts/capture-pgoctl-profile.sh")
+	}
+
+	if ba.PGODevirts != ba.DevirtDecisions+ba.PGODevirtsDeps {
+		t.Errorf("pgo_devirts %d != devirt_decisions %d + pgo_devirts_deps %d",
+			ba.PGODevirts, ba.DevirtDecisions, ba.PGODevirtsDeps)
+	}
+	if len(ba.DevirtSites) != ba.PGODevirts {
+		t.Errorf("devirt_sites len %d != pgo_devirts %d", len(ba.DevirtSites), ba.PGODevirts)
+	}
+
+	// Devirt sites outside pgoctl's own import path are dependencies by
+	// construction and must never count toward the verdict.
+	knownDeps := 0
+	for _, s := range ba.DevirtSites {
+		if !strings.Contains(s, ": PGO devirtualizing ") {
+			t.Errorf("devirt site %q is not a PGO devirtualizing message", s)
+		}
+		if f := sitePath(s); f != "" && !strings.HasPrefix(f, module) {
+			knownDeps++
+		}
+	}
+	if ba.PGODevirtsDeps < knownDeps {
+		t.Errorf("pgo_devirts_deps = %d, but %d devirt sites are outside %s", ba.PGODevirtsDeps, knownDeps, module)
+	}
+
+	// pgoctl is a thin layer over google/pprof, so PGO always finds
+	// something in dependencies. Those must never drive the verdict.
+	if ba.PGOExtraInlinesDeps+ba.PGODevirtsDeps == 0 {
+		t.Error("expected PGO decisions in dependencies for a pprof-parsing workload")
+	}
+	moduleDecisions := ba.DevirtDecisions > 0 || ba.PGOExtraInlines > 0
+	if moduleDecisions == (rpt.Verdict == VerdictNone) {
+		t.Errorf("verdict %s does not follow module-scoped counts (devirts=%d, extra inlines=%d); reason: %s",
+			rpt.Verdict, ba.DevirtDecisions, ba.PGOExtraInlines, rpt.VerdictReason)
+	}
+	t.Logf("verdict=%s devirts=%d/%d extra_inlines=%d/%d", rpt.Verdict,
+		ba.DevirtDecisions, ba.PGODevirts, ba.PGOExtraInlines, ba.PGOExtraInlines+ba.PGOExtraInlinesDeps)
+}
+
+// Cached -m output once replayed cwd-relative paths, flipping the verdict by --dir.
+func TestModuleSites_IndependentOfDirAndCache(t *testing.T) {
+	t.Setenv("GOCACHE", t.TempDir())
+	root := writeTestModule(t, map[string]string{
+		"go.mod":              "module example.com/p\n\ngo 1.21\n",
+		"internal/sub/sub.go": "package sub\n\nfunc Small() int { return 1 }\n\nfunc Use() int { return Small() + 1 }\n",
+		"cmd/app/main.go":     "package main\n\nimport \"example.com/p/internal/sub\"\n\nfunc main() { println(sub.Use()) }\n",
+	})
+	moduleSites := func(dir, pkg string) int {
+		t.Helper()
+		mods, err := listPackages(dir, pkg)
+		if err != nil {
+			t.Fatalf("listPackages(%s): %v", dir, err)
+		}
+		out, err := runBuild(dir, pkg, "", false)
+		if err != nil {
+			t.Fatalf("runBuild(%s): %v", dir, err)
+		}
+		n := 0
+		for _, l := range matchingLines(out, "inlining call") {
+			if mods.isModuleSite(l) {
+				n++
+			}
+		}
+		return n
+	}
+	fromSub := moduleSites(filepath.Join(root, "cmd", "app"), ".")
+	fromRoot := moduleSites(root, "./cmd/app")
+	if fromSub == 0 || fromSub != fromRoot {
+		t.Errorf("module inline sites: from cmd/app = %d, from root = %d; want equal and > 0", fromSub, fromRoot)
 	}
 }

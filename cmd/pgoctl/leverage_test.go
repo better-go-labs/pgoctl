@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -73,11 +74,9 @@ func TestPrintLeverageReport(t *testing.T) {
 					PGOExtraInlines: 3,
 					BaselineInlines: 10,
 					PGOInlines:      13,
+					DevirtSites:     []string{"foo.(*Bar).(Reader)"},
 				},
 				TopFunctions: []leverage.FunctionEntry{},
-				HotInterfaces: []string{
-					"foo.(*Bar).(Reader)",
-				},
 			},
 			shouldContain: []string{
 				"HIGH",
@@ -85,7 +84,7 @@ func TestPrintLeverageReport(t *testing.T) {
 				"5",
 				"pgo_extra_inlines",
 				"3",
-				"Detected interface method calls",
+				"PGO devirtualized call sites",
 				"foo.(*Bar).(Reader)",
 			},
 		},
@@ -485,7 +484,6 @@ func TestPrintLeverageReport_WithoutBuildAnalysis(t *testing.T) {
 		TopFunctions: []leverage.FunctionEntry{
 			{Function: "foo.Bar", Package: "foo", FlatPct: 25.5, CumPct: 35.0},
 		},
-		HotInterfaces: []string{},
 	}
 
 	r, w, pipeErr := os.Pipe()
@@ -523,12 +521,12 @@ func TestPrintLeverageReport_WithAllFields(t *testing.T) {
 			{Function: "pkg.hot1", Package: "pkg", FlatPct: 45.0, CumPct: 50.0},
 			{Function: "pkg.hot2", Package: "pkg", FlatPct: 30.0, CumPct: 40.0},
 		},
-		HotInterfaces: []string{"pkg.(*Type).(Reader)", "pkg.(*Type).(Writer)"},
 		BuildAnalysis: &leverage.BuildAnalysis{
 			DevirtDecisions: 10,
 			PGOExtraInlines: 50,
 			BaselineInlines: 100,
 			PGOInlines:      150,
+			DevirtSites:     []string{"pkg.(*Type).(Reader)", "pkg.(*Type).(Writer)"},
 		},
 	}
 
@@ -767,5 +765,105 @@ func TestLeverageRunE_JSONMode_VerdictNone_ExitsNonZero(t *testing.T) {
 	}
 	if code != 3 {
 		t.Errorf("--format json NONE verdict: expected exit code 3, got %d", code)
+	}
+}
+
+func TestNewLeverageCheckCmd_NegativeTop(t *testing.T) {
+	cmd := newLeverageCheckCmd()
+	if err := cmd.Flags().Set("top", "-1"); err != nil {
+		t.Fatalf("set top: %v", err)
+	}
+	err := cmd.RunE(cmd, []string{filepath.Join("..", "..", "testdata", "cpu_happy.pprof")})
+	if err == nil || !strings.Contains(err.Error(), "--top must be >= 0") {
+		t.Fatalf("want --top validation error, got %v", err)
+	}
+}
+
+func TestPrintLeverageReport_NoDevirtSection(t *testing.T) {
+	rpt := &leverage.Report{
+		Verdict:       leverage.VerdictNone,
+		VerdictReason: "NONE",
+		BuildAnalysis: &leverage.BuildAnalysis{},
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	printLeverageReport(rpt)
+	_ = w.Close()
+	os.Stdout = old
+	out, _ := io.ReadAll(r)
+	if strings.Contains(string(out), "PGO devirtualized call sites") {
+		t.Errorf("devirt section printed with zero sites:\n%s", out)
+	}
+
+	b, _ := json.Marshal(rpt)
+	if strings.Contains(string(b), "devirt_sites") {
+		t.Errorf("devirt_sites present in JSON with zero sites: %s", b)
+	}
+}
+
+func TestPrintLeverageReport_DevirtDeps(t *testing.T) {
+	capture := func(rpt *leverage.Report) string {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("os.Pipe: %v", err)
+		}
+		old := os.Stdout
+		os.Stdout = w
+		printLeverageReport(rpt)
+		_ = w.Close()
+		os.Stdout = old
+		out, _ := io.ReadAll(r)
+		return string(out)
+	}
+
+	withDeps := capture(&leverage.Report{
+		Verdict:       leverage.VerdictLow,
+		VerdictReason: "LOW",
+		BuildAnalysis: &leverage.BuildAnalysis{DevirtDecisions: 1, PGODevirts: 4, PGODevirtsDeps: 3},
+	})
+	if !regexp.MustCompile(`pgo_devirts_deps\s+3\n`).MatchString(withDeps) {
+		t.Errorf("pgo_devirts_deps 3 line missing:\n%s", withDeps)
+	}
+
+	withoutDeps := capture(&leverage.Report{
+		Verdict:       leverage.VerdictLow,
+		VerdictReason: "LOW",
+		BuildAnalysis: &leverage.BuildAnalysis{DevirtDecisions: 1, PGODevirts: 1},
+	})
+	if strings.Contains(withoutDeps, "pgo_devirts_deps") {
+		t.Errorf("pgo_devirts_deps printed with zero deps devirts:\n%s", withoutDeps)
+	}
+}
+
+func TestNewLeverageCheckCmd_SelfProfile(t *testing.T) {
+	profilePath := filepath.Join("..", "..", "testdata", "pgoctl_cpu.pprof")
+	data, err := os.ReadFile(profilePath)
+	if err != nil || strings.Contains(string(data), "version https://git-lfs.github.com") {
+		t.Skipf("testdata/pgoctl_cpu.pprof not available (LFS pointer or missing)")
+	}
+
+	rpt, err := leverage.CheckFile(profilePath, leverage.Options{TopN: 0})
+	if err != nil {
+		t.Fatalf("CheckFile: %v", err)
+	}
+	if rpt.Verdict != leverage.VerdictIncomplete {
+		t.Errorf("verdict without --dir = %s, want INCOMPLETE", rpt.Verdict)
+	}
+	if rpt.TotalSamples < 10_000 {
+		t.Errorf("total_samples = %d, want >= 10000 (fixture captured with BENCHTIME=75s)", rpt.TotalSamples)
+	}
+	found := false
+	for _, e := range rpt.TopFunctions {
+		if strings.HasPrefix(e.Function, "github.com/Better-Go-Labs/pgoctl/") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("no pgoctl functions in the self profile")
 	}
 }

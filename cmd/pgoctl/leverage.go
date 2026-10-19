@@ -35,9 +35,13 @@ With --dir, compiles the target package twice using 'go build -gcflags=all=-m=2'
 once with '-pgo=<profile>' and once as a baseline (no PGO). The compiler's
 optimization decisions are diffed to count:
   - PGO-attributed devirtualizations: hot interface.Method calls rewritten to
-    direct calls by the compiler only when the PGO profile is present.
+    direct calls by the compiler only when the PGO profile is present. Only
+    sites in the module's own packages drive the verdict; std/deps sites are
+    reported separately.
   - PGO-only extra inlines: functions inlined in the PGO build but not the
     baseline, indicating the profile guided the inliner beyond its defaults.
+    Only sites in the module's own packages drive the verdict; std/deps sites
+    are reported separately.
 
 Requires a buildable Go module at --dir. Without --dir the verdict is INCOMPLETE.
 
@@ -50,6 +54,11 @@ Verdict taxonomy:
 Exit codes: 0 = HIGH/LOW/INCOMPLETE, 3 = NONE (CI gate), 2 = usage/parse error, 1 = error`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if topN < 0 {
+				err := fmt.Errorf("--top must be >= 0, got %d", topN)
+				fmt.Fprintf(os.Stderr, "error: %s\n", err)
+				return &exitError{2, err}
+			}
 			opts := leverage.Options{
 				TopN:    topN,
 				Dir:     dir,
@@ -79,7 +88,7 @@ Exit codes: 0 = HIGH/LOW/INCOMPLETE, 3 = NONE (CI gate), 2 = usage/parse error, 
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&topN, "top", 20, "number of top functions to show")
+	cmd.Flags().IntVar(&topN, "top", 20, "number of top functions to show (0 = all)")
 	cmd.Flags().StringVar(&dir, "dir", "", "directory of the Go module to build-analyze (optional)")
 	cmd.Flags().StringVar(&pkg, "package", "./...", "package pattern to build")
 	cmd.Flags().StringVar(&format, "format", formatText, "output format: text|json")
@@ -94,6 +103,9 @@ func printLeverageReport(rpt *leverage.Report) {
 
 	if rpt.BuildAnalysis != nil {
 		_, _ = fmt.Fprintf(w, "devirt_decisions\t%d\n", rpt.BuildAnalysis.DevirtDecisions)
+		if rpt.BuildAnalysis.PGODevirtsDeps > 0 {
+			_, _ = fmt.Fprintf(w, "pgo_devirts_deps\t%d\n", rpt.BuildAnalysis.PGODevirtsDeps)
+		}
 		_, _ = fmt.Fprintf(w, "pgo_extra_inlines\t%d\n", rpt.BuildAnalysis.PGOExtraInlines)
 		if rpt.BuildAnalysis.PGOExtraInlinesDeps > 0 {
 			_, _ = fmt.Fprintf(w, "pgo_extra_inlines_deps\t%d\n", rpt.BuildAnalysis.PGOExtraInlinesDeps)
@@ -116,11 +128,11 @@ func printLeverageReport(rpt *leverage.Report) {
 		_ = w2.Flush()
 	}
 
-	if len(rpt.HotInterfaces) > 0 {
+	if rpt.BuildAnalysis != nil && len(rpt.BuildAnalysis.DevirtSites) > 0 {
 		_, _ = fmt.Fprintln(os.Stdout)
-		_, _ = fmt.Fprintln(os.Stdout, "── Detected interface method calls in hot functions ──")
-		for _, iface := range rpt.HotInterfaces {
-			_, _ = fmt.Fprintf(os.Stdout, "%s\n", iface)
+		_, _ = fmt.Fprintln(os.Stdout, "── PGO devirtualized call sites ──")
+		for _, site := range rpt.BuildAnalysis.DevirtSites {
+			_, _ = fmt.Fprintln(os.Stdout, site)
 		}
 	}
 }
