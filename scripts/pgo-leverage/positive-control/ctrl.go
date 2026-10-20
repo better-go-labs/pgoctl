@@ -29,3 +29,10 @@ func HotLoop(d Doer, n int) float64 {
 	}
 	return acc
 }
+
+// init() is called during go build so the interface dispatch in HotLoop
+// is visible to compiler analysis, allowing PGO devirtualization detection.
+func init() {
+	d := SumCalc{K: 1.5}
+	_ = HotLoop(d, 100)
+}

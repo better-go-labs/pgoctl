@@ -12,6 +12,12 @@ name: PGO Leverage Probe
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'cmd/pgoctl/**'
+      - 'internal/leverage/**'
+      - '.github/workflows/pgo-leverage-probe.yml'
+      - 'action.yml'
 
 concurrency:
   group: pgo-leverage-${{ github.ref }}
@@ -36,13 +42,18 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.9'
+          go-version-file: go.mod
           cache: true
 
       - name: Build pgoctl
         run: go build -o /tmp/pgoctl ./cmd/pgoctl
 
       # -------- Positive control: verify the probe mechanism works -----------
+      - name: "Ctrl | Build positive-control module"
+        working-directory: scripts/pgo-leverage/positive-control
+        run: |
+          go build -o /tmp/positive-control .
+
       - name: "Ctrl | Run positive-control benchmark (interface dispatch, 15s)"
         working-directory: scripts/pgo-leverage/positive-control
         run: |
@@ -53,14 +64,25 @@ jobs:
         working-directory: scripts/pgo-leverage/positive-control
         run: |
           set +e
-          /tmp/pgoctl leverage-check --dir . --format json /tmp/ctrl.pprof > /tmp/ctrl-leverage.json
+          LEVERAGE_STDERR=$(mktemp)
+          /tmp/pgoctl leverage-check --dir . --package ./... --format json /tmp/ctrl.pprof \
+            > /tmp/ctrl-leverage.json 2>"$LEVERAGE_STDERR"
           LEV_EXIT=$?
+          if [ -s "$LEVERAGE_STDERR" ]; then
+            echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+          fi
           set -e
           # exit 3 = NONE verdict (valid JSON); exit 1 or >3 = real error
           if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
             echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
           fi
           cat /tmp/ctrl-leverage.json
+          # Verify positive control produces a non-NONE verdict
+          VERDICT=$(jq -r '.verdict // "INCOMPLETE"' /tmp/ctrl-leverage.json)
+          if [ "$VERDICT" = "NONE" ] || [ "$VERDICT" = "INCOMPLETE" ]; then
+            echo "::error::Positive control must produce HIGH/LOW verdict, got: $VERDICT"
+            exit 1
+          fi
 
       - name: "Ctrl | Report"
         shell: bash
@@ -96,6 +118,7 @@ jobs:
         with:
           repository: prometheus/prometheus
           path: _prometheus
+          ref: v3.14.0
           fetch-depth: 1
 
       - name: "Prometheus | Cache Go modules"
@@ -125,15 +148,25 @@ jobs:
         working-directory: _prometheus
         run: |
           set +e
+          LEVERAGE_STDERR=$(mktemp)
           if [ "$HAS_PROFILE" = "true" ]; then
-            /tmp/pgoctl leverage-check --dir . --format json "$PGO_FILE" > /tmp/prom-leverage.json
+            /tmp/pgoctl leverage-check --dir . --package ./... --format json "$PGO_FILE" \
+              > /tmp/prom-leverage.json 2>"$LEVERAGE_STDERR"
           else
-            /tmp/pgoctl leverage-check --format json ./... > /tmp/prom-leverage.json || echo "{\"verdict\": \"INCOMPLETE\"}" > /tmp/prom-leverage.json
+            /tmp/pgoctl leverage-check --dir . --package ./... --format json /dev/null \
+              > /tmp/prom-leverage.json 2>"$LEVERAGE_STDERR"
           fi
           LEV_EXIT=$?
+          if [ -s "$LEVERAGE_STDERR" ]; then
+            echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+          fi
           set -e
+          # exit 3 = NONE verdict (valid JSON); exit 1 or >3 = real error
           if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
             echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+          fi
+          if [ ! -s /tmp/prom-leverage.json ]; then
+            printf '{"verdict":"INCOMPLETE","verdict_reason":"leverage-check produced no output"}\n' > /tmp/prom-leverage.json
           fi
           cat /tmp/prom-leverage.json
 
@@ -168,7 +201,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: "Prometheus | Sticky PR comment"
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && always()
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: pgo-leverage-prometheus
@@ -176,14 +209,13 @@ jobs:
 
       - name: Upload probe artifacts (Prometheus)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pgo-leverage-probe-prometheus
           path: |
             /tmp/ctrl-report.md
-            /tmp/prom-no-pgo.txt
-            /tmp/prom-with-pgo.txt
-            /tmp/prom-explain.json
+            /tmp/ctrl-leverage.json
+            /tmp/prom-leverage.json
             /tmp/prom-leverage-report.md
           if-no-files-found: warn
 
@@ -245,16 +277,25 @@ jobs:
         working-directory: _nats-server
         run: |
           set +e
+          LEVERAGE_STDERR=$(mktemp)
           if [ "$HAS_PROFILE" = "true" ]; then
-            /tmp/pgoctl leverage-check --dir . --format json "$NATS_PGO_FILE" > /tmp/nats-leverage.json
+            /tmp/pgoctl leverage-check --dir . --package ./... --format json "$NATS_PGO_FILE" \
+              > /tmp/nats-leverage.json 2>"$LEVERAGE_STDERR"
           else
-            /tmp/pgoctl leverage-check --format json . > /tmp/nats-leverage.json || echo "{\"verdict\": \"INCOMPLETE\"}" > /tmp/nats-leverage.json
+            /tmp/pgoctl leverage-check --dir . --package ./... --format json /dev/null \
+              > /tmp/nats-leverage.json 2>"$LEVERAGE_STDERR"
           fi
           LEV_EXIT=$?
+          if [ -s "$LEVERAGE_STDERR" ]; then
+            echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+          fi
           set -e
           # exit 3 = NONE verdict (expected for nats-server, valid JSON); exit 1 or >3 = real error
           if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
             echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+          fi
+          if [ ! -s /tmp/nats-leverage.json ]; then
+            printf '{"verdict":"INCOMPLETE","verdict_reason":"leverage-check produced no output"}\n' > /tmp/nats-leverage.json
           fi
           cat /tmp/nats-leverage.json
 
@@ -287,7 +328,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: "nats-server | Sticky PR comment"
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && always()
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: pgo-leverage-nats
@@ -295,12 +336,10 @@ jobs:
 
       - name: Upload probe artifacts (nats-server)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pgo-leverage-probe-nats-server
           path: |
-            /tmp/nats-no-pgo.txt
-            /tmp/nats-with-pgo.txt
-            /tmp/nats-explain.json
+            /tmp/nats-leverage.json
             /tmp/nats-leverage-report.md
           if-no-files-found: warn
