@@ -12,6 +12,8 @@ name: PGO Leverage Probe
 
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/pgo-leverage-probe]
   # NOTE: pull_request trigger disabled during feature development.
   # Re-enable after leverage-check is fully validated on real projects.
   # pull_request:
