@@ -468,24 +468,23 @@ func TestVerdictConstants(t *testing.T) {
 }
 
 func TestVerdictForAnalysis_High_Devirt(t *testing.T) {
+	// With AND-logic, 5 devirts alone (0 inlines) is HIGH only if inlines also
+	// meet the bar — but 0 < 30, so this is LOW. Both thresholds must be met
+	// for HIGH; a single incidental devirt must not alone trip HIGH.
 	ba := &BuildAnalysis{DevirtDecisions: 5, PGOExtraInlines: 0}
-	v, reason := verdictForAnalysis(ba, nil)
-	if v != VerdictHigh {
-		t.Errorf("expected HIGH, got %s", v)
-	}
-	if !strings.Contains(reason, "HIGH") {
-		t.Errorf("reason should contain HIGH, got %q", reason)
-	}
-	if !strings.Contains(reason, "devirtualization") {
-		t.Errorf("reason should mention devirtualization, got %q", reason)
+	v, _ := verdictForAnalysis(ba, nil)
+	if v != VerdictLow {
+		t.Errorf("expected LOW (5 devirts but 0 inlines → AND-logic needs both), got %s", v)
 	}
 }
 
 func TestVerdictForAnalysis_High_Inlines(t *testing.T) {
+	// With AND-logic, 0 devirts + 30 inlines is not HIGH (devirts < 5).
+	// Falls to LOW: 30 >= 5 inlines.
 	ba := &BuildAnalysis{DevirtDecisions: 0, PGOExtraInlines: 30}
 	v, reason := verdictForAnalysis(ba, nil)
-	if v != VerdictHigh {
-		t.Errorf("expected HIGH, got %s", v)
+	if v != VerdictLow {
+		t.Errorf("expected LOW (0 devirts + 30 inlines → AND-logic blocks HIGH), got %s", v)
 	}
 	if !strings.Contains(reason, "extra inline") {
 		t.Errorf("reason should mention extra inlines, got %q", reason)
@@ -500,6 +499,23 @@ func TestVerdictForAnalysis_High_BothParts(t *testing.T) {
 	}
 	if !strings.Contains(reason, "devirtualization") || !strings.Contains(reason, "extra inline") {
 		t.Errorf("reason should mention both devirt and inlines, got %q", reason)
+	}
+}
+
+// TestVerdictForAnalysis_NatsLike_IncidentalDevirt verifies that a single
+// incidental devirt combined with many extra inlines does NOT trip HIGH.
+// This is the nats-server scenario: 1 module devirt (incidental interface
+// call resolution) + 86 module extra inlines (in non-hot helper functions)
+// must produce LOW, not HIGH. The AND-logic ensures a single incidental
+// devirt cannot alone trip HIGH regardless of inline count.
+func TestVerdictForAnalysis_NatsLike_IncidentalDevirt(t *testing.T) {
+	ba := &BuildAnalysis{DevirtDecisions: 1, PGOExtraInlines: 86}
+	v, reason := verdictForAnalysis(ba, nil)
+	if v != VerdictLow {
+		t.Errorf("expected LOW for incidental devirt scenario (1+86), got %s; reason: %s", v, reason)
+	}
+	if strings.Contains(reason, "HIGH") {
+		t.Errorf("verdict reason should not mention HIGH, got: %q", reason)
 	}
 }
 

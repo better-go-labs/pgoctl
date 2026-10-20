@@ -190,7 +190,7 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 // verdictForAnalysis maps build-analysis counts to a Verdict + human-readable reason.
 func verdictForAnalysis(ba *BuildAnalysis, topEntries []FunctionEntry) (Verdict, string) {
 	switch {
-	case ba.DevirtDecisions >= 5 || ba.PGOExtraInlines >= 30:
+	case ba.DevirtDecisions >= 5 && ba.PGOExtraInlines >= 30:
 		parts := []string{}
 		if ba.DevirtDecisions > 0 {
 			parts = append(parts, fmt.Sprintf("%d devirtualization decision(s)", ba.DevirtDecisions))
