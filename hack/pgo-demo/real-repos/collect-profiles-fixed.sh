@@ -15,8 +15,8 @@ collect_bench_fasthttp() {
   local workdir="$OUTDIR/$name"
 
   log "--- $name: setting up bench module ---"
-  mkdir -p "$workdir/bench"
-  pushd "$workdir/bench" > /dev/null
+  mkdir -p "$workdir/_bench"
+  pushd "$workdir/_bench" > /dev/null
 
   if [[ ! -f go.mod ]]; then
     go mod init "bench_${name}"
@@ -73,8 +73,8 @@ collect_bench_snappy() {
   local workdir="$OUTDIR/$name"
 
   log "--- $name: setting up bench module ---"
-  mkdir -p "$workdir/bench"
-  pushd "$workdir/bench" > /dev/null
+  mkdir -p "$workdir/_bench"
+  pushd "$workdir/_bench" > /dev/null
 
   if [[ ! -f go.mod ]]; then
     go mod init "bench_${name}"
