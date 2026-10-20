@@ -273,7 +273,7 @@ jobs:
           if [ -n "$PGO_FILE" ] && [ -s "$PGO_FILE" ]; then
             echo "HAS_PROFILE=true" >> "$GITHUB_ENV"
             echo "NATS_PGO_FILE=$PGO_FILE" >> "$GITHUB_ENV"
-            echo "Profile: $PGO_FILE ($(du -sh \"$PGO_FILE\" | cut -f1))"
+            echo "Profile: $PGO_FILE ($(du -sh "$PGO_FILE" | cut -f1))"
           else
             echo "HAS_PROFILE=false" >> "$GITHUB_ENV"
             echo "No nats-server profile artifact available (or empty) — running baseline-only probe."
