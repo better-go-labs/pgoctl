@@ -190,6 +190,11 @@ jobs:
             echo "| PGO devirt decisions | \`${DEVIRT}\` |"
             echo "| PGO extra inlines | \`${INLINES}\` |"
           } | tee /tmp/prom-leverage-report.md
+          # Verify Prometheus produces HIGH verdict (interface-dispatch-heavy)
+          if [ "$VERDICT" != "HIGH" ]; then
+            echo "::error::Prometheus must produce HIGH verdict, got: $VERDICT"
+            exit 1
+          fi
 
       - name: "Prometheus | Job summary"
         run: |
@@ -319,6 +324,11 @@ jobs:
             echo "| PGO devirt decisions | \`${DEVIRT}\` |"
             echo "| PGO extra inlines | \`${INLINES}\` |"
           } | tee /tmp/nats-leverage-report.md
+          # Verify nats-server produces NONE/LOW verdict (not interface-dispatch-heavy)
+          if [ "$VERDICT" = "HIGH" ]; then
+            echo "::error::nats-server should produce NONE/LOW verdict, got: $VERDICT"
+            exit 1
+          fi
 
       - name: "nats-server | Job summary"
         run: |
