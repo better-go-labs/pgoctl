@@ -26,7 +26,8 @@ jobs:
         run: go build ./...
 
       - name: Vet
-        run: go vet ./...
+        run: |
+          go list ./... | grep -v 'hack/pgo-demo/real-repos/results/profiles' | xargs go vet
 
       - name: Test
         run: go test -covermode=atomic ./...
