@@ -78,6 +78,11 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read profile: %w", err)
 	}
+	// Reject empty profiles; they cause unpredictable compiler behavior during build analysis.
+	// /dev/null is valid and will parse as an empty profile, so check the file itself.
+	if len(data) == 0 {
+		return nil, fmt.Errorf("parse profile: profile file is empty")
+	}
 	p, err := profile.ParseData(data)
 	if err != nil {
 		return nil, fmt.Errorf("parse profile: %w", err)

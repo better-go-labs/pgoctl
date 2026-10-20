@@ -12,12 +12,14 @@ name: PGO Leverage Probe
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'cmd/pgoctl/**'
-      - 'internal/leverage/**'
-      - '.github/workflows/pgo-leverage-probe.yml'
-      - 'action.yml'
+  # NOTE: pull_request trigger disabled during feature development.
+  # Re-enable after leverage-check is fully validated on real projects.
+  # pull_request:
+  #   paths:
+  #     - 'cmd/pgoctl/**'
+  #     - 'internal/leverage/**'
+  #     - '.github/workflows/pgo-leverage-probe.yml'
+  #     - 'action.yml'
 
 concurrency:
   group: pgo-leverage-${{ github.ref }}
@@ -121,12 +123,12 @@ jobs:
           ref: v3.14.0
           fetch-depth: 1
 
-      - name: "Prometheus | Cache Go modules"
-        uses: actions/cache@v6
+      - name: "Prometheus | Setup Go (with cache)"
+        uses: actions/setup-go@v7
         with:
-          path: ~/go/pkg/mod
-          key: prom-mod-${{ hashFiles('_prometheus/go.sum') }}
-          restore-keys: prom-mod-
+          go-version: '1.26.9'
+          cache: true
+          cache-dependency-path: _prometheus/go.sum
 
       - name: "Prometheus | Validate + merge profile"
         run: |
@@ -267,13 +269,14 @@ jobs:
               --dir /tmp/nats-profile 2>/dev/null || true
           fi
           PGO_FILE=$(find /tmp/nats-profile -type f 2>/dev/null | head -1)
-          if [ -n "$PGO_FILE" ]; then
+          # Validate: file must exist and have nonzero size
+          if [ -n "$PGO_FILE" ] && [ -s "$PGO_FILE" ]; then
             echo "HAS_PROFILE=true" >> "$GITHUB_ENV"
             echo "NATS_PGO_FILE=$PGO_FILE" >> "$GITHUB_ENV"
             echo "Profile: $PGO_FILE ($(du -sh \"$PGO_FILE\" | cut -f1))"
           else
             echo "HAS_PROFILE=false" >> "$GITHUB_ENV"
-            echo "No nats-server profile artifact available — running baseline-only probe."
+            echo "No nats-server profile artifact available (or empty) — running baseline-only probe."
             echo "Note: NONE verdict requires a profile. Baseline analysis still reveals inline budget violations."
           fi
           set -e

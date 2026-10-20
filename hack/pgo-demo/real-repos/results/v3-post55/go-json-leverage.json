@@ -1,0 +1,152 @@
+{
+  "profile_path": "hack/pgo-demo/real-repos/results/profiles/go-json/profile.pprof",
+  "total_samples": 3791,
+  "top_functions": [
+    {
+      "function": "github.com/goccy/go-json/internal/encoder/vm.Run",
+      "package": "github.com/goccy/go-json/internal/encoder/vm",
+      "flat_pct": 7.25,
+      "cum_pct": 31.84
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/decoder.decodeKeyByBitmapUint8",
+      "package": "github.com/goccy/go-json/internal/decoder",
+      "flat_pct": 4.27,
+      "cum_pct": 4.88
+    },
+    {
+      "function": "runtime.asyncPreempt",
+      "package": "runtime",
+      "flat_pct": 4.01,
+      "cum_pct": 4.01
+    },
+    {
+      "function": "runtime.memmove",
+      "package": "runtime",
+      "flat_pct": 3.24,
+      "cum_pct": 3.24
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/encoder.appendNormalizedHTMLString",
+      "package": "github.com/goccy/go-json/internal/encoder",
+      "flat_pct": 3.14,
+      "cum_pct": 3.93
+    },
+    {
+      "function": "runtime.mallocgcSmallScanNoHeader",
+      "package": "runtime",
+      "flat_pct": 3.01,
+      "cum_pct": 17.3
+    },
+    {
+      "function": "runtime.nextFreeFast",
+      "package": "runtime",
+      "flat_pct": 2.8,
+      "cum_pct": 2.8
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/decoder.(*stringDecoder).Decode",
+      "package": "github.com/goccy/go-json/internal/decoder",
+      "flat_pct": 2.45,
+      "cum_pct": 6.23
+    },
+    {
+      "function": "runtime.memclrNoHeapPointers",
+      "package": "runtime",
+      "flat_pct": 2.43,
+      "cum_pct": 2.43
+    },
+    {
+      "function": "runtime.(*mspan).writeHeapBitsSmall",
+      "package": "runtime",
+      "flat_pct": 2.4,
+      "cum_pct": 3.09
+    },
+    {
+      "function": "runtime.typePointers.next",
+      "package": "runtime",
+      "flat_pct": 2.22,
+      "cum_pct": 2.48
+    },
+    {
+      "function": "runtime.mallocgc",
+      "package": "runtime",
+      "flat_pct": 2.19,
+      "cum_pct": 23.45
+    },
+    {
+      "function": "runtime.tryDeferToSpanScan",
+      "package": "runtime",
+      "flat_pct": 2.11,
+      "cum_pct": 2.74
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/decoder.(*stringDecoder).decodeByte",
+      "package": "github.com/goccy/go-json/internal/decoder",
+      "flat_pct": 1.98,
+      "cum_pct": 2.43
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/decoder.(*structDecoder).Decode",
+      "package": "github.com/goccy/go-json/internal/decoder",
+      "flat_pct": 1.64,
+      "cum_pct": 43.37
+    },
+    {
+      "function": "runtime.wbBufFlush1",
+      "package": "runtime",
+      "flat_pct": 1.35,
+      "cum_pct": 4.14
+    },
+    {
+      "function": "runtime.scanObject",
+      "package": "runtime",
+      "flat_pct": 1.29,
+      "cum_pct": 3.48
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/decoder.(*sliceDecoder).Decode",
+      "package": "github.com/goccy/go-json/internal/decoder",
+      "flat_pct": 1.24,
+      "cum_pct": 12.87
+    },
+    {
+      "function": "runtime.gcmarknewobject",
+      "package": "runtime",
+      "flat_pct": 1.24,
+      "cum_pct": 1.93
+    },
+    {
+      "function": "github.com/goccy/go-json/internal/encoder.AppendString",
+      "package": "github.com/goccy/go-json/internal/encoder",
+      "flat_pct": 1.21,
+      "cum_pct": 5.28
+    }
+  ],
+  "build_analysis": {
+    "devirt_decisions": 10,
+    "pgo_extra_inlines": 59,
+    "pgo_extra_inlines_deps": 598,
+    "baseline_inlines": 29925,
+    "pgo_inlines": 30816,
+    "pgo_devirts": 13,
+    "pgo_devirts_deps": 3,
+    "devirt_sites": [
+      "internal/reflectlite/type.go:397:28: PGO devirtualizing interface call u.common to rtype.common",
+      "reflect/type.go:1392:28: PGO devirtualizing interface call u.common to (*rtype).common",
+      "reflect/type.go:1407:27: PGO devirtualizing interface call u.common to (*rtype).common",
+      "github.com/goccy/go-json/internal/decoder/map.go:161:40: PGO devirtualizing interface call d.keyDecoder.Decode to (*stringDecoder).Decode",
+      "github.com/goccy/go-json/internal/decoder/map.go:171:44: PGO devirtualizing interface call d.valueDecoder.Decode to (*stringDecoder).Decode",
+      "github.com/goccy/go-json/internal/decoder/slice.go:264:36: PGO devirtualizing interface call d.valueDecoder.Decode to (*stringDecoder).Decode",
+      "github.com/goccy/go-json/internal/decoder/struct.go:782:32: PGO devirtualizing function call d.keyDecoder to decodeKeyByBitmapUint8",
+      "github.com/goccy/go-json/internal/decoder/struct.go:818:31: PGO devirtualizing interface call field.dec.Decode to (*sliceDecoder).Decode",
+      "github.com/goccy/go-json/internal/encoder/vm/vm.go:112:20: PGO devirtualizing function call appendString to encoder.AppendString",
+      "github.com/goccy/go-json/internal/encoder/vm/vm.go:1425:21: PGO devirtualizing function call appendFloat64 to encoder.AppendFloat64",
+      "github.com/goccy/go-json/internal/encoder/vm/vm.go:1718:20: PGO devirtualizing function call appendString to encoder.AppendString",
+      "github.com/goccy/go-json/internal/encoder/vm/vm.go:3280:17: PGO devirtualizing function call appendInt to encoder.AppendInt",
+      "github.com/goccy/go-json/internal/encoder/vm/vm.go:4541:20: PGO devirtualizing function call appendString to encoder.AppendString"
+    ]
+  },
+  "verdict": "HIGH",
+  "verdict_reason": "HIGH: strong PGO leverage — 10 devirtualization decision(s), 59 extra inline(s) with PGO; run a full benchmark cycle"
+}

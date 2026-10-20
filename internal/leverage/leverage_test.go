@@ -1348,3 +1348,37 @@ func TestModuleSites_IndependentOfDirAndCache(t *testing.T) {
 		t.Errorf("module inline sites: from cmd/app = %d, from root = %d; want equal and > 0", fromSub, fromRoot)
 	}
 }
+
+// TestAnalyzeBuildOutput_NatsLike verifies that large deps inline counts do not inflate the verdict.
+// nats-server is a real-world project where PGO optimization in dependencies is high but
+// optimization in the module itself is negligible. This must produce NONE, not HIGH.
+func TestAnalyzeBuildOutput_NatsLike(t *testing.T) {
+	// Simulate a build with:
+	// - 0 module-scoped devirts, 0 module-scoped extra inlines (the REAL signal)
+	// - Many deps devirts and inlines (should not drive verdict)
+	baselines := strings.Join([]string{
+		"github.com/x/y@v1/file1.go:10:5: inlining call to A",
+		"github.com/z/w@v2/file2.go:20:7: inlining call to B",
+	}, "\n")
+	pgo := strings.Join([]string{
+		// Same as baseline
+		"github.com/x/y@v1/file1.go:10:5: inlining call to A",
+		"github.com/z/w@v2/file2.go:20:7: inlining call to B",
+		// Extra deps inlines (PGO-only, but in deps)
+		"github.com/x/y@v1/file1.go:11:6: inlining call to C",
+		"github.com/x/y@v1/file1.go:12:7: inlining call to D",
+		"github.com/z/w@v2/file3.go:30:9: inlining call to E",
+		"runtime/proc.go:100:5: inlining call to F",
+	}, "\n")
+	ba := analyzeBuildOutput(pgo, baselines, testMods())
+	if ba.PGOExtraInlines != 0 {
+		t.Errorf("module extra inlines = %d, want 0 (no module packages in testMods() are in pgo output)", ba.PGOExtraInlines)
+	}
+	if ba.PGOExtraInlinesDeps < 3 {
+		t.Errorf("deps extra inlines = %d, want >= 3", ba.PGOExtraInlinesDeps)
+	}
+	v, _ := verdictForAnalysis(ba, nil)
+	if v != VerdictNone {
+		t.Errorf("verdict = %s, want NONE when module-scoped PGO decisions are 0", v)
+	}
+}
