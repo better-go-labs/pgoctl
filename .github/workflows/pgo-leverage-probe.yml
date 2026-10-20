@@ -5,23 +5,13 @@ name: PGO Leverage Probe
 #   2. DEVIRTUALIZATION         — PGO-driven devirt markers in the same diff
 # Emits: PGO-leverage = NONE | LOW | HIGH
 #
-# Runs on push to feature/pgo-leverage-probe and on pull_request for in-branch
-# testing. Also triggerable via workflow_dispatch.
-# TEMP: remove the pull_request (and push) triggers after this PR merges —
-# keep workflow_dispatch only in production.
+# Triggerable via workflow_dispatch.
 # Two jobs prove correctness on known targets:
 #   probe-high     : Prometheus (interface-dispatch-heavy) → expect HIGH
 #   probe-none-low : nats-server (client.parse over inline budget) → expect NONE/LOW
 
 on:
   workflow_dispatch:
-  # TEMP: pull_request trigger for in-branch testing, remove before merge
-  pull_request:
-    branches:
-      - master
-  push:
-    branches:
-      - feature/pgo-leverage-probe
 
 concurrency:
   group: pgo-leverage-${{ github.ref }}
@@ -243,7 +233,7 @@ jobs:
           if [ -n "$PGO_FILE" ]; then
             echo "HAS_PROFILE=true" >> "$GITHUB_ENV"
             echo "NATS_PGO_FILE=$PGO_FILE" >> "$GITHUB_ENV"
-            echo "Profile: $PGO_FILE ($(du -sh "$PGO_FILE" | cut -f1))"
+            echo "Profile: $PGO_FILE ($(du -sh \"$PGO_FILE\" | cut -f1))"
           else
             echo "HAS_PROFILE=false" >> "$GITHUB_ENV"
             echo "No nats-server profile artifact available — running baseline-only probe."
