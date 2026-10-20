@@ -5,13 +5,18 @@ name: PGO Leverage Probe
 #   2. DEVIRTUALIZATION         — PGO-driven devirt markers in the same diff
 # Emits: PGO-leverage = NONE | LOW | HIGH
 #
-# Manual e2e test only — trigger via workflow_dispatch.
+# Runs on push to feature/pgo-leverage-probe for in-branch testing.
+# Also triggerable via workflow_dispatch.
+# Remove the push trigger after this PR merges.
 # Two jobs prove correctness on known targets:
 #   probe-high     : Prometheus (interface-dispatch-heavy) → expect HIGH
 #   probe-none-low : nats-server (client.parse over inline budget) → expect NONE/LOW
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/pgo-leverage-probe
 
 concurrency:
   group: pgo-leverage-${{ github.ref }}
