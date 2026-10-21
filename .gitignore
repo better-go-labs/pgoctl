@@ -1,5 +1,10 @@
 # binaries
 bin/
+/pgoctl
+*.test
+
+# demo scratch output — not fixtures
+hack/pgo-demo/**/results/
 
 # captured profiles (committed intentionally go in testdata/ with explicit git add)
 testdata/*.pprof
