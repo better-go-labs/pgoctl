@@ -24,7 +24,7 @@ Output: PR #50 (feat/leverage-check branch) — https://github.com/better-go-lab
 - `cmd/pgoctl/leverage.go` — cobra command with --dir flag, text/JSON output formats
 - `internal/leverage/leverage.go` — core logic: pprof parsing, hot function detection, PGO build analysis, verdict generation
 - `internal/leverage/leverage_test.go` — comprehensive table-driven unit tests
-- `testdata/cpu_valid.pprof` — valid gzipped pprof test fixture (committed directly, excluded from LFS in .gitattributes)
+- `testdata/cpu_valid.pprof`, `testdata/cpu_happy.pprof`: pprof test fixtures, stored in Git LFS like every `*.pprof` (see `.gitattributes`). All CI checkouts use `lfs: true`; tests skip when only the LFS pointer is present.
 
 CI Status (head SHA 8ac496ef):
 - Build #103 ✅

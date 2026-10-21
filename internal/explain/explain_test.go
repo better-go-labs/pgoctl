@@ -153,21 +153,6 @@ func TestAnalyzeFile_NotFound(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestPackageFromFunction(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"github.com/prometheus/prometheus/tsdb.(*Head).Append", "github.com/prometheus/prometheus/tsdb"},
-		{"github.com/prometheus/prometheus/tsdb/wlog.(*Watcher).run", "github.com/prometheus/prometheus/tsdb/wlog"},
-		{"runtime.mallocgc", "runtime"},
-		{"main.main", "main"},
-	}
-	for _, tt := range tests {
-		assert.Equal(t, tt.want, packageFromFunction(tt.input), tt.input)
-	}
-}
-
 // TestPprofDataVsExplain cross-validates the explain flat-% computation by
 // reading the same profile twice: once with the raw pprof package (ground truth)
 // and once via AnalyzeFile. Both computations must agree to within 0.01%.
@@ -360,12 +345,4 @@ func TestAnalyze_EmptyLocationSkipped(t *testing.T) {
 	require.NotNil(t, rpt)
 	assert.Equal(t, int64(2), rpt.TotalSamples)
 	require.Len(t, rpt.TopFunctions, 1)
-}
-
-// TestPackageFromFunction_EmptyResult covers the pkg=="" return-name branch
-// when the function name starts with a "." or "(" and has no package prefix.
-func TestPackageFromFunction_EmptyResult(t *testing.T) {
-	// ".init" has no slash, and IndexAny finds "." at position 0 → cut=0 → pkg=""
-	result := packageFromFunction(".init")
-	assert.Equal(t, ".init", result)
 }

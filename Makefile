@@ -1,4 +1,4 @@
-.PHONY: build baseline-bin kind-up kind-down collect-baseline load-prometheus test vet smoke demo clean cover
+.PHONY: build baseline-bin kind-up kind-down collect-baseline load-prometheus test vet smoke demo clean cover capture-pgoctl-profile
 
 COVERPKG := $(shell go list ./... | grep -vE '/(cmd/baseline|hack/loadgen)$$' | paste -sd,)
 
@@ -32,6 +32,9 @@ collect-baseline: baseline-bin
 load-prometheus:
 	@echo "Sending load to Prometheus query endpoint for 60s..."
 	hey -z 60s -c 50 http://localhost:9090/api/v1/query?query=up
+
+capture-pgoctl-profile:
+	./scripts/capture-pgoctl-profile.sh
 
 smoke: build
 	PGOCTL=$(BIN) ./scripts/smoke.sh

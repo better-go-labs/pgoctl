@@ -6,7 +6,8 @@ import (
 	"math"
 	"os"
 	"sort"
-	"strings"
+
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 
 	internerrors "github.com/Better-Go-Labs/pgoctl/internal/errors"
 	"github.com/google/pprof/profile"
@@ -88,7 +89,7 @@ func analyze(path string, p *profile.Profile, topN int) *Report {
 		}
 		entries = append(entries, FunctionEntry{
 			Function: fn,
-			Package:  packageFromFunction(fn),
+			Package:  pprofutil.PackageOf(fn),
 			FlatPct:  pct,
 		})
 	}
@@ -134,7 +135,7 @@ func analyze(path string, p *profile.Profile, topN int) *Report {
 
 	return &Report{
 		ProfilePath:   path,
-		TotalSamples:  int64(len(p.Sample)),
+		TotalSamples:  pprofutil.SampleCount(p),
 		DurationSec:   math.Round(float64(p.DurationNanos)/1e9*10) / 10,
 		TopFunctions:  topEntries,
 		PackageGroups: groups,
@@ -146,7 +147,7 @@ func analyze(path string, p *profile.Profile, topN int) *Report {
 // pgoVerdict gives a simple plain-English readiness verdict based on the
 // same signals used by validate: sample count and function diversity.
 func pgoVerdict(p *profile.Profile, _ int64, uniqueFunctions int) (Verdict, string) {
-	samples := int64(len(p.Sample))
+	samples := pprofutil.SampleCount(p)
 
 	const minSamples = 10000
 	const targetSamples = 50000
@@ -191,20 +192,4 @@ func cpuSampleIndex(p *profile.Profile) (int, bool) {
 		return fallback, true
 	}
 	return -1, false
-}
-
-// packageFromFunction extracts the package path from a pprof function name.
-func packageFromFunction(name string) string {
-	slash := strings.LastIndex(name, "/")
-	start := slash + 1
-	rest := name[start:]
-	cut := len(rest)
-	if i := strings.IndexAny(rest, "(."); i >= 0 {
-		cut = i
-	}
-	pkg := name[:start+cut]
-	if pkg == "" {
-		return name
-	}
-	return pkg
 }

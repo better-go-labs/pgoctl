@@ -337,3 +337,27 @@ func TestValidateFile_PackageShareZeroTotal(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, report)
 }
+
+// TestValidateFile_SamplesSumCount guards that Samples sums samples/count,
+// not the number of stack rows.
+func TestValidateFile_SamplesSumCount(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
+		DurationNanos: 30 * 1e9,
+	}
+	fn := &profile.Function{ID: 1, Name: "main.main"}
+	loc := &profile.Location{ID: 1, Line: []profile.Line{{Function: fn}}}
+	p.Function = []*profile.Function{fn}
+	p.Location = []*profile.Location{loc}
+	for i := 0; i < 4; i++ {
+		p.Sample = append(p.Sample, &profile.Sample{
+			Location: []*profile.Location{loc},
+			Value:    []int64{5},
+		})
+	}
+	path := writeTmpProfileV(t, p)
+
+	report, err := validate.ValidateFile(path, validate.Options{MinSamples: 1, MinScore: 0, MinStackDepth: 1})
+	require.NoError(t, err)
+	assert.Equal(t, int64(20), report.Samples, "4 rows x 5 samples")
+}
