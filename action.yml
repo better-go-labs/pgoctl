@@ -234,11 +234,12 @@ runs:
       id: leverage
       if: inputs.run-leverage-probe == 'true'
       shell: bash
+      env:
+        LEVERAGE_TARGET: ${{ inputs.leverage-probe-target }}
       run: |
         set +e
         echo "=== PGO leverage probe ==="
-        PKG="${{ inputs.leverage-probe-target }}"
-        PKG="${PKG:-./...}"
+        PKG="${LEVERAGE_TARGET:-./...}"
 
         LEVERAGE_JSON="$RUNNER_TEMP/leverage.json"
         LEVERAGE_STDERR="$RUNNER_TEMP/leverage.stderr"
