@@ -867,3 +867,34 @@ func TestNewLeverageCheckCmd_SelfProfile(t *testing.T) {
 		t.Error("no pgoctl functions in the self profile")
 	}
 }
+
+func TestPrintLeverageReport_PGOExtraInlinesDeps(t *testing.T) {
+	// Exercises the PGOExtraInlinesDeps > 0 branch in printLeverageReport.
+	rpt := &leverage.Report{
+		Verdict:       leverage.VerdictLow,
+		VerdictReason: "LOW",
+		BuildAnalysis: &leverage.BuildAnalysis{
+			DevirtDecisions:     1,
+			PGOExtraInlines:     8,
+			PGOExtraInlinesDeps: 42,
+		},
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	printLeverageReport(rpt)
+	_ = w.Close()
+	os.Stdout = old
+	out, _ := io.ReadAll(r)
+	outputStr := string(out)
+
+	if !strings.Contains(outputStr, "pgo_extra_inlines_deps") {
+		t.Errorf("expected pgo_extra_inlines_deps in output, got:\n%s", outputStr)
+	}
+	if !strings.Contains(outputStr, "42") {
+		t.Errorf("expected deps value 42 in output, got:\n%s", outputStr)
+	}
+}

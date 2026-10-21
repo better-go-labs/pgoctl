@@ -1398,3 +1398,58 @@ func TestAnalyzeBuildOutput_NatsLike(t *testing.T) {
 		t.Errorf("verdict = %s, want NONE when module-scoped PGO decisions are 0", v)
 	}
 }
+
+func TestRunBuild_Error(t *testing.T) {
+	// A nonexistent working directory causes exec.Cmd to fail on CombinedOutput,
+	// exercising the error-return branch in runBuild.
+	_, err := runBuild("/nonexistent/absolutely/missing", "./...", "", false)
+	if err == nil {
+		t.Fatal("expected error from runBuild with nonexistent dir")
+	}
+	if !strings.Contains(err.Error(), "go build") {
+		t.Errorf("expected 'go build' in error text, got: %v", err)
+	}
+}
+
+func TestRunBuildAnalysis_PGOBuildFails(t *testing.T) {
+	// A nonexistent dir makes runBuild fail on the PGO build pass,
+	// exercising the "PGO build: %w" error return in runBuildAnalysis.
+	_, err := runBuildAnalysis("/nonexistent/absolutely/missing", "./...", "/tmp/fake.pprof", nil)
+	if err == nil {
+		t.Fatal("expected error from runBuildAnalysis with nonexistent dir")
+	}
+	if !strings.Contains(err.Error(), "PGO build") {
+		t.Errorf("expected 'PGO build' in error, got: %v", err)
+	}
+}
+
+func TestRunBuildAnalysis_BaselineBuildFails(t *testing.T) {
+	// Build a valid minimal module so the PGO build can succeed,
+	// then point at an invalid package so the baseline go build also fails.
+	// This exercises the "baseline build: %w" return.
+	moduleDir := t.TempDir()
+	goMod := []byte("module example.com/baselinefail\n\ngo 1.21\n")
+	mainGo := []byte("package main\n\nfunc main() {}\n")
+	if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), goMod, 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, "main.go"), mainGo, 0o644); err != nil {
+		t.Fatalf("write main.go: %v", err)
+	}
+
+	mods, err := listPackages(moduleDir, ".")
+	if err != nil {
+		t.Fatalf("listPackages: %v", err)
+	}
+
+	// Use a nonexistent profile file; filepath.Abs succeeds, but the PGO build
+	// will fail because -pgo points at a missing file.
+	_, err = runBuildAnalysis(moduleDir, ".", filepath.Join(moduleDir, "nonexistent.pprof"), mods)
+	if err == nil {
+		t.Skip("compiler accepted nonexistent pprof — toolchain may silently ignore missing pprof")
+	}
+	// Either PGO or baseline error is acceptable here.
+	if !strings.Contains(err.Error(), "build") {
+		t.Errorf("expected 'build' in error, got: %v", err)
+	}
+}

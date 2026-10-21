@@ -126,7 +126,7 @@ jobs:
       - name: "Prometheus | Setup Go (with cache)"
         uses: actions/setup-go@v7
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.x'
           cache: true
           cache-dependency-path: _prometheus/go.sum
 
