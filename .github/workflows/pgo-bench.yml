@@ -269,6 +269,18 @@ jobs:
           echo "----- rendered report -----"
           cat /tmp/bench-report.md
 
+      - name: Truncate bench report for PR comment
+        if: github.event_name == 'pull_request' && steps.profile.outputs.found == 'true'
+        run: |
+          # GitHub PR comments have a 65536-char limit; stay under 60000 to leave room for header/footer.
+          MAX=60000
+          size=$(wc -c < /tmp/bench-report.md)
+          if [ "$size" -gt "$MAX" ]; then
+            head -c "$MAX" /tmp/bench-report.md > /tmp/bench-report-truncated.md
+            printf '\n\n> _(report truncated at %d chars — see job summary for full output)_\n' "$MAX" >> /tmp/bench-report-truncated.md
+            mv /tmp/bench-report-truncated.md /tmp/bench-report.md
+          fi
+
       - name: Post sticky PR comment
         if: github.event_name == 'pull_request' && steps.profile.outputs.found == 'true'
         uses: marocchino/sticky-pull-request-comment@v3
