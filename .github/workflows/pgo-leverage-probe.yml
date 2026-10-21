@@ -132,47 +132,30 @@ jobs:
           cache-dependency-path: _prometheus/go.sum
           check-latest: true
 
-      - name: "Prometheus | Validate + merge profile"
-        run: |
-          if [ -f testdata/prometheus_cpu.pprof ]; then
-            /tmp/pgoctl merge --strategy weighted --out /tmp/prometheus.pgo testdata/prometheus_cpu.pprof
-            echo "HAS_PROFILE=true" >> "$GITHUB_ENV"
-            echo "PGO_FILE=/tmp/prometheus.pgo" >> "$GITHUB_ENV"
-            echo "Profile: $(du -sh /tmp/prometheus.pgo | cut -f1)"
-          else
-            echo "HAS_PROFILE=false" >> "$GITHUB_ENV"
-            echo "::warning::testdata/prometheus_cpu.pprof not found — probe will run baseline-only"
-          fi
-
-      - name: "Prometheus | Download deps"
-        working-directory: _prometheus
-        run: go mod download
-
       - name: "Prometheus | Check leverage"
         working-directory: _prometheus
         run: |
           set +e
           LEVERAGE_STDERR=$(mktemp)
-          if [ "$HAS_PROFILE" = "true" ]; then
-            /tmp/pgoctl leverage-check --dir . --package ./... --format json "$PGO_FILE" \
+          if [ -f ../testdata/prometheus_cpu.pprof ]; then
+            /tmp/pgoctl leverage-check --dir . --package ./cmd/prometheus --format json ../testdata/prometheus_cpu.pprof \
               > /tmp/prom-leverage.json 2>"$LEVERAGE_STDERR"
+            LEV_EXIT=$?
+            if [ -s "$LEVERAGE_STDERR" ]; then
+              echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+            fi
+            if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
+              echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+            fi
           else
-            /tmp/pgoctl leverage-check --dir . --package ./... --format json /dev/null \
-              > /tmp/prom-leverage.json 2>"$LEVERAGE_STDERR"
-          fi
-          LEV_EXIT=$?
-          if [ -s "$LEVERAGE_STDERR" ]; then
-            echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
-          fi
-          set -e
-          # exit 3 = NONE verdict (valid JSON); exit 1 or >3 = real error
-          if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
-            echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+            echo "::warning::testdata/prometheus_cpu.pprof not found — probe will run baseline-only"
+            printf '{"verdict":"INCOMPLETE","verdict_reason":"no profile provided"}\n' > /tmp/prom-leverage.json
           fi
           if [ ! -s /tmp/prom-leverage.json ]; then
             printf '{"verdict":"INCOMPLETE","verdict_reason":"leverage-check produced no output"}\n' > /tmp/prom-leverage.json
           fi
           cat /tmp/prom-leverage.json
+          set -e
 
       - name: "Prometheus | Generate leverage report"
         shell: bash
@@ -292,23 +275,21 @@ jobs:
           if [ "$HAS_PROFILE" = "true" ]; then
             /tmp/pgoctl leverage-check --dir . --package ./... --format json "$NATS_PGO_FILE" \
               > /tmp/nats-leverage.json 2>"$LEVERAGE_STDERR"
+            LEV_EXIT=$?
+            if [ -s "$LEVERAGE_STDERR" ]; then
+              echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+            fi
+            if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
+              echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+            fi
           else
-            /tmp/pgoctl leverage-check --dir . --package ./... --format json /dev/null \
-              > /tmp/nats-leverage.json 2>"$LEVERAGE_STDERR"
-          fi
-          LEV_EXIT=$?
-          if [ -s "$LEVERAGE_STDERR" ]; then
-            echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
-          fi
-          set -e
-          # exit 3 = NONE verdict (expected for nats-server, valid JSON); exit 1 or >3 = real error
-          if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
-            echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+            printf '{"verdict":"INCOMPLETE","verdict_reason":"no profile provided"}\n' > /tmp/nats-leverage.json
           fi
           if [ ! -s /tmp/nats-leverage.json ]; then
             printf '{"verdict":"INCOMPLETE","verdict_reason":"leverage-check produced no output"}\n' > /tmp/nats-leverage.json
           fi
           cat /tmp/nats-leverage.json
+          set -e
 
       - name: "nats-server | Generate leverage report"
         shell: bash

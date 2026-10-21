@@ -249,6 +249,10 @@ runs:
 
         if [ -s "$LEVERAGE_STDERR" ]; then
           echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+          if { [ $LEVERAGE_STATUS -ne 0 ] && [ $LEVERAGE_STATUS -ne 3 ]; }; then
+            HEAD_ERR=$(head -1 "$LEVERAGE_STDERR")
+            echo "::warning::leverage-check failed: $HEAD_ERR"
+          fi
         fi
         cat "$LEVERAGE_JSON"
 
@@ -262,18 +266,20 @@ runs:
         SAMPLES=$(python3 -c "import json; d=json.load(open('$LEVERAGE_JSON')); print(d.get('total_samples',0))" 2>/dev/null || echo "0")
         DEVIRT=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('devirt_decisions','-'))" 2>/dev/null || echo "-")
         INLINES=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('pgo_extra_inlines','-'))" 2>/dev/null || echo "-")
+        DEVIRT_DEPS=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('pgo_devirts_deps','-'))" 2>/dev/null || echo "-")
+        INLINES_DEPS=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('pgo_extra_inlines_deps','-'))" 2>/dev/null || echo "-")
 
         echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
 
         {
           echo "### PGO Leverage: \`${VERDICT}\`"
           echo ""
-          echo "> Samples: ${SAMPLES} | Devirt decisions: ${DEVIRT} | Extra inlines: ${INLINES}"
+          echo "> Samples: ${SAMPLES} | Devirt decisions: ${DEVIRT} | Devirt deps: ${DEVIRT_DEPS} | Extra inlines: ${INLINES} | Inlines deps: ${INLINES_DEPS}"
           [ -n "$REASON" ] && echo "" && echo "$REASON"
         } >> "$GITHUB_STEP_SUMMARY"
 
         if [ "$VERDICT" = "NONE" ]; then
-          echo "::warning::PGO-leverage = NONE — no codegen lever found. Consider skipping the full benchmark cycle."
+          echo "::warning::PGO-leverage = NONE: no codegen lever found. Consider skipping the full benchmark cycle."
         fi
         set -e
 

@@ -15,7 +15,11 @@ type Doer interface {
 type SumCalc struct{ K float64 }
 
 func (s SumCalc) Run(x float64) float64 {
-	return x*s.K + x - x*x*0.5
+	acc := 0.0
+	for i := 0; i < 64; i++ {
+		acc += x*s.K + x - x*x*0.5
+	}
+	return acc
 }
 
 // HotLoop is marked noinline so the interface-call site survives in the
@@ -28,11 +32,4 @@ func HotLoop(d Doer, n int) float64 {
 		acc += d.Run(float64(i) * 1e-4)
 	}
 	return acc
-}
-
-// init() is called during go build so the interface dispatch in HotLoop
-// is visible to compiler analysis, allowing PGO devirtualization detection.
-func init() {
-	d := SumCalc{K: 1.5}
-	_ = HotLoop(d, 100)
 }

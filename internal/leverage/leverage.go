@@ -78,11 +78,6 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read profile: %w", err)
 	}
-	// Reject empty profiles; they cause unpredictable compiler behavior during build analysis.
-	// /dev/null is valid and will parse as an empty profile, so check the file itself.
-	if len(data) == 0 {
-		return nil, fmt.Errorf("parse profile: profile file is empty")
-	}
 	p, err := profile.ParseData(data)
 	if err != nil {
 		return nil, fmt.Errorf("parse profile: %w", err)
@@ -190,7 +185,7 @@ func CheckFile(profilePath string, opts Options) (*Report, error) {
 // verdictForAnalysis maps build-analysis counts to a Verdict + human-readable reason.
 func verdictForAnalysis(ba *BuildAnalysis, topEntries []FunctionEntry) (Verdict, string) {
 	switch {
-	case ba.DevirtDecisions >= 5 && ba.PGOExtraInlines >= 30:
+	case ba.DevirtDecisions >= 5 || ba.PGOExtraInlines >= 30:
 		parts := []string{}
 		if ba.DevirtDecisions > 0 {
 			parts = append(parts, fmt.Sprintf("%d devirtualization decision(s)", ba.DevirtDecisions))

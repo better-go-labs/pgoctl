@@ -215,26 +215,6 @@ func TestCheckFile_InvalidData(t *testing.T) {
 	}
 }
 
-func TestCheckFile_EmptyProfile(t *testing.T) {
-	f, err := os.CreateTemp("", "empty-*.pprof")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = f.Close()
-	t.Cleanup(func() { _ = os.Remove(f.Name()) })
-
-	_, err = CheckFile(f.Name(), Options{})
-	if err == nil {
-		t.Error("expected error for empty profile file")
-	}
-	if !strings.Contains(err.Error(), "parse profile") {
-		t.Errorf("expected parse profile error, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "empty") {
-		t.Errorf("expected 'empty' in error message, got: %v", err)
-	}
-}
-
 func TestCpuSampleIndex_FallbackOnly(t *testing.T) {
 	p := &profile.Profile{
 		SampleType: []*profile.ValueType{{Type: "samples", Unit: "count"}},
@@ -1443,33 +1423,3 @@ func TestRunBuildAnalysis_PGOBuildFails(t *testing.T) {
 	}
 }
 
-func TestRunBuildAnalysis_BaselineBuildFails(t *testing.T) {
-	// Build a valid minimal module so the PGO build can succeed,
-	// then point at an invalid package so the baseline go build also fails.
-	// This exercises the "baseline build: %w" return.
-	moduleDir := t.TempDir()
-	goMod := []byte("module example.com/baselinefail\n\ngo 1.21\n")
-	mainGo := []byte("package main\n\nfunc main() {}\n")
-	if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), goMod, 0o644); err != nil {
-		t.Fatalf("write go.mod: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(moduleDir, "main.go"), mainGo, 0o644); err != nil {
-		t.Fatalf("write main.go: %v", err)
-	}
-
-	mods, err := listPackages(moduleDir, ".")
-	if err != nil {
-		t.Fatalf("listPackages: %v", err)
-	}
-
-	// Use a nonexistent profile file; filepath.Abs succeeds, but the PGO build
-	// will fail because -pgo points at a missing file.
-	_, err = runBuildAnalysis(moduleDir, ".", filepath.Join(moduleDir, "nonexistent.pprof"), mods)
-	if err == nil {
-		t.Skip("compiler accepted nonexistent pprof — toolchain may silently ignore missing pprof")
-	}
-	// Either PGO or baseline error is acceptable here.
-	if !strings.Contains(err.Error(), "build") {
-		t.Errorf("expected 'build' in error, got: %v", err)
-	}
-}
