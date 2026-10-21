@@ -215,6 +215,26 @@ func TestCheckFile_InvalidData(t *testing.T) {
 	}
 }
 
+func TestCheckFile_EmptyProfile(t *testing.T) {
+	f, err := os.CreateTemp("", "empty-*.pprof")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	t.Cleanup(func() { _ = os.Remove(f.Name()) })
+
+	_, err = CheckFile(f.Name(), Options{})
+	if err == nil {
+		t.Error("expected error for empty profile file")
+	}
+	if !strings.Contains(err.Error(), "parse profile") {
+		t.Errorf("expected parse profile error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("expected 'empty' in error message, got: %v", err)
+	}
+}
+
 func TestCpuSampleIndex_FallbackOnly(t *testing.T) {
 	p := &profile.Profile{
 		SampleType: []*profile.ValueType{{Type: "samples", Unit: "count"}},
