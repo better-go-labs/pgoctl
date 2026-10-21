@@ -129,6 +129,7 @@ jobs:
           go-version: '1.26.x'
           cache: true
           cache-dependency-path: _prometheus/go.sum
+          check-latest: true
 
       - name: "Prometheus | Validate + merge profile"
         run: |
