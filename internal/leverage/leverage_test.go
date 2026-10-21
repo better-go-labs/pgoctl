@@ -1416,4 +1416,3 @@ func TestRunBuildAnalysis_PGOBuildFails(t *testing.T) {
 		t.Errorf("expected 'PGO build' in error, got: %v", err)
 	}
 }
-
