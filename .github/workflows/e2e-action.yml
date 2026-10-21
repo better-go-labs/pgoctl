@@ -34,6 +34,7 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
+          check-latest: true
 
       - name: Build pgoctl and generate fixture profile
         run: |
@@ -138,6 +139,7 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
+          check-latest: true
 
       - name: Build pgoctl and generate fixture profile
         run: |
@@ -215,6 +217,7 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
+          check-latest: true
 
       - name: Start pprof server (CPU burner)
         run: |
