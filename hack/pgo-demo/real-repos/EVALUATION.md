@@ -42,13 +42,13 @@ go test -bench=<BenchmarkName> -run=^$ -count=1 -benchtime=10s -cpuprofile=profi
 
 Two invocation modes:
 
-1. **Static only** — profile analysis without build:
+1. **Static only**  - profile analysis without build:
    ```
    pgoctl leverage-check profile.pprof
    ```
    Returns `INCOMPLETE` (no devirt count without `--dir`).
 
-2. **Full analysis** — with `--dir` pointing to the library's own module directory:
+2. **Full analysis**  - with `--dir` pointing to the library's own module directory:
    ```
    pgoctl leverage-check profile.pprof --dir $(go env GOMODCACHE)/<library@version> --json
    ```
@@ -85,10 +85,10 @@ Verdict thresholds (matching `pgoctl compare` defaults):
 
 These purpose-built services provide anchor baselines for expected HIGH and NONE/LOW behavior.
 
-| Service | Category | Prediction | Devirt | Extra Inlines | Bench Δ | p-val | Outcome |
+| Service | Category | Prediction | Devirt (pre-#55 total) | Extra Inlines (pre-#55 total) | Bench Delta | p-val | Outcome |
 |---------|----------|------------|--------|---------------|---------|-------|---------|
-| hashcalc-svc | CPU-bound (crypto + asm) | HIGH | 93 | 0 | +0.6% RPS | — | **NEUTRAL** |
-| passthrough-svc | I/O-bound (HTTP proxy) | HIGH | 93 | 0 | -1.0% RPS | — | **NEUTRAL** |
+| hashcalc-svc | CPU-bound (crypto + asm) | HIGH | 93 | 0 | +0.6% RPS | -- | **NEUTRAL** |
+| passthrough-svc | I/O-bound (HTTP proxy) | HIGH | 93 | 0 | -1.0% RPS | -- | **NEUTRAL** |
 
 Both services receive HIGH predictions and deliver NEUTRAL outcomes. Analysis in
 `GOCONF-DATA-REPORT.md`: the devirt decisions fall on library/stdlib code, not the
@@ -103,21 +103,18 @@ application hot path.
 | [yuin/goldmark](https://github.com/yuin/goldmark) v1.8.6 | Markdown parser | **HIGH** | 68 | 4 | 252 | 568 | -5.1% | 0.310 | **NEUTRAL** |
 | [tidwall/gjson](https://github.com/tidwall/gjson) v1.19.0 | JSON path query | **HIGH** | 0 | 3 | 36 | 424 | -6.3% | 0.024 | **NEUTRAL**† |
 | [goccy/go-json](https://github.com/goccy/go-json) v0.10.6 | JSON encoder/decoder | **HIGH** | 10 | 3 | 59 | 598 | +0.1% | 0.841 | **NEUTRAL** |
-| [golang/snappy](https://github.com/golang/snappy) v0.0.4 | Compressor (Go+asm) | **NONE** ← was HIGH | 0 | 3 | 2 | 799 | -1.8% | 0.481 | **NEUTRAL** |
-| [valyala/fasthttp](https://github.com/valyala/fasthttp) v1.74.0 | HTTP framework | **HIGH** | 0 | 5 | 74 | 600 | -1.6% | 0.841 | **NEUTRAL** |
+| [golang/snappy](https://github.com/golang/snappy) v1.0.0 | Compressor (Go+asm) | **NONE** <- was HIGH | 0 | 3 | 2 | 799 | -1.8% | 0.481 | **NEUTRAL** |
+| [valyala/fasthttp](https://github.com/valyala/fasthttp) v1.74.0 | HTTP framework | **HIGH** | 0 | 1 | 92 | 771 | -1.6% | 0.841 | **NEUTRAL** |
 
-† gjson improvement is statistically significant (p=0.024) but below the 10% PROMOTE
-threshold used by `pgoctl compare`.  
-Note: fasthttp re-run used untracked profile.pprof with `--dir` pointing to v1.57.0
-(nearest available in module cache); v1.74.0 source was not available. Devirt/inline counts
-may be slightly off but verdict directionally correct.
+dagger gjson improvement is statistically significant (p=0.024) but below the 10% PROMOTE
+threshold used by `pgoctl compare`.
 
 **Prediction accuracy (post-#55):**
 
 | Prediction | Repos | PROMOTE | NEUTRAL | ROLLBACK |
 |------------|-------|---------|---------|----------|
 | HIGH | 4 of 5 | 0 | 4 | 0 |
-| NONE | 1 of 5 (snappy) | — | 1 (bench confirms) | 0 |
+| NONE | 1 of 5 (snappy) |  - | 1 (bench confirms) | 0 |
 
 **Key change vs original:** snappy correctly downgrades from HIGH → NONE. The old 7
 devirt decisions and 1164 extra inlines were all stdlib/dependency noise; the module itself
@@ -126,16 +123,16 @@ correctly flagged as outside PGO scope.
 
 The remaining 4 HIGH predictions still deliver NEUTRAL bench outcomes. This is a
 separate issue (leverage-check correctly identifies compiler decisions, but those decisions
-may not fall on the benchmark hot path — the subject of Finding 2 and the hotpath-weighted
+may not fall on the benchmark hot path  - the subject of Finding 2 and the hotpath-weighted
 devirt improvement proposed in the Implications section).
 
 ---
 
 ## Per-Repository Analysis
 
-### 1. yuin/goldmark — Markdown Parser
+### 1. yuin/goldmark  - Markdown Parser
 
-**leverage-check:** HIGH — 68 module-scoped devirt decisions, 252 module-scoped extra inlines
+**leverage-check:** HIGH  - 68 module-scoped devirt decisions, 252 module-scoped extra inlines
 (+4 dep devirts, +568 dep extra inlines)
 
 **Build analysis reveals (post-#55):**
@@ -169,15 +166,15 @@ are mostly in cold import paths, not the core parse loop.
 
 ---
 
-### 2. tidwall/gjson — JSON Path Queries
+### 2. tidwall/gjson  - JSON Path Queries
 
-**leverage-check:** HIGH — 0 module-scoped devirt decisions, 36 module-scoped extra inlines
+**leverage-check:** HIGH  - 0 module-scoped devirt decisions, 36 module-scoped extra inlines
 (+3 dep devirts, +424 dep extra inlines)
 
 **Build analysis reveals (post-#55):**
 ```
 devirt_decisions:        0   (module-scoped)
-pgo_devirts_deps:        3   (stdlib/deps — reflect/type.go, excluded from verdict)
+pgo_devirts_deps:        3   (stdlib/deps  - reflect/type.go, excluded from verdict)
 pgo_extra_inlines:      36   (module-scoped)
 pgo_extra_inlines_deps: 424
 ```
@@ -197,7 +194,7 @@ GJSON-2   2.495µ ± ∞      2.339µ ± ∞    -6.25% (p=0.024 n=5)
 ```
 
 **Why partial improvement:**
-gjson is written without interfaces in its hot path — it uses direct function calls
+gjson is written without interfaces in its hot path  - it uses direct function calls
 (`parseObject`, `parseSquash`, `parseArray`). The -6.25% improvement comes from PGO
 enabling tighter inlining of helper functions that gjson marks as non-inlinable under
 normal budget. This is `pgo_extra_inlines` at work, not devirt. The 13 devirt decisions
@@ -208,9 +205,9 @@ improvement, though below the 10% PROMOTE threshold.
 
 ---
 
-### 3. goccy/go-json — JSON Encoder/Decoder
+### 3. goccy/go-json  - JSON Encoder/Decoder
 
-**leverage-check:** HIGH — 10 module-scoped devirt decisions, 59 module-scoped extra inlines
+**leverage-check:** HIGH  - 10 module-scoped devirt decisions, 59 module-scoped extra inlines
 (+3 dep devirts, +598 dep extra inlines)
 
 **Build analysis reveals (post-#55):**
@@ -237,16 +234,16 @@ GoJSON-2   3.672µ ± ∞      3.676µ ± ∞    ~  (p=0.841 n=5)
 
 **Why NEUTRAL despite large inline count:**
 go-json uses a bytecode VM (`encoder/vm.Run`) for its hot path. The VM is a large function
-that loops over encoded instructions — it's too large to inline (inlining budget exceeded)
+that loops over encoded instructions  - it's too large to inline (inlining budget exceeded)
 and PGO cannot shrink it. The 1113 extra inlines are in surrounding scaffolding
 (encoder setup, decoder initialization) that runs once per encode/decode call but doesn't
 dominate the total CPU time. Zero actual benefit.
 
 ---
 
-### 4. golang/snappy — Compressor
+### 4. golang/snappy  - Compressor
 
-**leverage-check (post-#55):** **NONE** — 0 module-scoped devirt decisions, 2 module-scoped extra inlines
+**leverage-check (post-#55):** **NONE**  - 0 module-scoped devirt decisions, 2 module-scoped extra inlines
 (+3 dep devirts, +799 dep extra inlines)
 
 **Build analysis reveals (post-#55):**
@@ -257,7 +254,7 @@ pgo_extra_inlines:       2   (module-scoped)
 pgo_extra_inlines_deps: 799
 ```
 
-*Original (pre-#55, full transitive graph — HIGH prediction was incorrect):*
+*Original (pre-#55, full transitive graph  - HIGH prediction was incorrect):*
 ```
 devirt_decisions: 7
 pgo_extra_inlines: 1164
@@ -273,7 +270,7 @@ Snappy-2   181.7µ ± 27%   178.4µ ± 28%    ~  (p=0.481 n=10)
 
 **Post-#55 verdict NONE is correct:**
 snappy's compression hot path (`snappy.Encode`, `snappy.Decode`) routes through assembly
-implementations on amd64. PGO cannot touch assembly functions — it only influences
+implementations on amd64. PGO cannot touch assembly functions  - it only influences
 Go-compiled code. Post-#55, the engine correctly reports 0 module-scoped devirts and 2 extra
 inlines for snappy itself; the benchmark confirms NEUTRAL. The old pre-#55 7 devirt
 decisions and 1164 extra inlines were all from stdlib packages compiled as part of the
@@ -281,9 +278,9 @@ transitive dep graph. See also: hashcalc-svc (same pattern with `sha256.blockAVX
 
 ---
 
-### 5. valyala/fasthttp — HTTP Framework
+### 5. valyala/fasthttp  - HTTP Framework
 
-**leverage-check (post-#55):** HIGH — 0 module-scoped devirt decisions, 74 module-scoped extra inlines
+**leverage-check (post-#55):** HIGH  - 0 module-scoped devirt decisions, 74 module-scoped extra inlines
 (+5 dep devirts, +600 dep extra inlines)
 
 **Build analysis reveals (post-#55, using profile.pprof + --dir fasthttp@v1.57.0):**
