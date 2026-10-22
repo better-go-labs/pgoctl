@@ -59,7 +59,7 @@ jobs:
           done
           echo "[$(date -u +%H:%M:%S)] all binaries compiled"
 
-      - name: Probe benchmarks (fail-fast: 1 iteration each)
+      - name: "Probe benchmarks (fail-fast: 1 iteration each)"
         run: |
           declare -A BENCH_FN
           BENCH_FN[goldmark]='BenchmarkGoldmark'
