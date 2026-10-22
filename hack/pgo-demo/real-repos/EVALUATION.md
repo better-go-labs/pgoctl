@@ -60,32 +60,36 @@ Two invocation modes:
 
 ### Benchmark Comparison
 
-Baseline and PGO builds compared with 5 trials, `benchtime=5s`:
+**Current harness (CI-backed):** `.github/workflows/pgo-bench-real-repos.yml`
+- Single `ubuntu-latest` job; pre-compiled test binaries per library
+- **10 interleaved rounds** (A/B/A/B per library per round, same pattern as `pgo-bench.yml`)
+- `GOMAXPROCS=2`; 90s per-binary timeout; benchtime=5s per round
+- Results carry a GitHub Actions run id; raw data uploaded as workflow artifact
+- Signal threshold: >=2-3% geomean improvement at p<0.05 (house standard)
+
+**Legacy harness (v3 results):** one-off manual run on a shared 2-vCPU Skylake VM, no run id,
+benchstat sequential baseline-then-PGO blocks. The benchmark rows below are from that run.
 
 ```bash
-# baseline
+# v3 manual harness (legacy, sequential — do not use for new measurements)
 go test -bench=. -run=^$ -count=5 -benchtime=5s > baseline.txt
-
-# pgo build using collected profile
 go test -bench=. -run=^$ -count=5 -benchtime=5s -pgo=profile.pprof > pgo.txt
-
 benchstat baseline.txt pgo.txt
 ```
 
 Verdict thresholds (matching `pgoctl compare` defaults at time of eval):
-- **PROMOTE**: ≥10% improvement, p < 0.05
+- **PROMOTE**: >=10% improvement, p < 0.05 (threshold since lowered to 3%)
 - **NEUTRAL**: within +-10%, or p >= 0.05
-- **ROLLBACK**: ≥10% regression
+- **ROLLBACK**: >=10% regression
 
-> **Methodology limitations:** n=5 on a shared 2-vCPU Skylake VM produces 13-48% run-to-run
+> **v3 methodology limitations:** n=5 on a shared 2-vCPU Skylake VM produces 13-48% run-to-run
 > noise. At that noise floor, benchstat returns `+/-inf` confidence intervals on 4 of 5 rows,
 > so **NEUTRAL outcomes at n=5 are uninformative**: they do not confirm that PGO has no effect,
 > only that the signal-to-noise ratio is too low to detect the typical 2-7% PGO gain.
 > Additionally, the CPU profile was collected from the same benchmark it then measures
 > (collect-and-eval.sh:53), which is the most PGO-favourable setup -- near-zero gain here is
 > a stronger negative signal, not a weaker one.
-> A methodologically sound re-run requires n>=20 per side, interleaved A/B ordering, and
-> dedicated CPU (taskset pinning). See open question in the task tracker.
+> Use the CI workflow for any new benchmark measurements.
 
 ---
 

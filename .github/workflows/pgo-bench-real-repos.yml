@@ -1,0 +1,248 @@
+name: PGO Benchmark — Real-Repo Libraries
+# Validates pgoctl leverage-check predictions against 5 real open-source Go libraries.
+# Uses the same interleaved-round harness as pgo-bench.yml:
+#   single ubuntu-latest job, GOMAXPROCS=2, 10 rounds alternating baseline/pgo per library,
+#   pre-compiled test binaries, 90s per-binary timeout.
+# Results carry a GitHub Actions run_id, removing the manual-VM provenance from results/v3.
+#
+# Trigger: workflow_dispatch or PR changes to bench modules / profiles / this workflow.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'hack/pgo-demo/real-repos/results/profiles/**'
+      - '.github/workflows/pgo-bench-real-repos.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            hack/pgo-demo/real-repos/results/profiles/goldmark/_bench/go.sum
+            hack/pgo-demo/real-repos/results/profiles/gjson/_bench/go.sum
+            hack/pgo-demo/real-repos/results/profiles/go-json/_bench/go.sum
+            hack/pgo-demo/real-repos/results/profiles/snappy/_bench/go.sum
+            hack/pgo-demo/real-repos/results/profiles/fasthttp/_bench/go.sum
+          check-latest: true
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Pre-compile test binaries (baseline + PGO for each library)
+        run: |
+          BENCH_ROOT="${GITHUB_WORKSPACE}/hack/pgo-demo/real-repos/results/profiles"
+          mkdir -p /tmp/bench
+
+          for name in goldmark gjson go-json snappy fasthttp; do
+            pkg_dir="$BENCH_ROOT/${name}/_bench"
+            profile="$BENCH_ROOT/${name}/profile.pprof"
+            echo "[$(date -u +%H:%M:%S)] compiling ${name} (baseline)"
+            (cd "$pkg_dir" && go test -c -o /tmp/bench/${name}-baseline.test .)
+            echo "[$(date -u +%H:%M:%S)] compiling ${name} (pgo, profile=${profile})"
+            (cd "$pkg_dir" && go test -c -pgo="${profile}" -o /tmp/bench/${name}-pgo.test .)
+          done
+          echo "[$(date -u +%H:%M:%S)] all binaries compiled"
+
+      - name: Probe benchmarks (fail-fast: 1 iteration each)
+        run: |
+          declare -A BENCH_FN
+          BENCH_FN[goldmark]='BenchmarkGoldmark'
+          BENCH_FN[gjson]='BenchmarkGJSON'
+          BENCH_FN[go-json]='BenchmarkGoJSON'
+          BENCH_FN[snappy]='BenchmarkSnappy'
+          BENCH_FN[fasthttp]='BenchmarkFastHTTPParsing'
+
+          for name in goldmark gjson go-json snappy fasthttp; do
+            fn="${BENCH_FN[$name]}"
+            count=$(timeout 30s /tmp/bench/${name}-baseline.test \
+              -test.bench="${fn}" -test.benchtime=50ms -test.run='^$' 2>/dev/null \
+              | grep -c '^Benchmark' || echo 0)
+            echo "${name}: ${count} benchmark(s) matched '${fn}'"
+            if [ "$count" -eq 0 ]; then
+              echo "::error::${name}: 0 benchmarks matched '${fn}'"
+              exit 1
+            fi
+          done
+
+      - name: Run 10 interleaved rounds (baseline vs PGO, all 5 libraries)
+        env:
+          GOMAXPROCS: 2
+        run: |
+          BENCHTIME=5s
+          BINTIMEOUT=90s
+          ROUNDS=10
+
+          declare -A BENCH_FN
+          BENCH_FN[goldmark]='BenchmarkGoldmark'
+          BENCH_FN[gjson]='BenchmarkGJSON'
+          BENCH_FN[go-json]='BenchmarkGoJSON'
+          BENCH_FN[snappy]='BenchmarkSnappy'
+          BENCH_FN[fasthttp]='BenchmarkFastHTTPParsing'
+
+          # Initialise output files
+          for name in goldmark gjson go-json snappy fasthttp; do
+            : > /tmp/bench/${name}-baseline.txt
+            : > /tmp/bench/${name}-pgo.txt
+          done
+
+          echo "Running ${ROUNDS} interleaved rounds (GOMAXPROCS=${GOMAXPROCS}, benchtime=${BENCHTIME})..."
+          overall=$SECONDS
+
+          for i in $(seq 1 "${ROUNDS}"); do
+            echo ""
+            echo "================= round ${i}/${ROUNDS} ================="
+            r=$SECONDS
+            for name in goldmark gjson go-json snappy fasthttp; do
+              fn="${BENCH_FN[$name]}"
+
+              echo "--- [$(date -u +%H:%M:%S)] round ${i} • ${name} • baseline ---"
+              timeout "${BINTIMEOUT}" /tmp/bench/${name}-baseline.test \
+                -test.bench="${fn}" -test.benchtime="${BENCHTIME}" \
+                -test.run='^$' \
+                2>&1 | tee -a /tmp/bench/${name}-baseline.txt || \
+                echo "::warning::${name}/baseline round ${i} may have timed out"
+
+              echo "--- [$(date -u +%H:%M:%S)] round ${i} • ${name} • pgo ---"
+              timeout "${BINTIMEOUT}" /tmp/bench/${name}-pgo.test \
+                -test.bench="${fn}" -test.benchtime="${BENCHTIME}" \
+                -test.run='^$' \
+                2>&1 | tee -a /tmp/bench/${name}-pgo.txt || \
+                echo "::warning::${name}/pgo round ${i} may have timed out"
+            done
+            echo "--- round ${i} done in $((SECONDS - r))s (total $((SECONDS - overall))s) ---"
+          done
+
+          echo ""
+          echo "[$(date -u +%H:%M:%S)] all rounds complete in $((SECONDS - overall))s"
+
+      - name: benchstat + CV summary
+        run: |
+          : > /tmp/bench-report.md
+          : > /tmp/bench-summary.md
+
+          # Per-library benchstat
+          for name in goldmark gjson go-json snappy fasthttp; do
+            benchstat /tmp/bench/${name}-baseline.txt /tmp/bench/${name}-pgo.txt \
+              > /tmp/bench/${name}-stat.txt 2>&1 || true
+          done
+
+          # CV (coefficient of variation) helper: stddev/mean * 100
+          # Reads benchstat input file, extracts ns/op values, computes CV.
+          cv_from_bench() {
+            local file="$1"
+            awk '/^Benchmark/{print $3}' "$file" \
+              | awk '
+                BEGIN { sum=0; sumsq=0; n=0 }
+                { sum += $1; sumsq += $1*$1; n++ }
+                END {
+                  if (n < 2) { print "n/a"; next }
+                  mean = sum/n
+                  var  = (sumsq - n*mean*mean) / (n-1)
+                  if (mean == 0) { print "n/a"; next }
+                  printf "%.1f%%", sqrt(var)/mean*100
+                }'
+          }
+
+          {
+            echo "## PGO Benchmark — Real-Repo Libraries"
+            echo ""
+            echo "_${ROUNDS:-10} interleaved rounds, GOMAXPROCS=2, benchtime=5s per round. Run: \`$GITHUB_RUN_ID\` on \`$GITHUB_SHA\`._"
+            echo "_Signal threshold: ≥2-3% geomean improvement at p<0.05 (house standard matching pgo-bench.yml)._"
+            echo ""
+            echo "| Library | Bench | Baseline CV | PGO CV | geomean Δ | p-value | leverage-check |"
+            echo "|---------|-------|-------------|--------|-----------|---------|---------------|"
+            declare -A LEVERAGE
+            LEVERAGE[goldmark]='HIGH'
+            LEVERAGE[gjson]='HIGH'
+            LEVERAGE[go-json]='HIGH'
+            LEVERAGE[snappy]='NONE'
+            LEVERAGE[fasthttp]='HIGH'
+
+            declare -A BENCH_FN
+            BENCH_FN[goldmark]='BenchmarkGoldmark'
+            BENCH_FN[gjson]='BenchmarkGJSON'
+            BENCH_FN[go-json]='BenchmarkGoJSON'
+            BENCH_FN[snappy]='BenchmarkSnappy'
+            BENCH_FN[fasthttp]='BenchmarkFastHTTPParsing'
+
+            for name in goldmark gjson go-json snappy fasthttp; do
+              fn="${BENCH_FN[$name]}"
+              stat_line=$(grep -m1 "geomean\|${fn}" /tmp/bench/${name}-stat.txt 2>/dev/null | head -1 || echo "")
+              if [ -n "$stat_line" ]; then
+                delta=$(echo "$stat_line" | awk '{print $3}' 2>/dev/null || echo "—")
+                pval=$(echo "$stat_line"  | awk '{print $NF}' 2>/dev/null || echo "—")
+              else
+                delta="—"; pval="—"
+              fi
+              base_cv=$(cv_from_bench /tmp/bench/${name}-baseline.txt)
+              pgo_cv=$(cv_from_bench  /tmp/bench/${name}-pgo.txt)
+              lev="${LEVERAGE[$name]}"
+              echo "| \`${name}\` | \`${fn}\` | ${base_cv} | ${pgo_cv} | ${delta} | ${pval} | ${lev} |"
+            done
+            echo ""
+          } > /tmp/bench-report.md
+
+          # Per-library collapsible breakdown
+          {
+            echo "<details>"
+            echo "<summary>Per-library benchstat detail (5 libraries)</summary>"
+            echo ""
+            for name in goldmark gjson go-json snappy fasthttp; do
+              echo "#### ${name}"
+              echo ""
+              echo '```'
+              cat /tmp/bench/${name}-stat.txt
+              echo '```'
+              echo ""
+              echo "baseline raw:"
+              echo '```'
+              cat /tmp/bench/${name}-baseline.txt
+              echo '```'
+              echo ""
+              echo "pgo raw:"
+              echo '```'
+              cat /tmp/bench/${name}-pgo.txt
+              echo '```'
+              echo ""
+            done
+            echo "</details>"
+          } >> /tmp/bench-report.md
+
+          # Job summary
+          cat /tmp/bench-report.md >> "$GITHUB_STEP_SUMMARY"
+
+          echo "----- rendered report -----"
+          cat /tmp/bench-report.md
+
+      - name: Upload raw benchmark data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pgo-bench-real-repos-${{ github.run_id }}
+          path: |
+            /tmp/bench/*-baseline.txt
+            /tmp/bench/*-pgo.txt
+            /tmp/bench/*-stat.txt
+
+      - name: Post sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: pgo-bench-real-repos
+          path: /tmp/bench-report.md
