@@ -35,6 +35,7 @@ flowchart TD
 - [Quick start](#quick-start)
   - [Via pprof endpoint](#via-pprof-endpoint-any-go-service)
   - [Via Parca](#via-parca-continuous-profiling)
+  - [PGO leverage probe](#pgo-leverage-probe-optional-pre-check)
   - [GitHub Action](#github-action-ci-integration)
   - [Smoke test](#smoke-test-no-external-services-required)
 - [CLI reference](#cli-reference)
@@ -88,6 +89,42 @@ PARCA_URL=http://localhost:7070 ./demo.sh
 ```
 
 `demo.sh` runs collect, validate, merge, build, and explain end to end against your Parca server.
+
+### PGO leverage probe (optional pre-check)
+
+Before running a full benchmark cycle, the action can check whether the profile has enough
+PGO signal for the compiler to act on. Run it via `run-leverage-probe`:
+
+```yaml
+- id: pgo
+  uses: better-go-labs/pgoctl@v0.1.0
+  with:
+    profile-file: cpu.pprof
+    run-leverage-probe: 'true'
+    leverage-probe-target: ./cmd/myapp   # point at the binary the profile came from
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+
+- run: test "${{ steps.pgo.outputs.leverage-verdict }}" != "NONE"
+```
+
+`leverage-probe-target` defaults to `./...`, which builds every package under `-m=2`.
+Point it at the specific binary package the profile came from to avoid double-building test helpers.
+
+The probe emits `leverage-verdict` with one of four values:
+
+| Value | Meaning |
+|-------|---------|
+| `NONE` | 0 PGO-specific compiler decisions; optimization will not help |
+| `LOW` | 1-4 devirt decisions or 5-29 extra inlines; modest gains possible |
+| `HIGH` | >=5 devirt decisions or >=30 extra inlines; run a full benchmark cycle |
+| `INCOMPLETE` | Build analysis was not run (no directory provided internally) |
+
+A `NONE` verdict emits a `::warning::` annotation and never fails the job by itself.
+To gate on it, add an explicit assertion as shown above.
+
+> **Note:** No release up to v0.1.3 ships `leverage-check` in its binary distribution.
+> The probe works only while the action builds `pgoctl` from source (i.e. no `pgoctl-version`
+> tag set in your workflow, or a version that is not yet released).
 
 ### GitHub Action (CI integration)
 
@@ -291,6 +328,8 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 | `github-token` | Token used to post the PR comment |
 | `restore-previous-artifact` | Auto-download the most recent successful artifact for steady-state profile accumulation (requires `permissions: actions: read`; default: `false`) |
 | `previous-profile` | Path to a previous `default.pgo` to merge with — overrides `restore-previous-artifact` if set |
+| `run-leverage-probe` | Run PGO leverage pre-check (`go build -gcflags=-m=2`) before the benchmark cycle. Emits `leverage-verdict`. Default: `false` |
+| `leverage-probe-target` | Go build target for the leverage probe. Default: `./...` (all packages); point at the binary the profile came from to avoid double-building test helpers under `-m=2` |
 
 > **Note:** To enable progressive profile accumulation across runs, set `restore-previous-artifact: true` in your workflow.
 > The calling workflow must have `permissions: actions: read` for cross-run artifact download.
@@ -303,6 +342,7 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 | `profile-path` | Path to the collected/used profile |
 | `artifact-path` | Path to the produced artifact |
 | `validate-score` | Quality score from `pgoctl validate` |
+| `leverage-verdict` | PGO leverage pre-check verdict: `NONE`, `LOW`, `HIGH`, or `INCOMPLETE` (empty if `run-leverage-probe` is not set) |
 
 ## Docker
 
