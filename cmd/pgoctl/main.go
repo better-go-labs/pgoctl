@@ -70,6 +70,7 @@ func newValidateCmd() *cobra.Command {
 	var minPeakedness float64
 	var crossPkgHotThreshold float64
 	var minCrossPkgDensity float64
+	var driftAgainst string
 
 	// validateConfigFlags are the flags resolved from env/config (precedence:
 	// CLI > env > config file > default). json is the root persistent flag.
@@ -80,6 +81,7 @@ func newValidateCmd() *cobra.Command {
 		"richness-factor", "min-package-share", "json",
 		"workload-signals", "min-cpu-bound-fraction", "peakedness-top-n",
 		"min-peakedness", "cross-pkg-hot-threshold", "min-cross-pkg-density",
+		"drift-against",
 	}
 
 	cmd := &cobra.Command{
@@ -118,6 +120,8 @@ func newValidateCmd() *cobra.Command {
 							return err
 						}
 						workloadSignals = b
+					case "drift-against":
+						driftAgainst = val
 					case "min-samples", "target-samples":
 						n, err := strconv.ParseInt(val, 10, 64)
 						if err != nil {
@@ -204,6 +208,7 @@ func newValidateCmd() *cobra.Command {
 				MinPeakedness:               minPeakedness,
 				CrossPackageHotThresholdPct: crossPkgHotThreshold,
 				MinCrossPackageChainDensity: minCrossPkgDensity,
+				DriftAgainstPath:            driftAgainst,
 			}
 			report, err := validate.ValidateFile(args[0], opts) //nolint:gosec
 			if err != nil {
@@ -241,6 +246,7 @@ func newValidateCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&minPeakedness, "min-peakedness", 0, "warn if top-N cumulative CPU%% is below this value (0=disabled)")
 	cmd.Flags().Float64Var(&crossPkgHotThreshold, "cross-pkg-hot-threshold", 0, "per-function flat CPU%% threshold to count as hot for cross-package chain density (0=all)")
 	cmd.Flags().Float64Var(&minCrossPkgDensity, "min-cross-pkg-density", 0, "warn if cross-package chain density is below this value (0–1, 0=disabled)")
+	cmd.Flags().StringVar(&driftAgainst, "drift-against", "", "reference profile path (.pb.gz or pprof); enables drift_pct (TVD) in workload signals (requires --workload-signals)")
 	return cmd
 }
 
@@ -413,6 +419,9 @@ func printQualityReport(report *profiletypes.QualityReport, jsonOutput bool) {
 			_, _ = fmt.Fprintf(w, "cpu_bound_fraction\t%.4f\n", ws.CPUBoundFraction)
 			_, _ = fmt.Fprintf(w, "peakedness\t%.2f%%\n", ws.Peakedness)
 			_, _ = fmt.Fprintf(w, "cross_package_chain_density\t%.4f\n", ws.CrossPackageChainDensity)
+			if ws.DriftPct != 0 {
+				_, _ = fmt.Fprintf(w, "drift_pct\t%.4f\n", ws.DriftPct)
+			}
 		}
 		for _, e := range report.Errors {
 			_, _ = fmt.Fprintf(w, "error\t%s\n", e)

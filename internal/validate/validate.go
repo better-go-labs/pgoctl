@@ -181,6 +181,11 @@ type Options struct {
 	// (the default) the signals block is skipped and ValidateFile behaves as
 	// before this change.
 	ComputeWorkloadSignals bool
+
+	// DriftAgainstPath is an optional path to a reference CPU profile (.pb.gz or
+	// raw pprof). When non-empty and ComputeWorkloadSignals is true, ValidateFile
+	// computes drift_pct (TVD) between the current profile and the reference.
+	DriftAgainstPath string
 }
 
 // DefaultOptions returns Options with sensible defaults for production profiles.
@@ -325,6 +330,25 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 			Peakedness:               ProfilePeakedness(p, topN),
 			CrossPackageChainDensity: CrossPackageChainDensity(p, opts.CrossPackageHotThresholdPct),
 		}
+
+		if opts.DriftAgainstPath != "" {
+			refData, err := os.ReadFile(opts.DriftAgainstPath)
+			if err != nil {
+				report.Warnings = append(report.Warnings, fmt.Sprintf(
+					"drift_pct skipped: cannot read reference profile %s: %v",
+					opts.DriftAgainstPath, err))
+			} else {
+				refP, err := profile.ParseData(refData)
+				if err != nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf(
+						"drift_pct skipped: cannot parse reference profile %s: %v",
+						opts.DriftAgainstPath, err))
+				} else {
+					ws.DriftPct = ProfileDriftPct(p, refP)
+				}
+			}
+		}
+
 		report.WorkloadSignals = ws
 
 		if opts.MinCPUBoundFraction > 0 && ws.CPUBoundFraction < opts.MinCPUBoundFraction {

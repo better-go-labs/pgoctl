@@ -311,3 +311,155 @@ func TestValidateFile_WorkloadSignals_WarnOnThreshold(t *testing.T) {
 	}
 	assert.True(t, hasCPUWarn, "expected cpu_bound_fraction warning when all-runtime profile")
 }
+
+// ── ProfileDriftPct ─────────────────────────────────────────────────────────
+
+func TestProfileDriftPct_IdenticalProfiles(t *testing.T) {
+	p := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "github.com/myapp/server.handleRequest", 600},
+		{nil, "github.com/myapp/db.Query", 400},
+	})
+	// TVD between identical distributions is always 0.
+	assert.Equal(t, 0.0, ProfileDriftPct(p, p))
+}
+
+func TestProfileDriftPct_DisjointProfiles(t *testing.T) {
+	cur := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "github.com/myapp/server.handleRequest", 1000},
+		{nil, "github.com/myapp/db.Query", 0},
+	})
+	ref := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "github.com/myapp/other.doWork", 500},
+		{nil, "github.com/myapp/cache.Get", 500},
+	})
+	// No overlap → TVD = 1.0.
+	assert.Equal(t, 1.0, ProfileDriftPct(cur, ref))
+}
+
+func TestProfileDriftPct_PartialOverlap(t *testing.T) {
+	// cur: fn1=600, fn2=400 (normalized: fn1=0.6, fn2=0.4)
+	// ref: fn1=400, fn3=600 (normalized: fn1=0.4, fn3=0.6)
+	// TVD = 0.5 * (|0.6-0.4| + |0.4-0| + |0-0.6|) = 0.5*(0.2+0.4+0.6) = 0.6
+	cur := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "fn1", 600},
+		{nil, "fn2", 400},
+	})
+	ref := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "fn1", 400},
+		{nil, "fn3", 600},
+	})
+	assert.InDelta(t, 0.6, ProfileDriftPct(cur, ref), 0.001)
+}
+
+func TestProfileDriftPct_SingleSample(t *testing.T) {
+	p := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "fn1", 1000},
+	})
+	// n < 2 guard.
+	assert.Equal(t, 0.0, ProfileDriftPct(p, p))
+}
+
+func TestProfileDriftPct_NoCPUSampleType(t *testing.T) {
+	p := &profile.Profile{
+		SampleType: []*profile.ValueType{{Type: "alloc_space", Unit: "bytes"}},
+	}
+	ref := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "fn1", 1000},
+		{nil, "fn2", 500},
+	})
+	assert.Equal(t, 0.0, ProfileDriftPct(p, ref))
+}
+
+// ── Integration: drift_pct via ValidateFile ──────────────────────────────────
+
+func TestValidateFile_DriftPct_Populated(t *testing.T) {
+	cur := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "github.com/myapp/server.handleRequest", 600},
+		{nil, "github.com/myapp/db.Query", 400},
+	})
+	ref := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "github.com/myapp/server.handleRequest", 600},
+		{nil, "github.com/myapp/db.Query", 400},
+	})
+	curPath := writeTmpPprof(t, cur)
+	refPath := writeTmpPprof(t, ref)
+
+	opts := DefaultOptions()
+	opts.MinSamples = 1
+	opts.MinScore = 0.0
+	opts.ComputeWorkloadSignals = true
+	opts.DriftAgainstPath = refPath
+
+	report, err := ValidateFile(curPath, opts)
+	require.NoError(t, err)
+	require.NotNil(t, report.WorkloadSignals)
+	// Identical distributions → drift = 0.
+	assert.Equal(t, 0.0, report.WorkloadSignals.DriftPct)
+}
+
+func TestValidateFile_DriftPct_BadRefPath(t *testing.T) {
+	cur := buildProfile(t, []struct {
+		chain []string
+		fn    string
+		value int64
+	}{
+		{nil, "fn1", 500},
+		{nil, "fn2", 500},
+	})
+	curPath := writeTmpPprof(t, cur)
+
+	opts := DefaultOptions()
+	opts.MinSamples = 1
+	opts.MinScore = 0.0
+	opts.ComputeWorkloadSignals = true
+	opts.DriftAgainstPath = "/nonexistent/profile.pb.gz"
+
+	report, err := ValidateFile(curPath, opts)
+	require.NoError(t, err)
+	require.NotNil(t, report.WorkloadSignals)
+	// drift_pct skipped on I/O error → 0, and a warning is emitted.
+	assert.Equal(t, 0.0, report.WorkloadSignals.DriftPct)
+	var hasWarn bool
+	for _, w := range report.Warnings {
+		if strings.HasPrefix(w, "drift_pct skipped") {
+			hasWarn = true
+		}
+	}
+	assert.True(t, hasWarn, "expected drift_pct skipped warning for missing reference")
+}

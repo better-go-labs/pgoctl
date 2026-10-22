@@ -17,9 +17,11 @@ type ProfileMeta struct {
 	SHA256       string        `json:"sha256"`
 }
 
-// WorkloadSignals holds the three workload-shape signals computed beyond the
-// existing devirt/inline-fire pre-check. All three fields are always populated
-// when ComputeWorkloadSignals is enabled.
+// WorkloadSignals holds workload-shape signals computed beyond the existing
+// devirt/inline-fire pre-check. CPUBoundFraction, Peakedness, and
+// CrossPackageChainDensity are always populated when ComputeWorkloadSignals is
+// enabled. DriftPct is only populated when a reference profile is supplied via
+// Options.DriftAgainstPath.
 type WorkloadSignals struct {
 	// CPUBoundFraction is the share (0–1) of on-CPU time attributed to
 	// user/library Go functions vs runtime, GC, scheduler, syscall, and IO.
@@ -38,6 +40,12 @@ type WorkloadSignals struct {
 	// Higher values mean PGO's cross-package inlining optimisations have more
 	// targets.
 	CrossPackageChainDensity float64 `json:"cross_package_chain_density"`
+
+	// DriftPct is the Total Variation Distance (TVD) between this profile's
+	// leaf-function distribution and a reference profile's. Range [0, 1]:
+	// 0 = identical hot-path; 1 = completely disjoint. Only populated when a
+	// reference profile is supplied via --drift-against.
+	DriftPct float64 `json:"drift_pct,omitempty"`
 }
 
 // QualityReport is the output of a pgoctl validate run.

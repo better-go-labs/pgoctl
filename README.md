@@ -242,6 +242,7 @@ pgoctl validate [flags] <path>
 | `--min-peakedness` | `0` | Warn if top-N cumulative CPU% is below this value (0=disabled) |
 | `--cross-pkg-hot-threshold` | `0` | Per-function flat CPU% threshold to count as hot for cross-package chain density (0=all) |
 | `--min-cross-pkg-density` | `0` | Warn if cross-package chain density is below this value (0–1, 0=disabled) |
+| `--drift-against` | `""` | Path to a reference profile (.pb.gz or pprof); enables `drift_pct` (TVD) in workload signals (requires `--workload-signals`) |
 
 Exit codes: **0** = valid, **1** = below quality gate, **2** = input error.
 
@@ -389,6 +390,7 @@ peakedness-top-n: 10
 min-peakedness: 0
 cross-pkg-hot-threshold: 0
 min-cross-pkg-density: 0
+drift-against: ""
 ```
 
 ## Demo service

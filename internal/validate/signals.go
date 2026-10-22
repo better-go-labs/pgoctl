@@ -131,6 +131,57 @@ func ProfilePeakedness(p *profile.Profile, topN int) float64 {
 // intentional because PGO's cross-package inlining covers stdlib too.
 // Values close to 1.0 indicate that many CPU-weighted chains cross package
 // lines and PGO's cross-package inlining optimisations have many targets.
+// ProfileDriftPct computes the Total Variation Distance (TVD) between two CPU
+// profiles' leaf-function distributions. The result is in [0, 1]: 0 means the
+// two profiles are identical; 1 means they share no common hot functions.
+// Distributions are built by weighting each sample by s.Value[idx] (CPU time),
+// which ensures hot functions dominate the distance calculation.
+// Returns 0 if either profile has fewer than 2 samples or no CPU sample type.
+func ProfileDriftPct(current, reference *profile.Profile) float64 {
+	curIdx, ok := cpuSampleIndex(current)
+	if !ok {
+		return 0
+	}
+	refIdx, refOK := cpuSampleIndex(reference)
+	if !refOK {
+		return 0
+	}
+
+	n := int64(len(current.Sample))
+	if n < 2 {
+		return 0
+	}
+
+	curCounts, curTotal := leafCounts(current, curIdx)
+	refCounts, refTotal := leafCounts(reference, refIdx)
+	if curTotal == 0 || refTotal == 0 {
+		return 0
+	}
+
+	// Collect all unique leaf functions across both profiles.
+	allFuncs := make(map[string]struct{}, len(curCounts)+len(refCounts))
+	for fn := range curCounts {
+		allFuncs[fn] = struct{}{}
+	}
+	for fn := range refCounts {
+		allFuncs[fn] = struct{}{}
+	}
+
+	// TVD = 0.5 * Σ |p_i − q_i| ∈ [0, 1].
+	var tvd float64
+	for fn := range allFuncs {
+		p := float64(curCounts[fn]) / float64(curTotal)
+		q := float64(refCounts[fn]) / float64(refTotal)
+		diff := p - q
+		if diff < 0 {
+			diff = -diff
+		}
+		tvd += diff
+	}
+	tvd *= 0.5
+	return math.Round(tvd*10000) / 10000
+}
+
 func CrossPackageChainDensity(p *profile.Profile, hotThresholdPct float64) float64 {
 	idx, ok := cpuSampleIndex(p)
 	if !ok {

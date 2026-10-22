@@ -37,3 +37,12 @@ min-package-share:
   - github.com/prometheus/prometheus/promql:1.5
 
 # json: true   # emit JSON output (same as --json)
+
+# --- workload-shape signals (requires --workload-signals) ---
+# workload-signals: false
+# min-cpu-bound-fraction: 0
+# peakedness-top-n: 10
+# min-peakedness: 0
+# cross-pkg-hot-threshold: 0
+# min-cross-pkg-density: 0
+# drift-against: ""   # path to reference profile for TVD (drift_pct)

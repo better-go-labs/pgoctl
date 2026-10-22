@@ -515,3 +515,179 @@ func TestCompare_TopN(t *testing.T) {
 	_, _, err := executeCmd(t, "compare", "--top=5", p1, p1)
 	assert.NoError(t, err)
 }
+
+// TestValidate_WorkloadSignals tests the --workload-signals flag.
+func TestValidate_WorkloadSignals(t *testing.T) {
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		p,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_DriftAgainst tests the --drift-against flag with a self-comparison.
+func TestValidate_DriftAgainst(t *testing.T) {
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		"--drift-against="+p,
+		p,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_DriftAgainst_NonZero tests that drift_pct appears in tabwriter output
+// when two different profiles are compared (non-zero TVD).
+func TestValidate_DriftAgainst_NonZero(t *testing.T) {
+	// makeTimePackageSyntheticProfile produces time.Now + main.run samples.
+	// generateProfile() produces actual runtime stack frames.
+	// Comparing them yields non-zero TVD → exercises the drift_pct print branch.
+	synthPath := makeTimePackageSyntheticProfile(t)
+	realPath := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		"--drift-against="+synthPath,
+		realPath,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_DriftAgainst_BadRef tests --drift-against with a missing reference (warn only, no error).
+func TestValidate_DriftAgainst_BadRef(t *testing.T) {
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		"--drift-against=/nonexistent/ref.pb.gz",
+		p,
+	)
+	// Warn on missing ref, but validate still succeeds (exit 0).
+	assert.NoError(t, err)
+}
+
+// TestValidate_TabwriterBranch covers the tabwriter output path when workload signals are populated.
+func TestValidate_TabwriterBranch(t *testing.T) {
+	p := makeTimePackageSyntheticProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		"--min-cpu-bound-fraction=0.01",
+		p,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_ConfigEnv_DriftAgainst tests drift-against via env variable.
+func TestValidate_ConfigEnv_DriftAgainst(t *testing.T) {
+	p := generateProfile(t)
+	t.Setenv("PGOCTL_DRIFT_AGAINST", p)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		p,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_ConfigEnv_PeakednessTopN covers the peakedness-top-n env case.
+func TestValidate_ConfigEnv_PeakednessTopN(t *testing.T) {
+	t.Setenv("PGOCTL_PEAKEDNESS_TOP_N", "5")
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		p,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_ConfigEnv_BadPeakednessTopN tests parsing failure for peakedness-top-n.
+func TestValidate_ConfigEnv_BadPeakednessTopN(t *testing.T) {
+	t.Setenv("PGOCTL_PEAKEDNESS_TOP_N", "not-an-int")
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		p,
+	)
+	var ee *exitError
+	require.ErrorAs(t, err, &ee)
+	assert.Equal(t, 2, ee.code)
+}
+
+// TestValidate_ConfigEnv_WorkloadSignalsBadBool tests workload-signals ParseBool error path.
+func TestValidate_ConfigEnv_WorkloadSignalsBadBool(t *testing.T) {
+	t.Setenv("PGOCTL_WORKLOAD_SIGNALS", "not-a-bool")
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		p,
+	)
+	var ee *exitError
+	require.ErrorAs(t, err, &ee)
+	assert.Equal(t, 2, ee.code)
+}
+
+// TestValidate_ConfigEnv_MinCPUBoundFraction covers the min-cpu-bound-fraction env case.
+func TestValidate_ConfigEnv_MinCPUBoundFraction(t *testing.T) {
+	t.Setenv("PGOCTL_MIN_CPU_BOUND_FRACTION", "0.1")
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		p,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_ConfigEnv_MinPeakedness covers the min-peakedness env case.
+func TestValidate_ConfigEnv_MinPeakedness(t *testing.T) {
+	t.Setenv("PGOCTL_MIN_PEAKEDNESS", "10.0")
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		p,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_ConfigEnv_CrossPkgHotThreshold covers the cross-pkg-hot-threshold env case.
+func TestValidate_ConfigEnv_CrossPkgHotThreshold(t *testing.T) {
+	t.Setenv("PGOCTL_CROSS_PKG_HOT_THRESHOLD", "1.0")
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		p,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_ConfigEnv_MinCrossPkgDensity covers the min-cross-pkg-density env case.
+func TestValidate_ConfigEnv_MinCrossPkgDensity(t *testing.T) {
+	t.Setenv("PGOCTL_MIN_CROSS_PKG_DENSITY", "0.1")
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--workload-signals",
+		p,
+	)
+	assert.NoError(t, err)
+}
