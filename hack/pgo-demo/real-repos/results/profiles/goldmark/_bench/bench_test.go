@@ -1,4 +1,3 @@
-# Workflow test trigger
 package bench_test
 
 import (
