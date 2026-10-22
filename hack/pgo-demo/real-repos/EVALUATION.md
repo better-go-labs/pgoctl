@@ -280,15 +280,15 @@ transitive dep graph. See also: hashcalc-svc (same pattern with `sha256.blockAVX
 
 ### 5. valyala/fasthttp  - HTTP Framework
 
-**leverage-check (post-#55):** HIGH  - 0 module-scoped devirt decisions, 74 module-scoped extra inlines
-(+5 dep devirts, +600 dep extra inlines)
+**leverage-check (post-#55):** HIGH  - 0 module-scoped devirt decisions, 92 module-scoped extra inlines
+(+1 dep devirt, +771 dep extra inlines)
 
-**Build analysis reveals (post-#55, using profile.pprof + --dir fasthttp@v1.57.0):**
+**Build analysis reveals (post-#55, using profile.pprof + --dir fasthttp@v1.74.0):**
 ```
 devirt_decisions:        0   (module-scoped)
-pgo_devirts_deps:        5   (stdlib/deps, excluded from verdict)
-pgo_extra_inlines:      74   (module-scoped)
-pgo_extra_inlines_deps: 600
+pgo_devirts_deps:        1   (stdlib/deps, excluded from verdict)
+pgo_extra_inlines:      92   (module-scoped)
+pgo_extra_inlines_deps: 771
 ```
 
 *Original (pre-#55, full transitive graph):*
@@ -310,7 +310,7 @@ The benchmark exercises HTTP request parsing from a fixed byte buffer (no I/O).
 The hot path is `RequestHeader.parseHeaders` → string scanning via `runtime.memclrNoHeapPointers`.
 fasthttp's parser uses direct field access, not interface dispatch. Post-#55: 0 module-scoped
 devirt decisions confirms the original 91 were all in the net/http dependency tree.
-The 74 module-scoped extra inlines are in initialization and option-handling code that
+The 92 module-scoped extra inlines are in initialization and option-handling code that
 doesn't dominate the parsing benchmark hot loop.
 
 ---
