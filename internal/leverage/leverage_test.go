@@ -468,24 +468,20 @@ func TestVerdictConstants(t *testing.T) {
 }
 
 func TestVerdictForAnalysis_High_Devirt(t *testing.T) {
+	// With OR-logic, 5 devirts alone (0 inlines) is HIGH because >= 5.
 	ba := &BuildAnalysis{DevirtDecisions: 5, PGOExtraInlines: 0}
-	v, reason := verdictForAnalysis(ba, nil)
+	v, _ := verdictForAnalysis(ba, nil)
 	if v != VerdictHigh {
-		t.Errorf("expected HIGH, got %s", v)
-	}
-	if !strings.Contains(reason, "HIGH") {
-		t.Errorf("reason should contain HIGH, got %q", reason)
-	}
-	if !strings.Contains(reason, "devirtualization") {
-		t.Errorf("reason should mention devirtualization, got %q", reason)
+		t.Errorf("expected HIGH (5 devirts >= 5 threshold), got %s", v)
 	}
 }
 
 func TestVerdictForAnalysis_High_Inlines(t *testing.T) {
+	// With OR-logic, 0 devirts + 30 inlines is HIGH because 30 >= 30.
 	ba := &BuildAnalysis{DevirtDecisions: 0, PGOExtraInlines: 30}
 	v, reason := verdictForAnalysis(ba, nil)
 	if v != VerdictHigh {
-		t.Errorf("expected HIGH, got %s", v)
+		t.Errorf("expected HIGH (30 inlines >= 30 threshold), got %s", v)
 	}
 	if !strings.Contains(reason, "extra inline") {
 		t.Errorf("reason should mention extra inlines, got %q", reason)
@@ -500,6 +496,20 @@ func TestVerdictForAnalysis_High_BothParts(t *testing.T) {
 	}
 	if !strings.Contains(reason, "devirtualization") || !strings.Contains(reason, "extra inline") {
 		t.Errorf("reason should mention both devirt and inlines, got %q", reason)
+	}
+}
+
+// TestVerdictForAnalysis_NatsLike_IncidentalDevirt verifies the nats-server scenario.
+// With OR-logic: 1 module devirt (< 5) + 86 module extra inlines (>= 30)
+// produces HIGH because the inline count alone triggers the threshold.
+func TestVerdictForAnalysis_NatsLike_IncidentalDevirt(t *testing.T) {
+	ba := &BuildAnalysis{DevirtDecisions: 1, PGOExtraInlines: 86}
+	v, reason := verdictForAnalysis(ba, nil)
+	if v != VerdictHigh {
+		t.Errorf("expected HIGH for nats-like scenario (1 devirt + 86 inlines), got %s; reason: %s", v, reason)
+	}
+	if !strings.Contains(reason, "HIGH") {
+		t.Errorf("verdict reason should mention HIGH, got: %q", reason)
 	}
 }
 
@@ -1346,5 +1356,63 @@ func TestModuleSites_IndependentOfDirAndCache(t *testing.T) {
 	fromRoot := moduleSites(root, "./cmd/app")
 	if fromSub == 0 || fromSub != fromRoot {
 		t.Errorf("module inline sites: from cmd/app = %d, from root = %d; want equal and > 0", fromSub, fromRoot)
+	}
+}
+
+// TestAnalyzeBuildOutput_NatsLike verifies that large deps inline counts do not inflate the verdict.
+// nats-server is a real-world project where PGO optimization in dependencies is high but
+// optimization in the module itself is negligible. This must produce NONE, not HIGH.
+func TestAnalyzeBuildOutput_NatsLike(t *testing.T) {
+	// Simulate a build with:
+	// - 0 module-scoped devirts, 0 module-scoped extra inlines (the REAL signal)
+	// - Many deps devirts and inlines (should not drive verdict)
+	baselines := strings.Join([]string{
+		"github.com/x/y@v1/file1.go:10:5: inlining call to A",
+		"github.com/z/w@v2/file2.go:20:7: inlining call to B",
+	}, "\n")
+	pgo := strings.Join([]string{
+		// Same as baseline
+		"github.com/x/y@v1/file1.go:10:5: inlining call to A",
+		"github.com/z/w@v2/file2.go:20:7: inlining call to B",
+		// Extra deps inlines (PGO-only, but in deps)
+		"github.com/x/y@v1/file1.go:11:6: inlining call to C",
+		"github.com/x/y@v1/file1.go:12:7: inlining call to D",
+		"github.com/z/w@v2/file3.go:30:9: inlining call to E",
+		"runtime/proc.go:100:5: inlining call to F",
+	}, "\n")
+	ba := analyzeBuildOutput(pgo, baselines, testMods())
+	if ba.PGOExtraInlines != 0 {
+		t.Errorf("module extra inlines = %d, want 0 (no module packages in testMods() are in pgo output)", ba.PGOExtraInlines)
+	}
+	if ba.PGOExtraInlinesDeps < 3 {
+		t.Errorf("deps extra inlines = %d, want >= 3", ba.PGOExtraInlinesDeps)
+	}
+	v, _ := verdictForAnalysis(ba, nil)
+	if v != VerdictNone {
+		t.Errorf("verdict = %s, want NONE when module-scoped PGO decisions are 0", v)
+	}
+}
+
+func TestRunBuild_Error(t *testing.T) {
+	// A nonexistent working directory causes exec.Cmd to fail on CombinedOutput,
+	// exercising the error-return branch in runBuild.
+	_, err := runBuild("/nonexistent/absolutely/missing", "./...", "", false)
+	if err == nil {
+		t.Fatal("expected error from runBuild with nonexistent dir")
+	}
+	if !strings.Contains(err.Error(), "go build") {
+		t.Errorf("expected 'go build' in error text, got: %v", err)
+	}
+}
+
+func TestRunBuildAnalysis_PGOBuildFails(t *testing.T) {
+	// A nonexistent dir makes runBuild fail on the PGO build pass,
+	// exercising the "PGO build: %w" error return in runBuildAnalysis.
+	_, err := runBuildAnalysis("/nonexistent/absolutely/missing", "./...", "/tmp/fake.pprof", nil)
+	if err == nil {
+		t.Fatal("expected error from runBuildAnalysis with nonexistent dir")
+	}
+	if !strings.Contains(err.Error(), "PGO build") {
+		t.Errorf("expected 'PGO build' in error, got: %v", err)
 	}
 }
