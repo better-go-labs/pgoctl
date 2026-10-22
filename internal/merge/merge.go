@@ -109,8 +109,17 @@ func Profiles(inputs []Input, opts Options, w io.Writer) error {
 	return merged.Write(w)
 }
 
-// applyWeights scales each profile by an exponential recency weight before merge.
-// weight = RecencyWeight * 0.5^(age/HalfLife), clamped to [0.25, RecencyWeight].
+// applyWeights scales each profile by a normalised exponential recency weight.
+//
+// Raw weight = RecencyWeight * 0.5^(age/HalfLife). Dividing every raw weight
+// by the newest profile's raw weight (= RecencyWeight, since age=0 there)
+// normalises the scale so the newest profile always receives factor 1.0. This
+// means a single-input merge returns unchanged sample totals, and relative
+// recency ordering is preserved across multiple inputs.
+//
+// RecencyWeight cancels out after normalisation and has no effect on output; it
+// is retained in Options for interface stability and potential future use as a
+// decay-shape parameter.
 func applyWeights(profiles []*profile.Profile, times []time.Time, opts Options) {
 	newest := times[0]
 	for _, t := range times[1:] {
@@ -122,10 +131,18 @@ func applyWeights(profiles []*profile.Profile, times []time.Time, opts Options) 
 	if halfLifeH <= 0 {
 		halfLifeH = 24.0
 	}
+	// newestW is the raw weight for age=0; dividing by it normalises newest→1.0.
+	newestW := opts.RecencyWeight
+	if newestW <= 0 {
+		newestW = 1.0
+	}
 	for i, p := range profiles {
 		ageH := newest.Sub(times[i]).Hours()
-		w := opts.RecencyWeight * math.Pow(0.5, ageH/halfLifeH)
-		w = math.Max(0.25, math.Min(opts.RecencyWeight, w))
+		w := opts.RecencyWeight * math.Pow(0.5, ageH/halfLifeH) / newestW
+		// Floor keeps very-old profiles from contributing negligibly; expressed
+		// relative to newestW so the ratio is consistent with the original 0.25
+		// floor before normalisation.
+		w = math.Max(0.25/newestW, w)
 		p.Scale(w)
 	}
 }

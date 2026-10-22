@@ -40,6 +40,30 @@ func buildProfile(t *testing.T, sampleCount int, durationNanos, sampleValue, tim
 	return buf.Bytes()
 }
 
+// TestMerge_WeightedSingleInput is a regression test for issue #56: a single
+// input must return unchanged sample totals under the weighted strategy.
+func TestMerge_WeightedSingleInput(t *testing.T) {
+	sampleCount := 500
+	sampleValue := int64(10000000)
+	input := merge.Input{
+		Data:       buildProfile(t, sampleCount, 30*1e9, sampleValue, 0),
+		CapturedAt: time.Now(),
+	}
+	var out bytes.Buffer
+	if err := merge.Profiles([]merge.Input{input}, merge.DefaultOptions(), &out); err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+	p, err := profile.ParseData(out.Bytes())
+	if err != nil {
+		t.Fatalf("parse merged output: %v", err)
+	}
+	want := int64(sampleCount) * sampleValue
+	got := totalValue(t, p)
+	if got != want {
+		t.Errorf("single-input weighted merge: sample total = %d, want %d (got %.2fx)", got, want, float64(got)/float64(want))
+	}
+}
+
 func TestMerge_WeightedTwo(t *testing.T) {
 	now := time.Now()
 	inputs := []merge.Input{
@@ -135,9 +159,9 @@ func TestMerge_StrategiesDifferWeighting(t *testing.T) {
 	if unionTotal != wantUnion {
 		t.Errorf("union: expected total %d, got %d", wantUnion, unionTotal)
 	}
-	// Weighted scales newest by RecencyWeight (2.0) and the 48h-old profile
-	// by 2.0*0.5^(48/24) = 0.5: 500*(10M*2.0 + 10M*0.5) = 12.5B.
-	wantWeighted := int64(500) * (10000000*2 + int64(math.Round(10000000*0.5)))
+	// After normalisation newest→1.0, the 48h-old profile (age=2 half-lives)
+	// decays to 0.5^2=0.25: 500*(10M*1.0 + 10M*0.25) = 6.25B.
+	wantWeighted := int64(500) * (10000000 + int64(math.Round(10000000*0.25)))
 	if weightedTotal != wantWeighted {
 		t.Errorf("weighted: expected total %d, got %d", wantWeighted, weightedTotal)
 	}
