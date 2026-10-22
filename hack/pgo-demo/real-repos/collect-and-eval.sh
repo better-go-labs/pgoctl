@@ -67,13 +67,18 @@ run_repo() {
   verdict=$(python3 -c "import json,sys; d=json.load(open('$workdir/leverage.json')); ba=d.get('build_analysis',{}); print(d['verdict'], ba.get('devirt_decisions','-'), ba.get('pgo_extra_inlines','-'))" 2>/dev/null || echo "ERROR")
   log "$name: $verdict (verdict devirt extra_inlines)"
 
-  # ── 4. Bench comparison: baseline vs PGO ─────────────────────────────────
-  log "$name: baseline benchmarks..."
+  # ── 4. Bench comparison: interleaved baseline/PGO (A/B/A/B) ─────────────
+  # Interleaving reduces machine-drift exposure vs running all baseline then
+  # all PGO as sequential blocks.
+  log "$name: interleaved baseline+PGO benchmarks (5 rounds A/B)..."
   pushd "$workdir" > /dev/null
-  go test -bench="$bench_fn" -run='^$' -count=5 -benchtime=5s > baseline.txt 2>&1
-  log "$name: PGO benchmarks (-pgo=profile.pprof)..."
-  go test -bench="$bench_fn" -run='^$' -count=5 -benchtime=5s \
-      -pgo=profile.pprof > pgo.txt 2>&1
+  > baseline.txt
+  > pgo.txt
+  for _round in $(seq 1 5); do
+    go test -bench="$bench_fn" -run='^$' -count=1 -benchtime=5s >> baseline.txt 2>&1
+    go test -bench="$bench_fn" -run='^$' -count=1 -benchtime=5s \
+        -pgo=profile.pprof >> pgo.txt 2>&1
+  done
   popd > /dev/null
 
   # Print comparison

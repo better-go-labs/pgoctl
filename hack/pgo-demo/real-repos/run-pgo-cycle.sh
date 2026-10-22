@@ -29,7 +29,7 @@ cd "$MODULE_DIR"
 log "$NAME: baseline benchmark ($TRIALS trials × $BENCH_TIME)..."
 baseline_results=()
 for i in $(seq 1 "$TRIALS"); do
-  result=$(go test -bench=. -benchtime="$BENCH_TIME" -count=1 . 2>/dev/null | grep -E '^Bench' | awk '{print $3}' | head -1)
+  result=$(go test -bench=. -benchtime="$BENCH_TIME" -count=3 . 2>&1 | grep -E '^Bench' | awk '{print $3}' | head -1)
   baseline_results+=("$result")
   log "  baseline trial $i: $result ns/op"
 done
@@ -41,7 +41,7 @@ trap 'rm -f default.pgo' EXIT
 log "$NAME: PGO benchmark ($TRIALS trials × $BENCH_TIME)..."
 pgo_results=()
 for i in $(seq 1 "$TRIALS"); do
-  result=$(go test -bench=. -benchtime="$BENCH_TIME" -count=1 -pgo=default.pgo . 2>/dev/null | grep -E '^Bench' | awk '{print $3}' | head -1)
+  result=$(go test -bench=. -benchtime="$BENCH_TIME" -count=3 -pgo=default.pgo . 2>&1 | grep -E '^Bench' | awk '{print $3}' | head -1)
   pgo_results+=("$result")
   log "  pgo trial $i: $result ns/op"
 done

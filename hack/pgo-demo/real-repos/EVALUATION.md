@@ -72,10 +72,20 @@ go test -bench=. -run=^$ -count=5 -benchtime=5s -pgo=profile.pprof > pgo.txt
 benchstat baseline.txt pgo.txt
 ```
 
-Verdict thresholds (matching `pgoctl compare` defaults):
+Verdict thresholds (matching `pgoctl compare` defaults at time of eval):
 - **PROMOTE**: ≥10% improvement, p < 0.05
-- **NEUTRAL**: within ±10%, or p ≥ 0.05
+- **NEUTRAL**: within +-10%, or p >= 0.05
 - **ROLLBACK**: ≥10% regression
+
+> **Methodology limitations:** n=5 on a shared 2-vCPU Skylake VM produces 13-48% run-to-run
+> noise. At that noise floor, benchstat returns `+/-inf` confidence intervals on 4 of 5 rows,
+> so **NEUTRAL outcomes at n=5 are uninformative**: they do not confirm that PGO has no effect,
+> only that the signal-to-noise ratio is too low to detect the typical 2-7% PGO gain.
+> Additionally, the CPU profile was collected from the same benchmark it then measures
+> (collect-and-eval.sh:53), which is the most PGO-favourable setup -- near-zero gain here is
+> a stronger negative signal, not a weaker one.
+> A methodologically sound re-run requires n>=20 per side, interleaved A/B ordering, and
+> dedicated CPU (taskset pinning). See open question in the task tracker.
 
 ---
 
@@ -103,27 +113,32 @@ application hot path.
 | [yuin/goldmark](https://github.com/yuin/goldmark) v1.8.6 | Markdown parser | **HIGH** | 68 | 4 | 252 | 568 | -5.1% | 0.310 | **NEUTRAL** |
 | [tidwall/gjson](https://github.com/tidwall/gjson) v1.19.0 | JSON path query | **HIGH** | 0 | 3 | 36 | 424 | -6.3% | 0.024 | **NEUTRAL**† |
 | [goccy/go-json](https://github.com/goccy/go-json) v0.10.6 | JSON encoder/decoder | **HIGH** | 10 | 3 | 59 | 598 | +0.1% | 0.841 | **NEUTRAL** |
-| [golang/snappy](https://github.com/golang/snappy) v1.0.0 | Compressor (Go+asm) | **NONE** <- was HIGH | 0 | 3 | 2 | 799 | -1.8% | 0.481 | **NEUTRAL** |
+| [golang/snappy](https://github.com/golang/snappy) v1.0.0 | Compressor (Go+asm) | **NONE** <- was HIGH | 0 | 3 | 2 | 799 | n/a (n=5, +-inf CI) | n/a | **NEUTRAL** |
 | [valyala/fasthttp](https://github.com/valyala/fasthttp) v1.74.0 | HTTP framework | **HIGH** | 0 | 1 | 92 | 771 | -1.6% | 0.841 | **NEUTRAL** |
 
-dagger gjson improvement is statistically significant (p=0.024) but below the 10% PROMOTE
-threshold used by `pgoctl compare`.
+gjson's improvement is statistically significant (p=0.024) but below the 10% PROMOTE
+threshold used by `pgoctl compare` at the time of this eval (threshold since lowered to 3%).
 
 **Prediction accuracy (post-#55):**
 
 | Prediction | Repos | PROMOTE | NEUTRAL | ROLLBACK |
 |------------|-------|---------|---------|----------|
 | HIGH | 4 of 5 | 0 | 4 | 0 |
-| NONE | 1 of 5 (snappy) |  - | 1 (bench confirms) | 0 |
+| NONE | 1 of 5 (snappy) |  - | 1 (bench uninformative at n=5, +-inf CI) | 0 |
 
-**Key change vs original:** snappy correctly downgrades from HIGH → NONE. The old 7
+> **Caution:** All-five-NEUTRAL is not positive evidence that leverage-check works. At n=5 on
+> a shared VM, benchstat returns `+/-inf` CI on 4 of 5 rows; those results cannot distinguish
+> real PGO gain from noise. The gjson result (p=0.024) is the only data point that carries
+> any statistical weight.
+
+**Key change vs original:** snappy correctly downgrades from HIGH -> NONE. The old 7
 devirt decisions and 1164 extra inlines were all stdlib/dependency noise; the module itself
 contributes 0 devirt decisions and 2 extra inlines. The asm hot path (`decode`) is now
 correctly flagged as outside PGO scope.
 
 The remaining 4 HIGH predictions still deliver NEUTRAL bench outcomes. This is a
 separate issue (leverage-check correctly identifies compiler decisions, but those decisions
-may not fall on the benchmark hot path  - the subject of Finding 2 and the hotpath-weighted
+may not fall on the benchmark hot path -- the subject of Finding 2 and the hotpath-weighted
 devirt improvement proposed in the Implications section).
 
 ---
@@ -262,11 +277,13 @@ baseline_inlines: 18186
 pgo_inlines: 19350
 ```
 
-**Benchmark (10 trials × 3s, re-run for stability):**
-```
-         baseline2.txt    pgo2.txt
-Snappy-2   181.7µ ± 27%   178.4µ ± 28%    ~  (p=0.481 n=10)
-```
+**Benchmark (committed raw data: n=5):**
+
+The committed benchmark files (`results/v3/snappy/baseline.txt`, `results/v3/snappy/pgo.txt`)
+each contain n=5 iterations. At n=5 on a shared 2-vCPU VM, benchstat returns `+/-inf` confidence
+intervals for snappy due to 27-28% run-to-run variance -- the result is uninformative and does
+not confirm or deny PGO benefit. A re-run at n>=20 with interleaved A/B ordering and CPU pinning
+is needed before drawing any benchmark conclusion for this library.
 
 **Post-#55 verdict NONE is correct:**
 snappy's compression hot path (`snappy.Encode`, `snappy.Decode`) routes through assembly
@@ -347,11 +364,14 @@ benchmarks that call those paths rarely.
 
 ### Finding 3: asm-heavy hot paths now correctly return NONE (post-#55)
 
-snappy (27% variance, NEUTRAL) mirrors hashcalc-svc from the controlled demo. When the
-top CPU consumer is assembly (`snappy.{Encode,Decode}`, `sha256.blockAVX2`), PGO has
-nothing to work with. Pre-#55, leverage-check incorrectly returned HIGH by counting devirt
-decisions in stdlib packages. Post-#55, snappy returns NONE (0 module-scoped devirts, 2
-extra inlines), which correctly matches the NEUTRAL benchmark outcome.
+snappy mirrors hashcalc-svc from the controlled demo. When the top CPU consumer is assembly
+(`snappy.{Encode,Decode}`, `sha256.blockAVX2`), PGO has nothing to work with. Pre-#55,
+leverage-check incorrectly returned HIGH by counting devirt decisions in stdlib packages.
+Post-#55, snappy returns NONE (0 module-scoped devirts, 2 extra inlines).
+
+The snappy benchmark (committed n=5, 27-28% variance) has `+/-inf` CI and cannot confirm or
+deny the NONE verdict. The build-analysis argument alone is sufficient: snappy's hot path is
+assembly, which PGO cannot touch. The benchmark result is consistent but uninformative.
 
 ### Finding 4: gjson is the useful data point
 

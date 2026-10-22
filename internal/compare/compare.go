@@ -41,16 +41,24 @@ type Report struct {
 }
 
 // GateConfig holds the thresholds used to decide the verdict.
+//
+// These thresholds operate on CPU-attribution deltas from pprof profile
+// comparison -- they are NOT benchmark wall-clock deltas. A separate
+// wall-clock gate (e.g. benchstat p-value + magnitude check) should be
+// applied to micro-benchmark results before drawing deployment conclusions.
+// Conflating the two quantities requires different thresholds: CPU-profile
+// attribution shifts of 3-8% are typical for PGO, whereas wall-clock noise
+// on shared infra often exceeds 10% even without any code change.
 type GateConfig struct {
-	MinCPUImprovement float64 // relative % improvement required for Promote
-	MinCPURegression  float64 // relative % regression required for Rollback (independent of MinCPUImprovement)
+	MinCPUImprovement float64 // relative % CPU-attribution improvement required for Promote
+	MinCPURegression  float64 // relative % CPU-attribution regression required for Rollback (independent of MinCPUImprovement)
 	MinCPUPercent     float64 // drop functions below this CPU %% share in BOTH profiles (<= 0 disables)
 	TopN              int     // number of function deltas to include in output
 }
 
 // DefaultGateConfig returns a GateConfig with sensible default thresholds.
 func DefaultGateConfig() GateConfig {
-	return GateConfig{MinCPUImprovement: 10.0, MinCPURegression: 10.0, TopN: 10}
+	return GateConfig{MinCPUImprovement: 3.0, MinCPURegression: 10.0, TopN: 10}
 }
 
 // ProfileFiles loads two pprof files and compares CPU function attribution.
