@@ -270,13 +270,12 @@ jobs:
         run: |
           cpu=$(grep -m1 '^cpu:' /tmp/bench/goldmark-stat.txt 2>/dev/null \
                 | sed 's/^cpu:[[:space:]]*//' | sed 's/[[:space:]]*$//' || echo "unknown")
-          slug=$(echo "$cpu" | sed \
-            -e 's/AMD EPYC \([0-9A-Za-z]*\).*/epyc-\1/' \
-            -e 's/Intel(R) Xeon(R) Platinum \([0-9A-Za-z]*\).*/xeon-\1/' \
-            -e 's/Intel(R) Xeon(R) Gold \([0-9A-Za-z]*\).*/xeon-\1/' \
-            -e 's/Intel(R) Xeon(R) \([0-9A-Za-z]*\).*/xeon-\1/' \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/-$//')
+          cpu_lc=$(echo "$cpu" | tr '[:upper:]' '[:lower:]')
+          slug=$(echo "$cpu_lc" | sed \
+            -e 's/amd epyc \([0-9a-z]*\).*/epyc-\1/' \
+            -e 's/intel(r) xeon(r) \(platinum\|gold\|silver\) \([0-9a-z]*\).*/xeon-\2/' \
+            -e 's/intel(r) xeon(r) \([0-9a-z]*\).*/xeon-\1/' \
+            | sed 's/[^a-z0-9-]/-/g; s/--*/-/g; s/^-//; s/-$//')
           [ -z "$slug" ] && slug="unknown"
           echo "slug=${slug}" >> "$GITHUB_OUTPUT"
           echo "CPU slug: ${slug}"
@@ -288,7 +287,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref || github.ref_name }}
         run: |
           pr_number=$(gh pr list --head "${HEAD_REF}" --state open \
-            --json number --jq '.[0].number' 2>/dev/null || echo "")
+            --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
           echo "number=${pr_number}" >> "$GITHUB_OUTPUT"
           echo "PR number for ${HEAD_REF}: ${pr_number:-none}"
 
