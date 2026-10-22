@@ -34,6 +34,7 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
+          check-latest: true
 
       - name: Build pgoctl and generate fixture profile
         run: |
@@ -138,6 +139,7 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
+          check-latest: true
 
       - name: Build pgoctl and generate fixture profile
         run: |
@@ -215,6 +217,7 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
+          check-latest: true
 
       - name: Start pprof server (CPU burner)
         run: |
@@ -255,3 +258,44 @@ jobs:
 
       - name: assert collect output
         run: test -s "${{ steps.run.outputs.profile-path }}"
+
+  # ── Job 5: leverage-probe ────────────────────────────────────────────────────
+  # Covers: run-leverage-probe input + leverage-verdict output wired through the
+  # composite action. Uses testdata/pgoctl_cpu.pprof (pgoctl itself) and asserts
+  # leverage-verdict == NONE: pgoctl has 0 module devirts / 0 module extra inlines.
+  leverage-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          check-latest: true
+
+      - name: Build pgoctl
+        run: |
+          go build -o /tmp/pgoctl ./cmd/pgoctl
+          echo /tmp >> "$GITHUB_PATH"
+
+      - id: run
+        uses: ./
+        with:
+          profile-file: testdata/pgoctl_cpu.pprof
+          run-leverage-probe: 'true'
+          leverage-probe-target: ./cmd/pgoctl
+          upload-artifact: 'false'
+          comment-on-pr: 'false'
+
+      - name: assert leverage-verdict == NONE
+        run: |
+          GOT="${{ steps.run.outputs.leverage-verdict }}"
+          if [ "$GOT" != "NONE" ]; then
+            echo "::error::Expected leverage-verdict=NONE for pgoctl itself, got: ${GOT}"
+            exit 1
+          fi
+          echo "leverage-verdict=NONE confirmed (pgoctl has 0 module devirts / 0 module extra inlines)"
