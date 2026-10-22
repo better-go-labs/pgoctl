@@ -57,8 +57,22 @@ mean() {
   [[ $count -gt 0 ]] && echo $((sum / count)) || echo 0
 }
 
+# compute coefficient of variation (stddev/mean * 100) as a string "X.X%"
+cv_pct() {
+  local m="$1"; shift
+  local values=("$@")
+  local count=${#values[@]}
+  [[ $count -lt 2 || $m -eq 0 ]] && echo "N/A" && return
+  printf '%s\n' "${values[@]}" | awk -v m="$m" -v n="$count" '
+    { sum += ($1 - m)^2 }
+    END { printf "%.1f%%", (sqrt(sum/(n-1)) / m) * 100 }
+  '
+}
+
 baseline_mean=$(mean "${baseline_results[@]}")
 pgo_mean=$(mean "${pgo_results[@]}")
+baseline_cv=$(cv_pct "$baseline_mean" "${baseline_results[@]}")
+pgo_cv=$(cv_pct "$pgo_mean" "${pgo_results[@]}")
 
 if [[ $baseline_mean -gt 0 && $pgo_mean -gt 0 ]]; then
   # delta% = (pgo - baseline) / baseline * 100  (negative = improvement)
@@ -67,7 +81,7 @@ else
   delta_pct="N/A"
 fi
 
-log "$NAME: baseline_mean=$baseline_mean ns/op  pgo_mean=$pgo_mean ns/op  delta=$delta_pct%"
+log "$NAME: baseline_mean=$baseline_mean ns/op (CV=$baseline_cv)  pgo_mean=$pgo_mean ns/op (CV=$pgo_cv)  delta=$delta_pct%"
 
 cat > "$OUTDIR/${NAME}-cycle.json" << EOF
 {
@@ -77,6 +91,8 @@ cat > "$OUTDIR/${NAME}-cycle.json" << EOF
   "pgo_trials_nsop": $(printf '%s\n' "${pgo_results[@]}" | jq -R . | jq -s .),
   "baseline_mean_nsop": $baseline_mean,
   "pgo_mean_nsop": $pgo_mean,
+  "baseline_cv": "$baseline_cv",
+  "pgo_cv": "$pgo_cv",
   "delta_pct": "$delta_pct"
 }
 EOF
