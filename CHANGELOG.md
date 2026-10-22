@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `leverage-check` command: static pre-check that compares a PGO build against a baseline build to count module-scoped devirtualization decisions and extra inlines; emits verdict NONE | LOW | HIGH | INCOMPLETE with exit codes 0/3/1 (#50)
+- Action: optional `run-leverage-probe` input (default `false`) runs `leverage-check` before the benchmark cycle and exposes the result as the `leverage-verdict` output (`NONE` | `LOW` | `HIGH` | `INCOMPLETE`); a `NONE` verdict emits a `::warning::` annotation and never fails the job; pair with `leverage-probe-target` (default `./...`) to scope the build to the binary the profile came from (#51)
+
 ### Fixed
 
 - `leverage-check`: module vs dependency origin of each compiler decision now comes from `go list -deps` main-module import paths, with both builds run under `-trimpath` so positions no longer depend on `--dir` or on cached build output. The previous `./` path prefix test counted every subpackage as a dependency
