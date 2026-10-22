@@ -116,30 +116,38 @@ separately and do not contribute to the verdict.
 GitHub-hosted runners assign AMD or Intel CPUs without announcement. Results are
 stratified by exact CPU model. Do not average across models.
 
-| Library | CPU | Run IDs | n | Δ (mean) | p-value | 3%-gate verdict |
-|---------|-----|---------|---|----------|---------|-----------------|
-| goldmark | AMD EPYC 7763 | 39831653386, 39831658152, 39833287253, 39835718451 | 4 | −5.84% | ≤0.001 all runs | **PROMOTE** |
-| goldmark | Intel Xeon 8573C | 39828409134 | 1 | −5.81% | 0.001 | **PROMOTE** |
-| gjson | AMD EPYC 7763 | 39831653386, 39831658152, 39833287253, 39835718451 | 4 | −15.85% (spread 0.30pp) | ≤0.001 all runs | **PROMOTE** |
-| gjson | Intel Xeon 8370C | 39828409134 | 1 | −11.06% | 0.001 | **PROMOTE** |
-| gjson | Intel Xeon 8573C | (earlier run) | 2 | −6.55% (spread 0.27pp) | ≤0.05 both runs | **PROMOTE** |
-| go-json | AMD EPYC 7763 | 39831653386, 39831658152 | 2 | −4.54% | ≤0.001 | **PROMOTE** |
-| go-json | Intel Xeon 8573C | 39828409134 | 1 | −1.79% | 0.018 | **NEUTRAL** (below 3%) |
-| go-json | Intel Xeon 8370C | (earlier run) | 1 | not significant | 0.247 | **NEUTRAL** |
+| Library | CPU | Run IDs | n | Δ values (%) | p-value | 3%-gate verdict |
+|---------|-----|---------|---|--------------|---------|-----------------|
+| goldmark | AMD EPYC 7763 | 39828409134, 39831658152, 39833250644, 39835714756 | 4 | −6.31, −5.39, −5.81, −6.54 | ≤0.001 all | **PROMOTE** |
+| goldmark | Intel Xeon 8573C | 39831653386, 39833287253 | 2 | −6.40, −5.22 | ≤0.001 both | **PROMOTE** |
+| goldmark | Intel Xeon 8370C | 39835718451 | 1 | −4.40 | 0.001 | **PROMOTE** |
+| gjson | AMD EPYC 7763 | 39828409134, 39831658152, 39833250644, 39835714756 | 4 | −15.74, −16.04, −15.76, −15.89 | ≤0.001 all | **PROMOTE** |
+| gjson | Intel Xeon 8573C | 39831653386, 39833287253 | 2 | −6.69, −6.42 | ≤0.001 both | **PROMOTE** |
+| gjson | Intel Xeon 8370C | 39835718451 | 1 | −11.06 | 0.001 | **PROMOTE** |
+| go-json | AMD EPYC 7763 | 39828409134, 39831658152, 39833250644, 39835714756 | 4 | −3.66, −6.02, −3.93, −5.42 | ≤0.001 all | **PROMOTE** |
+| go-json | Intel Xeon 8573C | 39831653386, 39833287253 | 2 | −1.52, −2.06 | 0.018 both | **NEUTRAL** (below 3%) |
+| go-json | Intel Xeon 8370C | 39835718451 | 1 | not significant | 0.247 | **NEUTRAL** |
 | snappy | all models | 7 runs total | 7 | see note | see note | **NEUTRAL / NONE** |
-| fasthttp | AMD EPYC 7763 | 39833287253 ★ | 1 | −7.77% | 0.001 | **PROMOTE** (provisional) |
-| fasthttp | Intel Xeon 8573C | 39835718451 ★ | 1 | −11.44% | 0.001 | **PROMOTE** (provisional) |
+| fasthttp ★ | AMD EPYC 7763 | 39833250644, 39835714756 | 2 | −7.77, −7.77 | ≤0.001 both | **PROMOTE** (provisional) |
+| fasthttp ★ | Intel Xeon 8573C | 39833287253 | 1 | −11.44 | 0.001 | **PROMOTE** (provisional) |
+| fasthttp ★ | Intel Xeon 8370C | 39835718451 | 1 | −6.23 | 0.001 | **PROMOTE** (provisional) |
 
 ★ fasthttp rows marked ★ are from the reshaped benchmark (commit `40150e0` onward: hoisted
-allocations, per-iteration reset, error check). They are **not comparable** to any earlier
-fasthttp number (old benchmark measured ~2.4 µs; new measures ~600–700 ns — different work).
-Each arch has n=1; treat as provisional until a second run pair confirms.
+allocations, per-iteration reset, error check). **Not comparable** to earlier runs
+(old benchmark ~2.4 µs/op; new ~600–700 ns/op — different work). Old-loop runs
+(EPYC: 39828409134, 39831658152 → −4.84%, −5.38%; Xeon 8573C: 39831653386 → −2.46%)
+are listed here for traceability only; do not use these values.
 
-**snappy note:** 7 runs total; 5 not significant (p = 0.28–0.631, CV 9–16%). The remaining
-2 runs at p=0.019 point in *opposite* directions: AMD EPYC 7763 +14.25% (significant
-regression), Intel Xeon 8370C −2.59% (significant improvement). The benchmark cannot
-measure reliably. The NONE verdict holds on grounds that no credible benefit is present,
-not because PGO cleanly does nothing. A benchmark redesign is tracked in BP-60.
+EPYC has n=2 for the new loop; Xeon 8573C and 8370C each have n=1 — treat as provisional
+until a second run pair confirms on those models.
+
+**snappy note:** 7 runs total (39828409134, 39831653386, 39831658152, 39833250644,
+39833287253, 39835714756, 39835718451); 5 not significant (p = 0.28–0.631, CV 9–16%).
+The remaining 2 runs at p=0.019 point in *opposite* directions: AMD EPYC 7763 +14.25%
+(significant regression), Intel Xeon 8370C (run 39835718451) −2.59% (significant
+improvement). The benchmark cannot measure reliably. The NONE verdict holds on grounds
+that no credible benefit is present, not because PGO cleanly does nothing. A benchmark
+redesign is tracked in BP-60.
 
 ---
 
@@ -155,17 +163,20 @@ significantly (p<0.05) on both AMD and Intel architectures. The predicted NONE (
 shows no credible benefit on any architecture.
 
 **The 3% gate is microarchitecture-dependent.** go-json is the clearest example: identical
-code, identical profile, identical binary — yet EPYC 7763 returns −4.54% (PROMOTE) and
-Xeon 8370C returns p=0.247 (not significant) at the same 3% threshold. Any single-run
-gate verdict on go-json or fasthttp depends on which CPU GitHub assigns; a multi-run
-median across architectures is needed before those verdicts can be treated as stable.
+code, identical profile, identical binary — yet EPYC 7763 returns −3.66 to −6.02%
+(PROMOTE on all 4 runs), Xeon 8573C returns −1.52 to −2.06% (NEUTRAL, below 3%), and
+Xeon 8370C returns p=0.247 (not significant) — three models, three verdicts. Any
+single-run gate decision on go-json depends on which CPU GitHub assigns; a multi-run
+median stratified by CPU model is needed before those verdicts can be treated as stable.
 
-goldmark is the counterexample to "PGO just helps more on AMD": EPYC −5.84% vs Intel
-−5.81% (gap 0.03pp) — architecture-independent within measurement precision.
+goldmark is the counterexample to "PGO just helps more on AMD": EPYC 7763 range −5.39
+to −6.54%, Xeon 8573C range −5.22 to −6.40%, Xeon 8370C −4.40% — all three models show
+consistent 4–7% improvement (max gap ~2pp across CPU models), architecture-independent
+within measurement precision.
 
-gjson shows the largest architecture split: up to 9.5pp between EPYC 7763 (~−15.85%)
-and Xeon 8573C (~−6.55%). Both are significant and above 3%, but the magnitude varies
-substantially by microarchitecture.
+gjson shows the largest architecture split: up to ~9.3pp between EPYC 7763 (range
+−15.74 to −16.04%) and Xeon 8573C (range −6.42 to −6.69%). All three models are
+significant and above 3%, but magnitude varies substantially by microarchitecture.
 
 ---
 
@@ -186,13 +197,15 @@ pgo_extra_inlines_deps: 568
 
 **CI results:**
 
-| CPU | Δ | p-value | n | Run IDs |
-|-----|---|---------|---|---------|
-| AMD EPYC 7763 | −5.84% (mean) | ≤0.001 all | 4 | 39831653386, 39831658152, 39833287253, 39835718451 |
-| Intel Xeon 8573C | −5.81% | 0.001 | 1 | 39828409134 |
+| CPU | Δ values (%) | p-value | n | Run IDs |
+|-----|--------------|---------|---|---------|
+| AMD EPYC 7763 | −6.31, −5.39, −5.81, −6.54 | ≤0.001 all | 4 | 39828409134, 39831658152, 39833250644, 39835714756 |
+| Intel Xeon 8573C | −6.40, −5.22 | ≤0.001 both | 2 | 39831653386, 39833287253 |
+| Intel Xeon 8370C | −4.40 | 0.001 | 1 | 39835718451 |
 
-goldmark is **architecture-independent** within measurement precision: the AMD/Intel gap is
-0.03pp. The leverage-check HIGH prediction is validated on both architectures.
+goldmark is **architecture-independent** within measurement precision: all three CPU models
+show 4–7% improvement, with a max gap of ~2pp across models. The leverage-check HIGH
+prediction is validated on all architectures tested.
 
 **Mechanism:** goldmark's hot path (`parser.(*parser).parseBlock`) calls through the
 `BlockParser` interface. PGO devirts these interface calls and enables tighter inlining of
@@ -216,16 +229,16 @@ pgo_extra_inlines_deps: 424
 
 **CI results:**
 
-| CPU | Δ | p-value | n | Run IDs |
-|-----|---|---------|---|---------|
-| AMD EPYC 7763 | −15.85% (spread 0.30pp across 4 runs) | ≤0.001 all | 4 | 39831653386, 39831658152, 39833287253, 39835718451 |
-| Intel Xeon 8370C | −11.06% | 0.001 | 1 | 39828409134 |
-| Intel Xeon 8573C | −6.55% (spread 0.27pp across 2 runs) | ≤0.05 both | 2 | (earlier runs) |
+| CPU | Δ values (%) | p-value | n | Run IDs |
+|-----|--------------|---------|---|---------|
+| AMD EPYC 7763 | −15.74, −16.04, −15.76, −15.89 | ≤0.001 all | 4 | 39828409134, 39831658152, 39833250644, 39835714756 |
+| Intel Xeon 8573C | −6.69, −6.42 | ≤0.001 both | 2 | 39831653386, 39833287253 |
+| Intel Xeon 8370C | −11.06 | 0.001 | 1 | 39835718451 |
 
-gjson shows the largest architecture split in this evaluation: up to 9.5pp between EPYC
-7763 and Xeon 8573C. All three CPU models return significant improvement above the 3%
-gate. The spread *within* a model is tight (≤0.30pp), confirming the split is real and not
-noise.
+gjson shows the largest architecture split in this evaluation: up to ~9.3pp between EPYC
+7763 (range −15.74 to −16.04%) and Xeon 8573C (range −6.42 to −6.69%). All three CPU
+models return significant improvement above the 3% gate. The spread *within* a model is
+tight (≤0.30pp), confirming the split is real and not noise.
 
 **Mechanism:** gjson uses direct function calls throughout its hot path (no interface
 dispatch). The improvement comes from PGO enabling tighter inlining of helper functions
@@ -249,11 +262,11 @@ pgo_extra_inlines_deps: 598
 
 **CI results:**
 
-| CPU | Δ | p-value | n | 3%-gate | Run IDs |
-|-----|---|---------|---|---------|---------|
-| AMD EPYC 7763 | −4.54% (mean) | ≤0.001 | 2 | **PROMOTE** | 39831653386, 39831658152 |
-| Intel Xeon 8573C | −1.79% | 0.018 | 1 | **NEUTRAL** (below 3%) | 39828409134 |
-| Intel Xeon 8370C | not significant | 0.247 | 1 | **NEUTRAL** | (earlier run) |
+| CPU | Δ values (%) | p-value | n | 3%-gate | Run IDs |
+|-----|--------------|---------|---|---------|---------|
+| AMD EPYC 7763 | −3.66, −6.02, −3.93, −5.42 | ≤0.001 all | 4 | **PROMOTE** | 39828409134, 39831658152, 39833250644, 39835714756 |
+| Intel Xeon 8573C | −1.52, −2.06 | 0.018 both | 2 | **NEUTRAL** (below 3%) | 39831653386, 39833287253 |
+| Intel Xeon 8370C | not significant | 0.247 | 1 | **NEUTRAL** | 39835718451 |
 
 go-json is the **clearest illustration that the 3% gate is microarchitecture-dependent:**
 identical code, identical profile, identical binary — three different gate verdicts
@@ -320,12 +333,13 @@ pgo_extra_inlines:      92   (module-scoped)
 pgo_extra_inlines_deps: 771
 ```
 
-**CI results (reshaped benchmark, commit `40150e0` onward — PRELIMINARY):**
+**CI results — reshaped benchmark only (commit `40150e0` onward — PRELIMINARY):**
 
-| CPU | Δ | p-value | n | Status |
-|-----|---|---------|---|--------|
-| AMD EPYC 7763 | −7.77% | 0.001 | 1 | **provisional** |
-| Intel Xeon 8573C | −11.44% | 0.001 | 1 | **provisional** |
+| CPU | Δ values (%) | p-value | n | Run IDs | Status |
+|-----|--------------|---------|---|---------|--------|
+| AMD EPYC 7763 | −7.77, −7.77 | ≤0.001 both | 2 | 39833250644, 39835714756 | **PROMOTE** (provisional) |
+| Intel Xeon 8573C | −11.44 | 0.001 | 1 | 39833287253 | **PROMOTE** (provisional) |
+| Intel Xeon 8370C | −6.23 | 0.001 | 1 | 39835718451 | **PROMOTE** (provisional) |
 
 > **Important:** These numbers are from the reshaped benchmark (commit `40150e0`): hoisted
 > `fasthttp.Request` and reader allocations out of the timed loop, per-iteration reset,
@@ -333,12 +347,13 @@ pgo_extra_inlines_deps: 771
 > `fasthttp.Request` on every iteration and discarded the parse error, making allocator
 > time and potential silent parse failures visible in the result.
 >
-> Old numbers (~2.4 µs/op) and new numbers (~600–700 ns/op) measure different work and
-> are **not comparable.** Do not carry forward, cite, or average any fasthttp result from
-> before commit `40150e0`.
+> Old-loop runs (EPYC 7763: 39828409134 → −4.84%, 39831658152 → −5.38%;
+> Xeon 8573C: 39831653386 → −2.46%) measured different work (~2.4 µs/op vs ~600–700 ns/op)
+> and are **not comparable.** Do not carry forward, cite, or average any fasthttp result
+> from before commit `40150e0`.
 
-Each architecture has n=1 under the reshaped benchmark. Treat as provisional until a
-second run pair confirms.
+Xeon 8573C and 8370C each have n=1 under the new loop; treat as provisional until a
+second run pair confirms on those models. EPYC has n=2 (both identical at −7.77%).
 
 **Mechanism:** fasthttp's parser is dominated by `RequestHeader.parseHeaders` → string
 scanning. The 92 module-scoped extra inlines are in request-parsing helper functions that
