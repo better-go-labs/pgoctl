@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `merge`: weighted strategy no longer doubles sample counts when merging a single profile. The newest profile now always receives scale factor 1.0; older profiles decay to `--min-weight` (default 0.125) over time. `--recency-weight` is deprecated — it had no effect on decay after this fix and is replaced by the explicit `--min-weight` floor (#56)
 - `leverage-check`: module vs dependency origin of each compiler decision now comes from `go list -deps` main-module import paths, with both builds run under `-trimpath` so positions no longer depend on `--dir` or on cached build output. The previous `./` path prefix test counted every subpackage as a dependency
 - `leverage-check`: `devirt_decisions` is module-scoped like `pgo_extra_inlines`; the full count stays in `pgo_devirts` (JSON) and the std/deps share is in the new `pgo_devirts_deps`. A profile whose only PGO devirts are in dependencies now gets verdict NONE (exit 3)
 - `leverage-check`: compiler lines are matched on their message, so escape-analysis lines that quote source text containing a marker string are no longer counted as PGO decisions

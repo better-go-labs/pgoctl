@@ -66,23 +66,27 @@ func TestMerge_WeightedSingleInput(t *testing.T) {
 
 func TestMerge_WeightedTwo(t *testing.T) {
 	now := time.Now()
+	const (
+		nSamples    = 500
+		sampleValue = int64(10_000_000)
+	)
 	inputs := []merge.Input{
-		{Data: buildProfile(t, 500, 30*1e9, 10000000, 0), CapturedAt: now.Add(-48 * time.Hour)},
-		{Data: buildProfile(t, 500, 30*1e9, 10000000, 0), CapturedAt: now},
+		{Data: buildProfile(t, nSamples, 30*1e9, sampleValue, 0), CapturedAt: now.Add(-48 * time.Hour)},
+		{Data: buildProfile(t, nSamples, 30*1e9, sampleValue, 0), CapturedAt: now},
 	}
 	var out bytes.Buffer
 	if err := merge.Profiles(inputs, merge.DefaultOptions(), &out); err != nil {
 		t.Fatalf("merge: %v", err)
 	}
-	if out.Len() == 0 {
-		t.Fatal("expected non-empty merged output")
-	}
 	p, err := profile.ParseData(out.Bytes())
 	if err != nil {
 		t.Fatalf("parse merged output: %v", err)
 	}
-	if len(p.Sample) == 0 {
-		t.Error("merged profile has no samples")
+	// newest at scale 1.0, 48h-old at 0.5^2=0.25; total = 500*(10M*1.0 + 10M*0.25)
+	want := int64(nSamples) * (sampleValue + int64(math.Round(float64(sampleValue)*0.25)))
+	got := totalValue(t, p)
+	if got != want {
+		t.Errorf("two-input weighted merge: total=%d want=%d", got, want)
 	}
 }
 
@@ -159,7 +163,7 @@ func TestMerge_StrategiesDifferWeighting(t *testing.T) {
 	if unionTotal != wantUnion {
 		t.Errorf("union: expected total %d, got %d", wantUnion, unionTotal)
 	}
-	// After normalisation newest→1.0, the 48h-old profile (age=2 half-lives)
+	// After normalisation newest->1.0, the 48h-old profile (age=2 half-lives)
 	// decays to 0.5^2=0.25: 500*(10M*1.0 + 10M*0.25) = 6.25B.
 	wantWeighted := int64(500) * (10000000 + int64(math.Round(10000000*0.25)))
 	if weightedTotal != wantWeighted {
@@ -167,6 +171,83 @@ func TestMerge_StrategiesDifferWeighting(t *testing.T) {
 	}
 	if weightedTotal == unionTotal {
 		t.Error("weighted and union strategies must produce different totals")
+	}
+}
+
+// TestMerge_WeightedDecayTable is a table-driven regression for issue #56.
+// It covers single-input scale invariance across RecencyWeight values (including
+// the rw=0.1 case that produced 2.5x before the fix), the floor engaging at 96h,
+// and rejection of non-positive RecencyWeight.
+func TestMerge_WeightedDecayTable(t *testing.T) {
+	const (
+		nSamples = 100
+		sampleV  = int64(10_000_000)
+	)
+	now := time.Now()
+	buildAt := func(at time.Time) merge.Input {
+		return merge.Input{Data: buildProfile(t, nSamples, 30e9, sampleV, 0), CapturedAt: at}
+	}
+	base := int64(nSamples) * sampleV
+
+	cases := []struct {
+		name      string
+		rw        float64
+		age       time.Duration // age of older profile; 0 = single-input
+		wantScale float64       // expected scale of the older profile
+		wantErr   bool
+	}{
+		// non-positive RecencyWeight must be rejected
+		{"invalid rw=0", 0, 0, 0, true},
+		{"invalid rw=-1", -1, 0, 0, true},
+		// newest always 1.0 regardless of rw (rw=0.1 was 2.5x before fix)
+		{"single-input rw=2.0", 2.0, 0, 1.0, false},
+		{"single-input rw=1.0", 1.0, 0, 1.0, false},
+		{"single-input rw=0.1", 0.1, 0, 1.0, false},
+		// 48h = 2 half-lives: d=0.25, above MinWeight=0.125
+		{"48h decay rw=2.0", 2.0, 48 * time.Hour, 0.25, false},
+		// 96h = 4 half-lives: d=0.0625, clamped to MinWeight=0.125
+		{"96h floor rw=2.0", 2.0, 96 * time.Hour, 0.125, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := merge.DefaultOptions()
+			opts.RecencyWeight = tc.rw
+
+			var inputs []merge.Input
+			if tc.age == 0 {
+				inputs = []merge.Input{buildAt(now)}
+			} else {
+				inputs = []merge.Input{buildAt(now.Add(-tc.age)), buildAt(now)}
+			}
+
+			var out bytes.Buffer
+			err := merge.Profiles(inputs, opts, &out)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error for non-positive RecencyWeight, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			p, err := profile.ParseData(out.Bytes())
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			total := totalValue(t, p)
+			if tc.age == 0 {
+				if total != base {
+					t.Errorf("newest scale: total=%d want=%d (%.3fx)", total, base, float64(total)/float64(base))
+				}
+			} else {
+				want := base + int64(math.Round(float64(base)*tc.wantScale))
+				if total != want {
+					t.Errorf("age=%v scale=%.4f: total=%d want=%d", tc.age, tc.wantScale, total, want)
+				}
+			}
+		})
 	}
 }
 

@@ -206,6 +206,7 @@ func newValidateCmd() *cobra.Command {
 func newMergeCmd() *cobra.Command {
 	var strategy string
 	var recencyWeight float64
+	var minWeight float64
 	var halfLifeH float64
 	var dropInvalid bool
 	var out string
@@ -218,6 +219,7 @@ func newMergeCmd() *cobra.Command {
 			opts := merge.Options{
 				Strategy:      merge.Strategy(strategy),
 				RecencyWeight: recencyWeight,
+				MinWeight:     minWeight,
 				HalfLife:      time.Duration(halfLifeH * float64(time.Hour)),
 				DropInvalid:   dropInvalid,
 			}
@@ -268,10 +270,12 @@ func newMergeCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&strategy, "strategy", "weighted", "merge strategy: weighted|latest|union")
-	cmd.Flags().Float64Var(&recencyWeight, "recency-weight", 2.0, "multiplier for most recent profile")
+	cmd.Flags().Float64Var(&recencyWeight, "recency-weight", 2.0, "must be positive; deprecated — use --min-weight instead")
+	cmd.Flags().Float64Var(&minWeight, "min-weight", 0.125, "minimum scale factor for very-old profiles (weighted strategy)")
 	cmd.Flags().Float64Var(&halfLifeH, "half-life", 24.0, "recency decay half-life in hours")
 	cmd.Flags().BoolVar(&dropInvalid, "drop-invalid", false, "skip unparseable profiles instead of failing")
 	cmd.Flags().StringVar(&out, "out", "default.pgo", "output path (- for stdout)")
+	_ = cmd.Flags().MarkDeprecated("recency-weight", "use --min-weight to set the floor weight for old profiles")
 	return cmd
 }
 
