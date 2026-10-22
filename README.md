@@ -117,7 +117,7 @@ The probe emits `leverage-verdict` with one of four values:
 | `NONE` | 0 PGO-specific compiler decisions; optimization will not help |
 | `LOW` | 1-4 devirt decisions or 5-29 extra inlines; modest gains possible |
 | `HIGH` | >=5 devirt decisions or >=30 extra inlines; run a full benchmark cycle |
-| `INCOMPLETE` | Build analysis was not run (no directory provided internally) |
+| `INCOMPLETE` | leverage-check failed or produced no output; see the warning annotation |
 
 A `NONE` verdict emits a `::warning::` annotation and never fails the job by itself.
 To gate on it, add an explicit assertion as shown above.

@@ -310,7 +310,7 @@ jobs:
           # 1 module devirt + 86 module PGO-only inlines = HIGH under OR logic.
           # INCOMPLETE is only valid when HAS_PROFILE is false (no artifact available).
           if [ "$HAS_PROFILE" = "true" ] && [ "$VERDICT" = "INCOMPLETE" ]; then
-            echo "::error::nats-server: INCOMPLETE verdict despite a profile being available — leverage-check failed"
+            echo "::error::nats-server: INCOMPLETE verdict despite a profile being available: leverage-check failed"
             exit 1
           fi
 

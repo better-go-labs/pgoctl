@@ -28,15 +28,6 @@ jobs:
         with:
           lfs: true
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.26.x'
-          cache: true
-          cache-dependency-path: |
-            go.sum
-            _prometheus/go.sum
-          check-latest: true
-
       - name: Check for pprof profile
         id: profile
         run: |
@@ -54,6 +45,26 @@ jobs:
           echo "## PGO Benchmark: skipped" >> "$GITHUB_STEP_SUMMARY"
           echo "No \`testdata/prometheus_cpu.pprof\` present. Run the *Profile Collect* workflow, " \
                "then commit the artifact to \`testdata/\` and re-trigger." >> "$GITHUB_STEP_SUMMARY"
+
+      # Checkout Prometheus before setup-go so _prometheus/go.sum exists when the
+      # cache key is hashed; otherwise the key never rotates on Prometheus dep changes.
+      - name: Checkout Prometheus
+        if: steps.profile.outputs.found == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: prometheus/prometheus
+          path: _prometheus
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v7
+        if: steps.profile.outputs.found == 'true'
+        with:
+          go-version: '1.26.x'
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            _prometheus/go.sum
+          check-latest: true
 
       - name: Build pgoctl binary
         if: steps.profile.outputs.found == 'true'
@@ -82,14 +93,6 @@ jobs:
             --json \
             testdata/prometheus_cpu.pprof > /tmp/validate-shares.json 2>&1 || true
           cat /tmp/validate-shares.json
-
-      - name: Checkout Prometheus
-        if: steps.profile.outputs.found == 'true'
-        uses: actions/checkout@v7
-        with:
-          repository: prometheus/prometheus
-          path: _prometheus
-          fetch-depth: 1
 
       - name: Install benchstat
         if: steps.profile.outputs.found == 'true'
@@ -278,7 +281,7 @@ jobs:
           if [ "$combined" -le "$MAX" ]; then
             cat /tmp/bench-breakdown.md >> /tmp/bench-report.md
           else
-            printf '\n> 📦 Package-level breakdown omitted (report too large for PR comment — see [job summary](%s) for full output)\n' \
+            printf '\n> 📦 Package-level breakdown omitted (report too large for PR comment: see [job summary](%s) for full output)\n' \
               "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               >> /tmp/bench-report.md
           fi
