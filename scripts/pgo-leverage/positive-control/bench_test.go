@@ -6,12 +6,14 @@ import (
 )
 
 func TestSumCalcRun(t *testing.T) {
+	// Run accumulates the per-iteration term (x*K + x - 0.5*x*x) over 64
+	// iterations, so each expected value is 64x the single-application result.
 	tests := []struct {
 		k, x, want float64
 	}{
 		{k: 1.5, x: 0.0, want: 0.0},
-		{k: 1.5, x: 1.0, want: 1.5 + 1.0 - 0.5},
-		{k: 2.0, x: 2.0, want: 2.0*2.0 + 2.0 - 2.0*2.0*0.5},
+		{k: 1.5, x: 1.0, want: 64 * (1.5 + 1.0 - 0.5)},
+		{k: 2.0, x: 2.0, want: 64 * (2.0*2.0 + 2.0 - 2.0*2.0*0.5)},
 	}
 	for _, tt := range tests {
 		s := SumCalc{K: tt.k}
