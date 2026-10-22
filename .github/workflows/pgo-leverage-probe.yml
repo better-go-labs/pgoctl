@@ -42,10 +42,21 @@ jobs:
         with:
           lfs: true
 
+      - name: "Prometheus | Checkout"
+        uses: actions/checkout@v7
+        with:
+          repository: prometheus/prometheus
+          path: _prometheus
+          ref: v3.14.0
+          fetch-depth: 1
+
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
+          cache-dependency-path: |
+            go.sum
+            _prometheus/go.sum
           check-latest: true
 
       - name: Build pgoctl
@@ -116,22 +127,6 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # -------- Main probe: Prometheus -------------------------------------
-      - name: "Prometheus | Checkout"
-        uses: actions/checkout@v7
-        with:
-          repository: prometheus/prometheus
-          path: _prometheus
-          ref: v3.14.0
-          fetch-depth: 1
-
-      - name: "Prometheus | Setup Go (with cache)"
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.26.x'
-          cache: true
-          cache-dependency-path: _prometheus/go.sum
-          check-latest: true
-
       - name: "Prometheus | Check leverage"
         working-directory: _prometheus
         run: |
