@@ -255,6 +255,138 @@ jobs:
           echo "----- rendered report -----"
           cat /tmp/bench-report.md
 
+      - name: Generate per-run benchmark markdown
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          OUTFILE="/tmp/bench/run-${GITHUB_RUN_ID}.md"
+
+          CPU_FULL=$(grep -m1 '^cpu:' /tmp/bench/goldmark-stat.txt 2>/dev/null \
+            | sed 's/^cpu:[[:space:]]*//' | sed 's/[[:space:]]*$//' || echo "unknown")
+          cpu_lc=$(echo "$CPU_FULL" | tr '[:upper:]' '[:lower:]')
+          CPU_SLUG=$(echo "$cpu_lc" | sed \
+            -e 's/amd epyc \([0-9a-z]*\).*/epyc-\1/' \
+            -e 's/intel(r) xeon(r) \(platinum\|gold\|silver\) \([0-9a-z]*\).*/xeon-\2/' \
+            -e 's/intel(r) xeon(r) \([0-9a-z]*\).*/xeon-\1/' \
+            | sed 's/[^a-z0-9-]/-/g; s/--*/-/g; s/^-//; s/-$//')
+          [ -z "$CPU_SLUG" ] && CPU_SLUG="unknown"
+
+          # Extract CV and benchstat row for a library from its stat file.
+          # cv_from_stat <stat_file> <arm: 1=baseline 2=pgo>
+          cv_from_stat() {
+            local file="$1" arm="$2"
+            grep -E '^[A-Z][A-Za-z].*-[0-9]' "$file" 2>/dev/null | head -1 \
+              | grep -oE '± [0-9]+(\.[0-9]+)?%' | sed -n "${arm}p" | sed 's/± //'
+          }
+          floor_pct() {
+            local cv="$1"
+            local cv_num
+            cv_num=$(echo "$cv" | sed 's/%//')
+            awk "BEGIN {printf \"%.1f%%\", 3 * ${cv_num} / 3.162}"
+          }
+          bench_row() {
+            local file="$1"
+            grep -E '^[A-Z][A-Za-z].*-[0-9]' "$file" 2>/dev/null | head -1 || echo ""
+          }
+          delta_from_row() {
+            local row="$1"
+            echo "$row" | grep -oE '[-+][0-9]+\.[0-9]+%|~' | head -1 || echo "—"
+          }
+          pval_from_row() {
+            local row="$1"
+            echo "$row" | grep -oE 'p=[0-9]+\.[0-9]+' | head -1 | sed 's/p=//' || echo "—"
+          }
+          n_from_row() {
+            local row="$1"
+            echo "$row" | grep -oE 'n=[0-9]+' | head -1 | sed 's/n=//' || echo "—"
+          }
+
+          {
+            echo "<!-- run: ${GITHUB_RUN_ID} | commit: ${GITHUB_SHA} | date: ${DATE} | cpu: ${CPU_FULL} | GOMAXPROCS: 2 | rounds: 10 | benchtime: 5s -->"
+            echo ""
+            echo "| Library | Baseline CV | PGO CV | Floor | Change | p | n |"
+            echo "|---------|------------|--------|-------|--------|---|---|"
+            for name in goldmark gjson go-json snappy fasthttp; do
+              stat="/tmp/bench/${name}-stat.txt"
+              base_cv=$(cv_from_stat "$stat" 1)
+              pgo_cv=$(cv_from_stat "$stat" 2)
+              [ -z "$base_cv" ] && base_cv="n/a"
+              [ -z "$pgo_cv" ]  && pgo_cv="n/a"
+              floor="n/a"
+              [ "$base_cv" != "n/a" ] && floor=$(floor_pct "$base_cv")
+              row=$(bench_row "$stat")
+              delta=$(delta_from_row "$row")
+              pval=$(pval_from_row "$row")
+              n=$(n_from_row "$row")
+              echo "| ${name} | ${base_cv} | ${pgo_cv} | ${floor} | ${delta} | ${pval} | ${n} |"
+            done
+            echo ""
+            echo "## Raw benchstat output"
+            echo ""
+            for name in goldmark gjson go-json snappy fasthttp; do
+              echo "### ${name}"
+              echo ""
+              echo '```'
+              cat /tmp/bench/${name}-stat.txt 2>/dev/null || echo "(no output)"
+              echo '```'
+              echo ""
+            done
+          } > "$OUTFILE"
+
+          echo "## Per-run benchmark file: ${DATE}-${GITHUB_RUN_ID}-${CPU_SLUG}.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$OUTFILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Generated: $OUTFILE"
+
+      - name: Generate benchmark results index
+        run: |
+          INDEX_FILE="/tmp/bench/index.md"
+          {
+            echo "# Benchmark Results Index"
+            echo ""
+            echo "_Generated from CI artifacts. Do not edit by hand — add runs by committing the generated per-run files._"
+            echo ""
+
+            # Extract unique CPU models from all generated per-run files
+            declare -A cpu_runs
+            for run_file in /tmp/bench/run-*.md; do
+              if [ -f "$run_file" ]; then
+                # Extract CPU from the HTML comment
+                cpu=$(grep -m1 '^<!-- run:' "$run_file" 2>/dev/null | sed 's/.*cpu: \([^|]*\).*/\1/' || echo "")
+                if [ -n "$cpu" ]; then
+                  run_id=$(basename "$run_file" | sed 's/run-//; s/\.md//')
+                  # Add to map (CPU as key, accumulate runs)
+                  if [ -z "${cpu_runs[$cpu]}" ]; then
+                    cpu_runs[$cpu]="$run_id"
+                  else
+                    cpu_runs[$cpu]="${cpu_runs[$cpu]} $run_id"
+                  fi
+                fi
+              fi
+            done
+
+            # Sort CPUs and output sections
+            for cpu in $(echo "${!cpu_runs[@]}" | tr ' ' '\n' | sort); do
+              echo "## $cpu"
+              echo ""
+              for run_id in ${cpu_runs[$cpu]}; do
+                # Extract run ID and date from filename (YYYY-MM-DD-<run_id>-<cpu_slug>.md)
+                date=$(echo "$run_id" | cut -d- -f1-3)
+                run_num=$(echo "$run_id" | cut -d- -f4)
+                cpu_slug=$(echo "$run_id" | cut -d- -f5-)
+                echo "- [$date · run $run_num](results/$run_id.md)"
+              done
+              echo ""
+            done
+
+            echo "---"
+            echo ""
+            echo "> Runs marked _old fasthttp benchmark (pre-40150e0)_ used a different loop structure for the fasthttp benchmark."
+            echo "> Their fasthttp rows are not comparable to later runs. All other libraries in those runs are unaffected."
+          } > "$INDEX_FILE"
+
+          echo "## Benchmark results index: index.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$INDEX_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Generated: $INDEX_FILE"
+
       - name: Upload raw benchmark data
         if: always()
         uses: actions/upload-artifact@v4
@@ -264,6 +396,8 @@ jobs:
             /tmp/bench/*-baseline.txt
             /tmp/bench/*-pgo.txt
             /tmp/bench/*-stat.txt
+            /tmp/bench/run-*.md
+            /tmp/bench/index.md
 
       - name: Detect CPU model slug
         id: cpuid
