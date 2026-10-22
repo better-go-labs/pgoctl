@@ -17,12 +17,12 @@ type ProfileMeta struct {
 	SHA256       string        `json:"sha256"`
 }
 
-// WorkloadSignals holds the four workload-shape signals computed beyond the
-// existing devirt/inline-fire pre-check. Each field is present in JSON output
-// when the corresponding analysis was requested.
+// WorkloadSignals holds the three workload-shape signals computed beyond the
+// existing devirt/inline-fire pre-check. All three fields are always populated
+// when ComputeWorkloadSignals is enabled.
 type WorkloadSignals struct {
 	// CPUBoundFraction is the share (0–1) of on-CPU time attributed to
-	// user/library Go functions vs runtime, GC, scheduler, syscall, cgo, and IO.
+	// user/library Go functions vs runtime, GC, scheduler, syscall, and IO.
 	// Higher values mean more optimisable code is on-CPU, making PGO more likely
 	// to move the needle.
 	CPUBoundFraction float64 `json:"cpu_bound_fraction"`
@@ -33,19 +33,11 @@ type WorkloadSignals struct {
 	// have large leverage.
 	Peakedness float64 `json:"peakedness"`
 
-	// CrossPackageChainDensity is the fraction of sampled call-chains (stacks)
-	// that contain at least one cross-package call boundary among the hot
-	// top-K% of functions. Higher values mean PGO's cross-package inlining
-	// optimisations have more targets.
+	// CrossPackageChainDensity is the CPU-weighted fraction (0–1) of sampled
+	// call-chains that contain at least one cross-package call boundary.
+	// Higher values mean PGO's cross-package inlining optimisations have more
+	// targets.
 	CrossPackageChainDensity float64 `json:"cross_package_chain_density"`
-
-	// DriftPct is the profile representativeness signal when two profiles are
-	// compared: the percentage of total CPU share that has shifted between the
-	// early and late halves of the profile's time range (or between two supplied
-	// windows). 0 = identical, 100 = completely different.  A high value
-	// indicates the workload changed during capture, reducing PGO reliability.
-	// Set to -1 when only one profile is provided (drift cannot be measured).
-	DriftPct float64 `json:"drift_pct"`
 }
 
 // QualityReport is the output of a pgoctl validate run.

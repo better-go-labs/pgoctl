@@ -177,12 +177,7 @@ type Options struct {
 	// warning. Dense cross-package chains give PGO's devirt/inlining more work.
 	MinCrossPackageChainDensity float64
 
-	// MaxDriftPct: if > 0 and the measured intra-profile drift exceeds this
-	// value, a warning is emitted. High drift suggests the workload is not in
-	// steady state.
-	MaxDriftPct float64
-
-	// ComputeWorkloadSignals enables all four workload-shape signals. When false
+	// ComputeWorkloadSignals enables all three workload-shape signals. When false
 	// (the default) the signals block is skipped and ValidateFile behaves as
 	// before this change.
 	ComputeWorkloadSignals bool
@@ -329,7 +324,6 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 			CPUBoundFraction:         CPUBoundFraction(p),
 			Peakedness:               ProfilePeakedness(p, topN),
 			CrossPackageChainDensity: CrossPackageChainDensity(p, opts.CrossPackageHotThresholdPct),
-			DriftPct:                 ProfileDriftPct(p),
 		}
 		report.WorkloadSignals = ws
 
@@ -347,11 +341,6 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 			report.Warnings = append(report.Warnings, fmt.Sprintf(
 				"cross_package_chain_density %.3f < %.3f: few cross-package hot chains; devirt/inlining targets are limited",
 				ws.CrossPackageChainDensity, opts.MinCrossPackageChainDensity))
-		}
-		if opts.MaxDriftPct > 0 && ws.DriftPct >= 0 && ws.DriftPct > opts.MaxDriftPct {
-			report.Warnings = append(report.Warnings, fmt.Sprintf(
-				"drift_pct %.1f%% > %.1f%%: workload shifted mid-capture; profile may not represent a stable steady-state",
-				ws.DriftPct, opts.MaxDriftPct))
 		}
 	}
 

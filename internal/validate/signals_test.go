@@ -2,6 +2,7 @@ package validate
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/pprof/profile"
@@ -186,7 +187,7 @@ func TestCrossPackageChainDensity_CrossPackage(t *testing.T) {
 		// same-package: db internal
 		{[]string{"github.com/myapp/db.scan", "github.com/myapp/db.next"}, "", 1},
 	})
-	// 1 out of 2 chains is cross-package
+	// 1 out of 2 chains is cross-package; equal weights → density = 0.5
 	assert.InDelta(t, 0.5, CrossPackageChainDensity(p, 0), 0.001)
 }
 
@@ -207,53 +208,16 @@ func TestCrossPackageChainDensity_HotThreshold(t *testing.T) {
 	assert.InDelta(t, 1.0, density, 0.01)
 }
 
-// ── ProfileDriftPct ─────────────────────────────────────────────────────────
-
-func TestProfileDriftPct_StableWorkload(t *testing.T) {
-	// Alternating fn1/fn2 with equal weight → identical halves → ~0 drift.
-	p := buildProfile(t, []struct {
-		chain []string
-		fn    string
-		value int64
-	}{
-		{nil, "fn1", 100},
-		{nil, "fn2", 100},
-		{nil, "fn1", 100},
-		{nil, "fn2", 100},
-	})
-	assert.InDelta(t, 0.0, ProfileDriftPct(p), 1.0)
-}
-
-func TestProfileDriftPct_CompletelyDifferent(t *testing.T) {
-	// First half: only fn1; second half: only fn2 → drift = 100%.
-	p := buildProfile(t, []struct {
-		chain []string
-		fn    string
-		value int64
-	}{
-		{nil, "fn1", 1000},
-		{nil, "fn1", 1000},
-		{nil, "fn2", 1000},
-		{nil, "fn2", 1000},
-	})
-	assert.InDelta(t, 100.0, ProfileDriftPct(p), 1.0)
-}
-
-func TestProfileDriftPct_TooFewSamples(t *testing.T) {
-	p := buildProfile(t, []struct {
-		chain []string
-		fn    string
-		value int64
-	}{
-		{nil, "fn1", 100},
-	})
-	assert.Equal(t, -1.0, ProfileDriftPct(p))
-}
-
 // ── Integration: ValidateFile with workload signals ──────────────────────────
 
 func TestValidateFile_WorkloadSignals_Populated(t *testing.T) {
 	// Build a synthetic profile with enough samples to pass basic gates.
+	// 10000 samples of [server.handleRequest→db.Query] at value=100 (cross-pkg)
+	// 10000 samples of [runtime.mallocgc] at value=10
+	// Total CPU = 10000*100 + 10000*10 = 1 100 000
+	// CPUBoundFraction  = 1 000 000 / 1 100 000 = 0.9091
+	// Peakedness(top-5) = 100.0 (top-5 covers both unique functions)
+	// CrossPkgDensity   = 1 000 000 / 1 100 000 = 0.9091 (weighted; mallocgc chain has no boundary)
 	entries := make([]struct {
 		chain []string
 		fn    string
@@ -287,17 +251,9 @@ func TestValidateFile_WorkloadSignals_Populated(t *testing.T) {
 	require.NotNil(t, report.WorkloadSignals)
 
 	ws := report.WorkloadSignals
-	// ~90.9% of CPU is user code (server.handleRequest)
-	assert.Greater(t, ws.CPUBoundFraction, 0.5)
-	assert.LessOrEqual(t, ws.CPUBoundFraction, 1.0)
-	// Top-5 functions cover most of the CPU
-	assert.Greater(t, ws.Peakedness, 0.0)
-	assert.LessOrEqual(t, ws.Peakedness, 100.0)
-	// Cross-package chains exist (server→db)
-	assert.Greater(t, ws.CrossPackageChainDensity, 0.0)
-	assert.LessOrEqual(t, ws.CrossPackageChainDensity, 1.0)
-	// Drift: alternating stable pattern → drift is defined (not -1)
-	assert.GreaterOrEqual(t, ws.DriftPct, 0.0)
+	assert.Equal(t, 0.9091, ws.CPUBoundFraction)
+	assert.Equal(t, 100.0, ws.Peakedness)
+	assert.Equal(t, 0.9091, ws.CrossPackageChainDensity)
 }
 
 func TestValidateFile_WorkloadSignals_Disabled(t *testing.T) {
@@ -349,7 +305,7 @@ func TestValidateFile_WorkloadSignals_WarnOnThreshold(t *testing.T) {
 
 	var hasCPUWarn bool
 	for _, w := range report.Warnings {
-		if len(w) > 16 && w[:16] == "cpu_bound_fracti" {
+		if strings.HasPrefix(w, "cpu_bound_fraction") {
 			hasCPUWarn = true
 		}
 	}

@@ -10,27 +10,57 @@ import (
 	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 )
 
-// runtimePrefixes are Go runtime, GC, scheduler, syscall, cgo, and IO
-// package prefixes that are not optimisable by PGO. Anything outside these
-// prefixes counts as "user/library Go code" for the CPU-bound fraction signal.
+// runtimePrefixes are package prefixes whose CPU time the compiler cannot move
+// through PGO: the Go runtime, GC, syscall wrappers, and I/O polling.
+// net/http, sync, os etc. are deliberately excluded — PGO compiles the standard
+// library with the profile, so hot stdlib paths are valid inlining targets.
 var runtimePrefixes = []string{
 	"runtime",
-	"runtime/internal",
-	"sync",
+	"internal/runtime",
 	"syscall",
 	"internal/poll",
-	"net/http",
-	"os",
 }
 
 func isRuntimeFunc(name string) bool {
-	// Bare runtime.* functions and their sub-packages.
 	for _, prefix := range runtimePrefixes {
 		if name == prefix || strings.HasPrefix(name, prefix+".") || strings.HasPrefix(name, prefix+"/") {
 			return true
 		}
 	}
 	return false
+}
+
+// leafFunction returns the name of the innermost (leaf) function in the sample,
+// or "" if none can be found.
+func leafFunction(s *profile.Sample) string {
+	for _, loc := range s.Location {
+		if loc == nil || len(loc.Line) == 0 {
+			continue
+		}
+		fn := loc.Line[0].Function
+		if fn != nil && fn.Name != "" {
+			return fn.Name
+		}
+	}
+	return ""
+}
+
+// leafCounts returns a (counts, total) pair: counts maps each leaf function name
+// to its aggregate sample value at idx; total is the sum of all sample values.
+func leafCounts(p *profile.Profile, idx int) (map[string]int64, int64) {
+	counts := make(map[string]int64)
+	var total int64
+	for _, s := range p.Sample {
+		if idx >= len(s.Value) {
+			continue
+		}
+		v := s.Value[idx]
+		total += v
+		if name := leafFunction(s); name != "" {
+			counts[name] += v
+		}
+	}
+	return counts, total
 }
 
 // CPUBoundFraction returns the fraction (0–1) of on-CPU sample weight
@@ -42,30 +72,16 @@ func CPUBoundFraction(p *profile.Profile) float64 {
 	if !ok {
 		return 0
 	}
-	var user, total int64
-	for _, s := range p.Sample {
-		if idx >= len(s.Value) {
-			continue
-		}
-		v := s.Value[idx]
-		total += v
-		// Attribute to the leaf (innermost) function.
-		for _, loc := range s.Location {
-			if loc == nil || len(loc.Line) == 0 {
-				continue
-			}
-			fn := loc.Line[0].Function
-			if fn != nil && fn.Name != "" {
-				pkg := pprofutil.PackageOf(fn.Name)
-				if !isRuntimeFunc(pkg) {
-					user += v
-				}
-				break
-			}
-		}
-	}
+	counts, total := leafCounts(p, idx)
 	if total == 0 {
 		return 0
+	}
+	var user int64
+	for name, v := range counts {
+		pkg := pprofutil.PackageOf(name)
+		if !isRuntimeFunc(pkg) {
+			user += v
+		}
 	}
 	return math.Round(float64(user)/float64(total)*10000) / 10000
 }
@@ -82,25 +98,7 @@ func ProfilePeakedness(p *profile.Profile, topN int) float64 {
 	if !ok {
 		return 0
 	}
-	counts := make(map[string]int64)
-	var total int64
-	for _, s := range p.Sample {
-		if idx >= len(s.Value) {
-			continue
-		}
-		v := s.Value[idx]
-		total += v
-		for _, loc := range s.Location {
-			if loc == nil || len(loc.Line) == 0 {
-				continue
-			}
-			fn := loc.Line[0].Function
-			if fn != nil && fn.Name != "" {
-				counts[fn.Name] += v
-				break
-			}
-		}
-	}
+	counts, total := leafCounts(p, idx)
 	if total == 0 {
 		return 0
 	}
@@ -121,37 +119,25 @@ func ProfilePeakedness(p *profile.Profile, topN int) float64 {
 	return math.Round(pct*100) / 100
 }
 
-// CrossPackageChainDensity returns the fraction (0–1) of sampled call-chains
-// that contain at least one cross-package boundary among functions whose
-// per-function flat share exceeds hotThresholdPct.  Values close to 1.0
-// indicate PGO's cross-package inlining optimisations have many targets.
-// hotThresholdPct = 0 means every function in a chain is a candidate.
+// CrossPackageChainDensity returns the CPU-weighted fraction (0–1) of sampled
+// call-chains that contain at least one cross-package boundary.  Chains are
+// weighted by their sample value, so a stack sampled 10 000× contributes 10 000
+// units, not one.  Only chains whose leaf function's flat share exceeds
+// hotThresholdPct are counted; hotThresholdPct=0 includes every chain.
+//
+// Boundary detection scans every frame in the chain — not only hot ones — so
+// any adjacent pair of frames from different packages is a boundary.  Standard-
+// library frames (sort, encoding, …) count as package boundaries; this is
+// intentional because PGO's cross-package inlining covers stdlib too.
+// Values close to 1.0 indicate that many CPU-weighted chains cross package
+// lines and PGO's cross-package inlining optimisations have many targets.
 func CrossPackageChainDensity(p *profile.Profile, hotThresholdPct float64) float64 {
 	idx, ok := cpuSampleIndex(p)
 	if !ok {
 		return 0
 	}
 
-	// Compute per-function total to identify "hot" functions.
-	counts := make(map[string]int64)
-	var total int64
-	for _, s := range p.Sample {
-		if idx >= len(s.Value) {
-			continue
-		}
-		v := s.Value[idx]
-		total += v
-		for _, loc := range s.Location {
-			if loc == nil || len(loc.Line) == 0 {
-				continue
-			}
-			fn := loc.Line[0].Function
-			if fn != nil && fn.Name != "" {
-				counts[fn.Name] += v
-				break
-			}
-		}
-	}
+	counts, total := leafCounts(p, idx)
 	if total == 0 {
 		return 0
 	}
@@ -164,32 +150,18 @@ func CrossPackageChainDensity(p *profile.Profile, hotThresholdPct float64) float
 		}
 	}
 
-	// Walk each sample's call-chain; count cross-package boundaries.
-	// A chain is included only when its leaf function meets the hot threshold.
-	// We then check whether ANY two adjacent frames in the chain belong to
-	// different packages (cross-package call boundary).
-	var crossPkgChains, totalChains int64
+	// Walk each sample's call-chain; accumulate CPU-weighted chain counts.
+	var crossPkgWeight, totalWeight int64
 	for _, s := range p.Sample {
 		if idx >= len(s.Value) || s.Value[idx] == 0 {
 			continue
 		}
-
-		// Determine the leaf function (innermost frame).
-		var leafName string
-		for _, loc := range s.Location {
-			if loc == nil || len(loc.Line) == 0 {
-				continue
-			}
-			if fn := loc.Line[0].Function; fn != nil && fn.Name != "" {
-				leafName = fn.Name
-				break
-			}
-		}
 		// Skip chains whose leaf is below the hot threshold.
-		if hotThresholdPct > 0 && !hotFuncs[leafName] {
+		if hotThresholdPct > 0 && !hotFuncs[leafFunction(s)] {
 			continue
 		}
-		totalChains++
+		w := s.Value[idx]
+		totalWeight += w
 
 		// Collect all frame packages in this chain.
 		var pkgs []string
@@ -205,86 +177,17 @@ func CrossPackageChainDensity(p *profile.Profile, hotThresholdPct float64) float
 			}
 		}
 		// Look for at least one package boundary.
-		hasCross := false
 		for i := 1; i < len(pkgs); i++ {
 			if pkgs[i] != pkgs[i-1] {
-				hasCross = true
+				crossPkgWeight += w
 				break
 			}
 		}
-		if hasCross {
-			crossPkgChains++
-		}
+		pkgs = pkgs[:0]
 	}
-	if totalChains == 0 {
+	if totalWeight == 0 {
 		return 0
 	}
-	density := float64(crossPkgChains) / float64(totalChains)
+	density := float64(crossPkgWeight) / float64(totalWeight)
 	return math.Round(density*10000) / 10000
-}
-
-// ProfileDriftPct measures representativeness by comparing the function-share
-// distributions of two non-overlapping halves of p (by sample index, not by
-// time).  Returns 0–100: 0 means identical distributions, 100 means fully
-// disjoint.  A high value indicates the workload changed mid-capture and the
-// profile is not representative of a stable steady-state.
-func ProfileDriftPct(p *profile.Profile) float64 {
-	idx, ok := cpuSampleIndex(p)
-	if !ok {
-		return -1
-	}
-	n := len(p.Sample)
-	if pprofutil.SampleCount(p) < 2 {
-		return -1
-	}
-	mid := n / 2
-
-	computeShares := func(samples []*profile.Sample) map[string]float64 {
-		counts := make(map[string]int64)
-		var total int64
-		for _, s := range samples {
-			if idx >= len(s.Value) {
-				continue
-			}
-			v := s.Value[idx]
-			total += v
-			for _, loc := range s.Location {
-				if loc == nil || len(loc.Line) == 0 {
-					continue
-				}
-				fn := loc.Line[0].Function
-				if fn != nil && fn.Name != "" {
-					counts[fn.Name] += v
-					break
-				}
-			}
-		}
-		shares := make(map[string]float64, len(counts))
-		if total == 0 {
-			return shares
-		}
-		for fn, v := range counts {
-			shares[fn] = float64(v) / float64(total)
-		}
-		return shares
-	}
-
-	early := computeShares(p.Sample[:mid])
-	late := computeShares(p.Sample[mid:])
-
-	// Total variation distance: sum of |early[fn] - late[fn]| over all fn / 2.
-	// Multiply by 100 to express as percentage.
-	all := make(map[string]struct{})
-	for fn := range early {
-		all[fn] = struct{}{}
-	}
-	for fn := range late {
-		all[fn] = struct{}{}
-	}
-	var tvd float64
-	for fn := range all {
-		tvd += math.Abs(early[fn] - late[fn])
-	}
-	driftPct := 100.0 * tvd / 2.0
-	return math.Round(driftPct*100) / 100
 }
