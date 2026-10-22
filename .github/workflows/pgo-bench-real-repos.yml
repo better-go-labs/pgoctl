@@ -151,12 +151,12 @@ jobs:
                 BEGIN { sum=0; sumsq=0; n=0 }
                 { sum += $1; sumsq += $1*$1; n++ }
                 END {
-                  if (n < 2) { print "n/a" }
+                  if (n < 2 || sum == 0) { print "n/a" }
                   else {
                     mean = sum/n
-                    var  = (sumsq - n*mean*mean) / (n-1)
-                    if (mean == 0) { print "n/a" }
-                    else { printf "%.1f%%", sqrt(var)/mean*100 }
+                    var = (sumsq - n*mean*mean) / (n-1)
+                    if (mean == 0) print "n/a"
+                    else printf "%.1f%%", sqrt(var)/mean*100
                   }
                 }'
           }

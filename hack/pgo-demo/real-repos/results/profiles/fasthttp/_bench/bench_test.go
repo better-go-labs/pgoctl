@@ -20,14 +20,27 @@ var rawRequest = []byte(
 )
 
 func BenchmarkFastHTTPParsing(b *testing.B) {
-	br := bufio.NewReader(bytes.NewReader(rawRequest))
+	var req fasthttp.Request
+	rd := bytes.NewReader(rawRequest)
+	br := bufio.NewReader(rd)
+
+	// Pre-check: verify parsing works
+	rd.Reset(rawRequest)
+	br.Reset(rd)
+	if err := req.Read(br); err != nil {
+		b.Fatalf("parsing failed: %v", err)
+	}
+	if len(req.Header.RequestURI()) == 0 {
+		b.Fatal("parsing produced empty RequestURI")
+	}
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		br.Reset(bytes.NewReader(rawRequest))
-		var req fasthttp.Request
-		_ = req.Read(br)
-		_ = string(req.Header.RequestURI())
-		_ = string(req.Header.Method())
-		_ = req.URI().QueryArgs().String()
+		rd.Reset(rawRequest)
+		br.Reset(rd)
+		req.Reset()
+		if err := req.Read(br); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
