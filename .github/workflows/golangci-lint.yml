@@ -17,8 +17,9 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.x'
           cache: false
+          check-latest: true
 
       - uses: golangci/golangci-lint-action@v9
         with:
