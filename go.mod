@@ -1,6 +1,6 @@
 module github.com/Better-Go-Labs/pgoctl
 
-go 1.26.6
+go 1.26.10
 
 require (
 	github.com/google/pprof v0.0.0-20260906184651-6331bc6350fe

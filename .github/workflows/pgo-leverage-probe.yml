@@ -1,0 +1,339 @@
+name: PGO Leverage Probe
+# Statically evaluates whether a Go repo can benefit from PGO BEFORE running
+# any full benchmark cycle. Probes the two primary PGO codegen levers:
+#   1. Profile-guided INLINING  — go build -gcflags=-m=2 WITH vs WITHOUT profile
+#   2. DEVIRTUALIZATION         — PGO-driven devirt markers in the same diff
+# Emits: PGO-leverage = NONE | LOW | HIGH
+#
+# Triggerable via workflow_dispatch.
+# Two jobs prove correctness on known targets:
+#   probe-high     : Prometheus (interface-dispatch-heavy) → expect HIGH
+#   probe-none-low : nats-server (client.parse over inline budget) → expect NONE/LOW/HIGH
+
+on:
+  workflow_dispatch:
+  # NOTE: pull_request trigger disabled during feature development.
+  # Re-enable after leverage-check is fully validated on real projects.
+  # pull_request:
+  #   paths:
+  #     - 'cmd/pgoctl/**'
+  #     - 'internal/leverage/**'
+  #     - '.github/workflows/pgo-leverage-probe.yml'
+  #     - 'action.yml'
+
+concurrency:
+  group: pgo-leverage-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  # ── Job 1: PGO-friendly target (Prometheus) ──────────────────────────────
+  probe-high:
+    name: "Leverage probe — Prometheus (expect: HIGH)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - name: "Prometheus | Checkout"
+        uses: actions/checkout@v7
+        with:
+          repository: prometheus/prometheus
+          path: _prometheus
+          ref: v3.14.0
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            _prometheus/go.sum
+          check-latest: true
+
+      - name: Build pgoctl
+        run: go build -o /tmp/pgoctl ./cmd/pgoctl
+
+      # -------- Positive control: verify the probe mechanism works -----------
+      - name: "Ctrl | Build positive-control module"
+        working-directory: scripts/pgo-leverage/positive-control
+        run: |
+          go build -o /tmp/positive-control .
+
+      - name: "Ctrl | Run positive-control benchmark (interface dispatch, 15s)"
+        working-directory: scripts/pgo-leverage/positive-control
+        run: |
+          go test -bench=BenchmarkControl -benchtime=15s -cpuprofile=/tmp/ctrl.pprof .
+          ls -lh /tmp/ctrl.pprof
+
+      - name: "Ctrl | Check leverage (--dir)"
+        working-directory: scripts/pgo-leverage/positive-control
+        run: |
+          set +e
+          LEVERAGE_STDERR=$(mktemp)
+          /tmp/pgoctl leverage-check --dir . --package ./... --format json /tmp/ctrl.pprof \
+            > /tmp/ctrl-leverage.json 2>"$LEVERAGE_STDERR"
+          LEV_EXIT=$?
+          if [ -s "$LEVERAGE_STDERR" ]; then
+            echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+          fi
+          set -e
+          # exit 3 = NONE verdict (valid JSON); exit 1 or >3 = real error
+          if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
+            echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+          fi
+          cat /tmp/ctrl-leverage.json
+          # Verify positive control produces a non-NONE verdict
+          VERDICT=$(jq -r '.verdict // "INCOMPLETE"' /tmp/ctrl-leverage.json)
+          if [ "$VERDICT" = "NONE" ] || [ "$VERDICT" = "INCOMPLETE" ]; then
+            echo "::error::Positive control must produce HIGH/LOW verdict, got: $VERDICT"
+            exit 1
+          fi
+
+      - name: "Ctrl | Report"
+        shell: bash
+        run: |
+          VERDICT=$(jq -r '.verdict // "INCOMPLETE"' /tmp/ctrl-leverage.json)
+          REASON=$(jq -r '.verdict_reason // ""' /tmp/ctrl-leverage.json)
+          SAMPLES=$(jq -r '.total_samples // 0' /tmp/ctrl-leverage.json)
+          DEVIRT=$(jq -r '.build_analysis.devirt_decisions // "-"' /tmp/ctrl-leverage.json)
+          INLINES=$(jq -r '.build_analysis.pgo_extra_inlines // "-"' /tmp/ctrl-leverage.json)
+          {
+            echo "### PGO Leverage: \`${VERDICT}\`"
+            echo ""
+            echo "> **Target:** \`positive-control (interface dispatch)\`  "
+            echo "> **Samples:** ${SAMPLES}"
+            echo ""
+            [ -n "${REASON}" ] && echo "${REASON}" && echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| PGO devirt decisions | \`${DEVIRT}\` |"
+            echo "| PGO extra inlines | \`${INLINES}\` |"
+          } | tee /tmp/ctrl-report.md
+
+      - name: "Ctrl | Job summary"
+        run: |
+          {
+            echo "## Positive Control"
+            cat /tmp/ctrl-report.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------- Main probe: Prometheus -------------------------------------
+      - name: "Prometheus | Check leverage"
+        working-directory: _prometheus
+        run: |
+          set +e
+          LEVERAGE_STDERR=$(mktemp)
+          if [ -f ../testdata/prometheus_cpu.pprof ]; then
+            /tmp/pgoctl leverage-check --dir . --package ./cmd/prometheus --format json ../testdata/prometheus_cpu.pprof \
+              > /tmp/prom-leverage.json 2>"$LEVERAGE_STDERR"
+            LEV_EXIT=$?
+            if [ -s "$LEVERAGE_STDERR" ]; then
+              echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+            fi
+            if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
+              echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+            fi
+          else
+            echo "::warning::testdata/prometheus_cpu.pprof not found — probe will run baseline-only"
+            printf '{"verdict":"INCOMPLETE","verdict_reason":"no profile provided"}\n' > /tmp/prom-leverage.json
+          fi
+          if [ ! -s /tmp/prom-leverage.json ]; then
+            printf '{"verdict":"INCOMPLETE","verdict_reason":"leverage-check produced no output"}\n' > /tmp/prom-leverage.json
+          fi
+          cat /tmp/prom-leverage.json
+          set -e
+
+      - name: "Prometheus | Generate leverage report"
+        shell: bash
+        run: |
+          VERDICT=$(jq -r '.verdict // "INCOMPLETE"' /tmp/prom-leverage.json)
+          REASON=$(jq -r '.verdict_reason // ""' /tmp/prom-leverage.json)
+          SAMPLES=$(jq -r '.total_samples // 0' /tmp/prom-leverage.json)
+          DEVIRT=$(jq -r '.build_analysis.devirt_decisions // "-"' /tmp/prom-leverage.json)
+          INLINES=$(jq -r '.build_analysis.pgo_extra_inlines // "-"' /tmp/prom-leverage.json)
+          {
+            echo "### PGO Leverage: \`${VERDICT}\`"
+            echo ""
+            echo "> **Target:** \`prometheus/prometheus\`  "
+            echo "> **Samples:** ${SAMPLES}"
+            echo ""
+            [ -n "${REASON}" ] && echo "${REASON}" && echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| PGO devirt decisions | \`${DEVIRT}\` |"
+            echo "| PGO extra inlines | \`${INLINES}\` |"
+          } | tee /tmp/prom-leverage-report.md
+          # Verify Prometheus produces HIGH verdict (interface-dispatch-heavy)
+          if [ "$VERDICT" != "HIGH" ]; then
+            echo "::error::Prometheus must produce HIGH verdict, got: $VERDICT"
+            exit 1
+          fi
+
+      - name: "Prometheus | Job summary"
+        run: |
+          {
+            echo ""
+            echo "---"
+            echo "## Prometheus Leverage Probe"
+            cat /tmp/prom-leverage-report.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Prometheus | Sticky PR comment"
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pgo-leverage-prometheus
+          path: /tmp/prom-leverage-report.md
+
+      - name: Upload probe artifacts (Prometheus)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pgo-leverage-probe-prometheus
+          path: |
+            /tmp/ctrl-report.md
+            /tmp/ctrl-leverage.json
+            /tmp/prom-leverage.json
+            /tmp/prom-leverage-report.md
+          if-no-files-found: warn
+
+  # ── Job 2: Known-flat target (nats-server: client.parse over inline budget) ──
+  probe-none-low:
+    name: "Leverage probe — nats-server (expect: NONE/LOW/HIGH)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          check-latest: true
+
+      - name: Build pgoctl
+        run: go build -o /tmp/pgoctl ./cmd/pgoctl
+
+      - name: "nats-server | Checkout (public)"
+        uses: actions/checkout@v7
+        with:
+          repository: nats-io/nats-server
+          path: _nats-server
+          fetch-depth: 1
+
+      # Try to fetch a profile artifact from the better-go-labs fork;
+      # gracefully skip if unavailable (cross-repo artifact access may be restricted).
+      # Use ?per_page=100 (no --paginate) so the jq filter runs over the full
+      # result set; --paginate applies jq per page so `last` would be wrong.
+      - name: "nats-server | Fetch PGO profile artifact (if available)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          RUN_ID=$(gh api "/repos/better-go-labs/nats-server/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.name=="default-pgo" and .expired==false)] | sort_by(.created_at) | last | .workflow_run.id' \
+            2>/dev/null || echo "")
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ] && [ "$RUN_ID" != "" ]; then
+            gh run download "$RUN_ID" \
+              --repo "better-go-labs/nats-server" \
+              --name default-pgo \
+              --dir /tmp/nats-profile 2>/dev/null || true
+          fi
+          PGO_FILE=$(find /tmp/nats-profile -type f 2>/dev/null | head -1)
+          # Validate: file must exist and have nonzero size
+          if [ -n "$PGO_FILE" ] && [ -s "$PGO_FILE" ]; then
+            echo "HAS_PROFILE=true" >> "$GITHUB_ENV"
+            echo "NATS_PGO_FILE=$PGO_FILE" >> "$GITHUB_ENV"
+            echo "Profile: $PGO_FILE ($(du -sh "$PGO_FILE" | cut -f1))"
+          else
+            echo "HAS_PROFILE=false" >> "$GITHUB_ENV"
+            echo "No nats-server profile artifact available (or empty) — running baseline-only probe."
+            echo "Note: NONE verdict requires a profile. Baseline analysis still reveals inline budget violations."
+          fi
+          set -e
+
+      - name: "nats-server | Check leverage"
+        working-directory: _nats-server
+        run: |
+          set +e
+          LEVERAGE_STDERR=$(mktemp)
+          if [ "$HAS_PROFILE" = "true" ]; then
+            /tmp/pgoctl leverage-check --dir . --package . --format json "$NATS_PGO_FILE" \
+              > /tmp/nats-leverage.json 2>"$LEVERAGE_STDERR"
+            LEV_EXIT=$?
+            if [ -s "$LEVERAGE_STDERR" ]; then
+              echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+            fi
+            if [ $LEV_EXIT -ne 0 ] && [ $LEV_EXIT -ne 3 ]; then
+              echo "::error::leverage-check failed (exit $LEV_EXIT)" && exit $LEV_EXIT
+            fi
+          else
+            printf '{"verdict":"INCOMPLETE","verdict_reason":"no profile provided"}\n' > /tmp/nats-leverage.json
+          fi
+          if [ ! -s /tmp/nats-leverage.json ]; then
+            printf '{"verdict":"INCOMPLETE","verdict_reason":"leverage-check produced no output"}\n' > /tmp/nats-leverage.json
+          fi
+          cat /tmp/nats-leverage.json
+          set -e
+
+      - name: "nats-server | Generate leverage report"
+        shell: bash
+        run: |
+          VERDICT=$(jq -r '.verdict // "INCOMPLETE"' /tmp/nats-leverage.json)
+          REASON=$(jq -r '.verdict_reason // ""' /tmp/nats-leverage.json)
+          SAMPLES=$(jq -r '.total_samples // 0' /tmp/nats-leverage.json)
+          DEVIRT=$(jq -r '.build_analysis.devirt_decisions // "-"' /tmp/nats-leverage.json)
+          INLINES=$(jq -r '.build_analysis.pgo_extra_inlines // "-"' /tmp/nats-leverage.json)
+          {
+            echo "### PGO Leverage: \`${VERDICT}\`"
+            echo ""
+            echo "> **Target:** \`nats-io/nats-server\`  "
+            echo "> **Samples:** ${SAMPLES}"
+            echo ""
+            [ -n "${REASON}" ] && echo "${REASON}" && echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| PGO devirt decisions | \`${DEVIRT}\` |"
+            echo "| PGO extra inlines | \`${INLINES}\` |"
+          } | tee /tmp/nats-leverage-report.md
+          # nats-server can produce NONE, LOW, or HIGH depending on profile;
+          # 1 module devirt + 86 module PGO-only inlines = HIGH under OR logic.
+          # INCOMPLETE is only valid when HAS_PROFILE is false (no artifact available).
+          if [ "$HAS_PROFILE" = "true" ] && [ "$VERDICT" = "INCOMPLETE" ]; then
+            echo "::error::nats-server: INCOMPLETE verdict despite a profile being available: leverage-check failed"
+            exit 1
+          fi
+
+      - name: "nats-server | Job summary"
+        run: |
+          {
+            echo "## nats-server Leverage Probe"
+            cat /tmp/nats-leverage-report.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "nats-server | Sticky PR comment"
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pgo-leverage-nats
+          path: /tmp/nats-leverage-report.md
+
+      - name: Upload probe artifacts (nats-server)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pgo-leverage-probe-nats-server
+          path: |
+            /tmp/nats-leverage.json
+            /tmp/nats-leverage-report.md
+          if-no-files-found: warn

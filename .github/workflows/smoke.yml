@@ -18,6 +18,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          check-latest: true
 
       - name: Build pgoctl
         run: go build -o bin/pgoctl ./cmd/pgoctl
