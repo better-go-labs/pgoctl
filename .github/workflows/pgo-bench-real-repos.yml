@@ -265,9 +265,25 @@ jobs:
             /tmp/bench/*-pgo.txt
             /tmp/bench/*-stat.txt
 
+      - name: Detect CPU model slug
+        id: cpuid
+        run: |
+          cpu=$(grep -m1 '^cpu:' /tmp/bench/goldmark-stat.txt 2>/dev/null \
+                | sed 's/^cpu:[[:space:]]*//' | sed 's/[[:space:]]*$//' || echo "unknown")
+          slug=$(echo "$cpu" | sed \
+            -e 's/AMD EPYC \([0-9]*\).*/epyc-\1/' \
+            -e 's/Intel(R) Xeon(R) Platinum \([0-9A-Za-z]*\).*/xeon-\1/' \
+            -e 's/Intel(R) Xeon(R) Gold \([0-9A-Za-z]*\).*/xeon-\1/' \
+            -e 's/Intel(R) Xeon(R) \([0-9A-Za-z]*\).*/xeon-\1/' \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/-$//')
+          [ -z "$slug" ] && slug="unknown"
+          echo "slug=${slug}" >> "$GITHUB_OUTPUT"
+          echo "CPU slug: ${slug}"
+
       - name: Post sticky PR comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v3
         with:
-          header: pgo-bench-real-repos
+          header: pgo-bench-real-repos-${{ steps.cpuid.outputs.slug }}
           path: /tmp/bench-report.md
