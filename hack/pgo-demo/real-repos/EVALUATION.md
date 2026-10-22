@@ -125,7 +125,7 @@ stratified by exact CPU model. Do not average across models.
 | gjson | Intel Xeon 8573C | 39831653386, 39833287253 | 2 | −6.69, −6.42 | ≤0.001 both | **PROMOTE** |
 | gjson | Intel Xeon 8370C | 39835718451 | 1 | −11.06 | 0.001 | **PROMOTE** |
 | go-json | AMD EPYC 7763 | 39828409134, 39831658152, 39833250644, 39835714756 | 4 | −3.66, −6.02, −3.93, −5.42 | ≤0.001 all | **PROMOTE** |
-| go-json | Intel Xeon 8573C | 39831653386, 39833287253 | 2 | −1.52, −2.06 | 0.018 both | **NEUTRAL** (below 3%) |
+| go-json | Intel Xeon 8573C | 39831653386, 39833287253 | 2 | −1.52, −2.06 | p=0.000 / p=0.002 | **NEUTRAL** (below 3%) |
 | go-json | Intel Xeon 8370C | 39835718451 | 1 | not significant | 0.247 | **NEUTRAL** |
 | snappy | all models | 7 runs total | 7 | see note | see note | **NEUTRAL / NONE** |
 | fasthttp ★ | AMD EPYC 7763 | 39833250644, 39835714756 | 2 | −7.77, −7.77 | ≤0.001 both | **PROMOTE** (provisional) |
@@ -265,7 +265,7 @@ pgo_extra_inlines_deps: 598
 | CPU | Δ values (%) | p-value | n | 3%-gate | Run IDs |
 |-----|--------------|---------|---|---------|---------|
 | AMD EPYC 7763 | −3.66, −6.02, −3.93, −5.42 | ≤0.001 all | 4 | **PROMOTE** | 39828409134, 39831658152, 39833250644, 39835714756 |
-| Intel Xeon 8573C | −1.52, −2.06 | 0.018 both | 2 | **NEUTRAL** (below 3%) | 39831653386, 39833287253 |
+| Intel Xeon 8573C | −1.52, −2.06 | p=0.000 / p=0.002 | 2 | **NEUTRAL** (below 3%) | 39831653386, 39833287253 |
 | Intel Xeon 8370C | not significant | 0.247 | 1 | **NEUTRAL** | 39835718451 |
 
 go-json is the **clearest illustration that the 3% gate is microarchitecture-dependent:**
