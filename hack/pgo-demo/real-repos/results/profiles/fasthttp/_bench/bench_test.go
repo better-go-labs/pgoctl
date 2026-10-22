@@ -1,6 +1,8 @@
 package bench_test
 
 import (
+	"bufio"
+	"bytes"
 	"testing"
 
 	"github.com/valyala/fasthttp"
@@ -18,11 +20,12 @@ var rawRequest = []byte(
 )
 
 func BenchmarkFastHTTPParsing(b *testing.B) {
-	var req fasthttp.Request
+	br := bufio.NewReader(bytes.NewReader(rawRequest))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		req.Reset()
-		req.Header.Parse(rawRequest)
+		br.Reset(bytes.NewReader(rawRequest))
+		var req fasthttp.Request
+		_ = req.Read(br)
 		_ = string(req.Header.RequestURI())
 		_ = string(req.Header.Method())
 		_ = req.URI().QueryArgs().String()
