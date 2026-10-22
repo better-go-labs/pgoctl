@@ -268,7 +268,7 @@ jobs:
           set +e
           LEVERAGE_STDERR=$(mktemp)
           if [ "$HAS_PROFILE" = "true" ]; then
-            /tmp/pgoctl leverage-check --dir . --package ./... --format json "$NATS_PGO_FILE" \
+            /tmp/pgoctl leverage-check --dir . --package . --format json "$NATS_PGO_FILE" \
               > /tmp/nats-leverage.json 2>"$LEVERAGE_STDERR"
             LEV_EXIT=$?
             if [ -s "$LEVERAGE_STDERR" ]; then
@@ -308,7 +308,11 @@ jobs:
           } | tee /tmp/nats-leverage-report.md
           # nats-server can produce NONE, LOW, or HIGH depending on profile;
           # 1 module devirt + 86 module PGO-only inlines = HIGH under OR logic.
-          # Any non-INCOMPLETE verdict is a valid result — no assertion here.
+          # INCOMPLETE is only valid when HAS_PROFILE is false (no artifact available).
+          if [ "$HAS_PROFILE" = "true" ] && [ "$VERDICT" = "INCOMPLETE" ]; then
+            echo "::error::nats-server: INCOMPLETE verdict despite a profile being available — leverage-check failed"
+            exit 1
+          fi
 
       - name: "nats-server | Job summary"
         run: |
