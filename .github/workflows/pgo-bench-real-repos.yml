@@ -271,7 +271,7 @@ jobs:
           cpu=$(grep -m1 '^cpu:' /tmp/bench/goldmark-stat.txt 2>/dev/null \
                 | sed 's/^cpu:[[:space:]]*//' | sed 's/[[:space:]]*$//' || echo "unknown")
           slug=$(echo "$cpu" | sed \
-            -e 's/AMD EPYC \([0-9]*\).*/epyc-\1/' \
+            -e 's/AMD EPYC \([0-9A-Za-z]*\).*/epyc-\1/' \
             -e 's/Intel(R) Xeon(R) Platinum \([0-9A-Za-z]*\).*/xeon-\1/' \
             -e 's/Intel(R) Xeon(R) Gold \([0-9A-Za-z]*\).*/xeon-\1/' \
             -e 's/Intel(R) Xeon(R) \([0-9A-Za-z]*\).*/xeon-\1/' \
