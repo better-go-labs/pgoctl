@@ -96,15 +96,8 @@ func computePackageShares(p *profile.Profile) (map[string]float64, error) {
 		total += v
 		// Leaf function = Location[0] per pprof convention (innermost frame first).
 		// Location[0].Line[0] is the deepest inlined frame within that location.
-		for _, loc := range s.Location {
-			if loc == nil || len(loc.Line) == 0 {
-				continue
-			}
-			fn := loc.Line[0].Function
-			if fn != nil && fn.Name != "" {
-				funcTotal[fn.Name] += v
-				break
-			}
+		if name := leafFunction(s); name != "" {
+			funcTotal[name] += v
 		}
 	}
 
