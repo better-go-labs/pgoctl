@@ -281,9 +281,21 @@ jobs:
           echo "slug=${slug}" >> "$GITHUB_OUTPUT"
           echo "CPU slug: ${slug}"
 
+      - name: Resolve PR number for branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          pr_number=$(gh pr list --head "${HEAD_REF}" --state open \
+            --json number --jq '.[0].number' 2>/dev/null || echo "")
+          echo "number=${pr_number}" >> "$GITHUB_OUTPUT"
+          echo "PR number for ${HEAD_REF}: ${pr_number:-none}"
+
       - name: Post sticky PR comment
-        if: github.event_name == 'pull_request'
+        if: steps.pr.outputs.number != ''
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: pgo-bench-real-repos-${{ steps.cpuid.outputs.slug }}
+          number: ${{ steps.pr.outputs.number }}
           path: /tmp/bench-report.md
