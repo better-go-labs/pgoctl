@@ -161,14 +161,30 @@ jobs:
                 }'
           }
 
+          # CPU info helper: extract and shorten CPU name from benchstat output file.
+          cpu_from_bench() {
+            local file="$1"
+            local cpu
+            cpu=$(grep -m1 '^cpu:' "$file" | sed 's/^cpu:[[:space:]]*//' | sed 's/[[:space:]]*$//' 2>/dev/null || echo "")
+            if [ -z "$cpu" ]; then
+              echo "unknown"
+              return
+            fi
+            echo "$cpu" | sed \
+              -e 's/AMD \(EPYC [^ ]*\).*/AMD \1/' \
+              -e 's/Intel(R) Xeon(R) \([A-Za-z0-9]*\).*/Intel Xeon \1/' \
+              -e 's/(R)//g' \
+              -e 's/ CPU @.*//'
+          }
+
           {
             echo "## PGO Benchmark — Real-Repo Libraries"
             echo ""
             echo "_${ROUNDS:-10} interleaved rounds, GOMAXPROCS=2, benchtime=5s per round. Run: \`$GITHUB_RUN_ID\` on \`$GITHUB_SHA\`._"
             echo "_Signal threshold: ≥2-3% geomean improvement at p<0.05 (house standard matching pgo-bench.yml)._"
             echo ""
-            echo "| Library | Bench | Baseline CV | PGO CV | geomean Δ | p-value | leverage-check |"
-            echo "|---------|-------|-------------|--------|-----------|---------|---------------|"
+            echo "| Library | Bench | CPU | Baseline CV | PGO CV | Δ | p-value | leverage-check |"
+            echo "|---------|-------|-----|-------------|--------|---|---------|---------------|"
             declare -A LEVERAGE
             LEVERAGE[goldmark]='HIGH'
             LEVERAGE[gjson]='HIGH'
@@ -185,17 +201,24 @@ jobs:
 
             for name in goldmark gjson go-json snappy fasthttp; do
               fn="${BENCH_FN[$name]}"
-              stat_line=$(grep -m1 "geomean\|${fn}" /tmp/bench/${name}-stat.txt 2>/dev/null | head -1 || echo "")
+              # benchstat strips the 'Benchmark' prefix on output rows; match by short name
+              short_fn="${fn#Benchmark}"
+              stat_line=$(grep -m1 "^${short_fn}" /tmp/bench/${name}-stat.txt 2>/dev/null | head -1 || echo "")
               if [ -n "$stat_line" ]; then
-                delta=$(echo "$stat_line" | awk '{print $3}' 2>/dev/null || echo "—")
-                pval=$(echo "$stat_line"  | awk '{print $NF}' 2>/dev/null || echo "—")
+                # delta: signed percentage like -5.39% or ~ (no statistically significant change)
+                delta=$(echo "$stat_line" | grep -oE '([-+][0-9]+\.[0-9]+%|~)' | head -1)
+                [ -z "$delta" ] && delta="—"
+                # p-value: from (p=0.001 n=10) group
+                pval=$(echo "$stat_line" | grep -oE 'p=[0-9]+\.[0-9]+' | head -1 | sed 's/p=//')
+                [ -z "$pval" ] && pval="—"
               else
                 delta="—"; pval="—"
               fi
               base_cv=$(cv_from_bench /tmp/bench/${name}-baseline.txt)
               pgo_cv=$(cv_from_bench  /tmp/bench/${name}-pgo.txt)
+              cpu_col=$(cpu_from_bench /tmp/bench/${name}-stat.txt)
               lev="${LEVERAGE[$name]}"
-              echo "| \`${name}\` | \`${fn}\` | ${base_cv} | ${pgo_cv} | ${delta} | ${pval} | ${lev} |"
+              echo "| \`${name}\` | \`${fn}\` | ${cpu_col} | ${base_cv} | ${pgo_cv} | ${delta} | ${pval} | ${lev} |"
             done
             echo ""
           } > /tmp/bench-report.md
