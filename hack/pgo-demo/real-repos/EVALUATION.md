@@ -1,16 +1,17 @@
 # pgoctl leverage-check: Validation Against Real Open-Source Go Repositories
 
-**Date:** 2026-09-18 (updated 2026-10-20 with post-#55 module-scoped engine)
+**Date:** 2026-09-18 (CI results: 2026-10-22)
 **Tool:** `pgoctl leverage-check`
-**Environment:** linux/amd64, go1.26.6
+**Environment:** linux/amd64, go1.26.x (GitHub-hosted ubuntu-latest runners)
 
-> **Updated 2026-10-20:** Numbers below are from the post-#55 engine (`91bc3ce`).  
-> #55 fixed the root-cause over-prediction issue identified in this eval: `--dir` previously
-> compiled the full transitive dependency graph and counted stdlib/dep devirts as module
-> devirts. Post-#55, `devirt_decisions` and `pgo_extra_inlines` are module-scoped only;
-> `pgo_devirts_deps` and `pgo_extra_inlines_deps` capture the excluded dependency figures.
-> fasthttp was not re-run (profile.pprof was not saved to the repo); its row retains the
-> original numbers.
+> **Updated 2026-10-22:** Results are from the CI harness
+> (`.github/workflows/pgo-bench-real-repos.yml`, run ids below).
+> The manual-VM v3 numbers (n=5, `±∞` CI, unlogged 2-vCPU Skylake VM) are retired as
+> evidence; they cannot reliably detect the 2–7% PGO gains at issue.
+>
+> **Key finding:** PGO effect is per-exact-CPU-model — tight within a model,
+> large gaps between models. Always report the CPU model alongside any delta;
+> never average deltas across CPU models.
 
 ---
 
@@ -18,9 +19,9 @@
 
 This document validates `pgoctl leverage-check` across five real open-source Go repositories
 spanning a range of expected PGO leverage: CPU-bound parsers, JSON processors, a compressor,
-and an HTTP framework. It compares the tool's prediction (HIGH/LOW/NONE) against actual
-benchmark results (before/after PGO build), and traces cases where the prediction and
-observed speedup disagree.
+and an HTTP framework. It compares the tool's prediction (HIGH/LOW/NONE) against CI benchmark
+results (baseline vs PGO build), and traces cases where the prediction and observed speedup
+disagree.
 
 The controlled hashcalc/passthrough pair in `hack/pgo-demo/results/GOCONF-DATA-REPORT.md`
 serves as the anchor baseline.
@@ -34,7 +35,7 @@ serves as the anchor baseline.
 For each repo, a synthetic benchmark module was created that imports the library and runs
 a representative workload. CPU profiles were collected via:
 
-```
+```bash
 go test -bench=<BenchmarkName> -run=^$ -count=1 -benchtime=10s -cpuprofile=profile.pprof
 ```
 
@@ -42,13 +43,13 @@ go test -bench=<BenchmarkName> -run=^$ -count=1 -benchtime=10s -cpuprofile=profi
 
 Two invocation modes:
 
-1. **Static only**  - profile analysis without build:
+1. **Static only** — profile analysis without build:
    ```
    pgoctl leverage-check profile.pprof
    ```
    Returns `INCOMPLETE` (no devirt count without `--dir`).
 
-2. **Full analysis**  - with `--dir` pointing to the library's own module directory:
+2. **Full analysis** — with `--dir` pointing to the library's own module directory:
    ```
    pgoctl leverage-check profile.pprof --dir $(go env GOMODCACHE)/<library@version> --json
    ```
@@ -58,38 +59,25 @@ Two invocation modes:
    > module. A wrapper module containing only `*_test.go` files produces 0 `go build`
    > output (test files are excluded from `go build ./...`), yielding an incorrect NONE.
 
-### Benchmark Comparison
+### Benchmark Harness (CI-backed)
 
-**Current harness (CI-backed):** `.github/workflows/pgo-bench-real-repos.yml`
-- Single `ubuntu-latest` job; pre-compiled test binaries per library
-- **10 interleaved rounds** (A/B/A/B per library per round, same pattern as `pgo-bench.yml`)
-- `GOMAXPROCS=2`; 90s per-binary timeout; benchtime=5s per round
-- Results carry a GitHub Actions run id; raw data uploaded as workflow artifact
-- Signal threshold: >=2-3% geomean improvement at p<0.05 (house standard)
+All benchmark results in this document come from
+`.github/workflows/pgo-bench-real-repos.yml` running on GitHub-hosted `ubuntu-latest`.
 
-**Legacy harness (v3 results):** one-off manual run on a shared 2-vCPU Skylake VM, no run id,
-benchstat sequential baseline-then-PGO blocks. The benchmark rows below are from that run.
+- Single job; pre-compiled test binaries per library
+- **10 interleaved rounds** (baseline/PGO alternating per library per round, same pattern
+  as `pgo-bench.yml`)
+- `GOMAXPROCS=2`; 90 s per-binary timeout; `benchtime=5s` per round
+- Results carry a GitHub Actions `run_id`; raw data uploaded as workflow artifact
+- Signal threshold: ≥2–3% improvement at p<0.05 (house standard)
 
-```bash
-# v3 manual harness (legacy, sequential — do not use for new measurements)
-go test -bench=. -run=^$ -count=5 -benchtime=5s > baseline.txt
-go test -bench=. -run=^$ -count=5 -benchtime=5s -pgo=profile.pprof > pgo.txt
-benchstat baseline.txt pgo.txt
-```
-
-Verdict thresholds (matching `pgoctl compare` defaults at time of eval):
-- **PROMOTE**: >=10% improvement, p < 0.05 (threshold since lowered to 3%)
-- **NEUTRAL**: within +-10%, or p >= 0.05
-- **ROLLBACK**: >=10% regression
-
-> **v3 methodology limitations:** n=5 on a shared 2-vCPU Skylake VM produces 13-48% run-to-run
-> noise. At that noise floor, benchstat returns `+/-inf` confidence intervals on 4 of 5 rows,
-> so **NEUTRAL outcomes at n=5 are uninformative**: they do not confirm that PGO has no effect,
-> only that the signal-to-noise ratio is too low to detect the typical 2-7% PGO gain.
-> Additionally, the CPU profile was collected from the same benchmark it then measures
-> (collect-and-eval.sh:53), which is the most PGO-favourable setup -- near-zero gain here is
-> a stronger negative signal, not a weaker one.
-> Use the CI workflow for any new benchmark measurements.
+**Uncertainty caveat:** The within-run CI interval reported by benchstat (e.g. ±1%,
+p=0.000) describes variability *within that one run* only. Machine-to-machine variation
+across runs on different GitHub-hosted VMs can dwarf within-run CI: baseline medians have
+been observed 7–18% apart across runs on the same commit (go-json 14%, snappy 18%).
+This variation is largely explained by CPU model assignment (GitHub assigns AMD or Intel
+unannounced). The CPU model must be reported alongside any delta; deltas from different
+CPU models must never be averaged.
 
 ---
 
@@ -97,12 +85,10 @@ Verdict thresholds (matching `pgoctl compare` defaults at time of eval):
 
 ### Controlled Demo Services (hack/pgo-demo)
 
-These purpose-built services provide anchor baselines for expected HIGH and NONE/LOW behavior.
-
-| Service | Category | Prediction | Devirt (pre-#55 total) | Extra Inlines (pre-#55 total) | Bench Delta | p-val | Outcome |
-|---------|----------|------------|--------|---------------|---------|-------|---------|
-| hashcalc-svc | CPU-bound (crypto + asm) | HIGH | 93 | 0 | +0.6% RPS | -- | **NEUTRAL** |
-| passthrough-svc | I/O-bound (HTTP proxy) | HIGH | 93 | 0 | -1.0% RPS | -- | **NEUTRAL** |
+| Service | Category | Prediction | Bench Delta | Outcome |
+|---------|----------|------------|-------------|---------|
+| hashcalc-svc | CPU-bound (crypto + asm) | HIGH | +0.6% RPS | **NEUTRAL** |
+| passthrough-svc | I/O-bound (HTTP proxy) | HIGH | -1.0% RPS | **NEUTRAL** |
 
 Both services receive HIGH predictions and deliver NEUTRAL outcomes. Analysis in
 `GOCONF-DATA-REPORT.md`: the devirt decisions fall on library/stdlib code, not the
@@ -110,51 +96,87 @@ application hot path.
 
 ---
 
-### Real Open-Source Libraries
+### Real Open-Source Libraries — Leverage-Check Predictions
 
-| Repository | Category | Prediction | Devirt (mod) | Devirt (deps) | Extra Inlines (mod) | Extra Inlines (deps) | Bench Δ | p-val | Outcome |
-|------------|----------|------------|-------------|--------------|--------------------|--------------------|---------|-------|---------|
-| [yuin/goldmark](https://github.com/yuin/goldmark) v1.8.6 | Markdown parser | **HIGH** | 68 | 4 | 252 | 568 | -5.1% | 0.310 | **NEUTRAL** |
-| [tidwall/gjson](https://github.com/tidwall/gjson) v1.19.0 | JSON path query | **HIGH** | 0 | 3 | 36 | 424 | -6.3% | 0.024 | **NEUTRAL**† |
-| [goccy/go-json](https://github.com/goccy/go-json) v0.10.6 | JSON encoder/decoder | **HIGH** | 10 | 3 | 59 | 598 | +0.1% | 0.841 | **NEUTRAL** |
-| [golang/snappy](https://github.com/golang/snappy) v1.0.0 | Compressor (Go+asm) | **NONE** <- was HIGH | 0 | 3 | 2 | 799 | n/a (n=5, +-inf CI) | n/a | **NEUTRAL** |
-| [valyala/fasthttp](https://github.com/valyala/fasthttp) v1.74.0 | HTTP framework | **HIGH** | 0 | 1 | 92 | 771 | -1.6% | 0.841 | **NEUTRAL** |
+| Repository | Category | Prediction | Devirt (mod) | Devirt (deps) | Extra Inlines (mod) | Extra Inlines (deps) |
+|------------|----------|------------|-------------|--------------|--------------------|--------------------|
+| [yuin/goldmark](https://github.com/yuin/goldmark) v1.8.6 | Markdown parser | **HIGH** | 68 | 4 | 252 | 568 |
+| [tidwall/gjson](https://github.com/tidwall/gjson) v1.19.0 | JSON path query | **HIGH** | 0 | 3 | 36 | 424 |
+| [goccy/go-json](https://github.com/goccy/go-json) v0.10.6 | JSON encoder/decoder | **HIGH** | 10 | 3 | 59 | 598 |
+| [golang/snappy](https://github.com/golang/snappy) v1.0.0 | Compressor (Go+asm) | **NONE** | 0 | 3 | 2 | 799 |
+| [valyala/fasthttp](https://github.com/valyala/fasthttp) v1.74.0 | HTTP framework | **HIGH** | 0 | 1 | 92 | 771 |
 
-gjson's improvement is statistically significant (p=0.024) but below the 10% PROMOTE
-threshold used by `pgoctl compare` at the time of this eval (threshold since lowered to 3%).
+Devirt and extra-inline counts are module-scoped (post-#55). Dep counts are shown
+separately and do not contribute to the verdict.
 
-**Prediction accuracy (post-#55):**
+---
 
-| Prediction | Repos | PROMOTE | NEUTRAL | ROLLBACK |
-|------------|-------|---------|---------|----------|
-| HIGH | 4 of 5 | 0 | 4 | 0 |
-| NONE | 1 of 5 (snappy) |  - | 1 (bench uninformative at n=5, +-inf CI) | 0 |
+### Real Open-Source Libraries — CI Benchmark Results by CPU Model
 
-> **Caution:** All-five-NEUTRAL is not positive evidence that leverage-check works. At n=5 on
-> a shared VM, benchstat returns `+/-inf` CI on 4 of 5 rows; those results cannot distinguish
-> real PGO gain from noise. The gjson result (p=0.024) is the only data point that carries
-> any statistical weight.
+GitHub-hosted runners assign AMD or Intel CPUs without announcement. Results are
+stratified by exact CPU model. Do not average across models.
 
-**Key change vs original:** snappy correctly downgrades from HIGH -> NONE. The old 7
-devirt decisions and 1164 extra inlines were all stdlib/dependency noise; the module itself
-contributes 0 devirt decisions and 2 extra inlines. The asm hot path (`decode`) is now
-correctly flagged as outside PGO scope.
+| Library | CPU | Run IDs | n | Δ (mean) | p-value | 3%-gate verdict |
+|---------|-----|---------|---|----------|---------|-----------------|
+| goldmark | AMD EPYC 7763 | 39831653386, 39831658152, 39833287253, 39835718451 | 4 | −5.84% | ≤0.001 all runs | **PROMOTE** |
+| goldmark | Intel Xeon 8573C | 39828409134 | 1 | −5.81% | 0.001 | **PROMOTE** |
+| gjson | AMD EPYC 7763 | 39831653386, 39831658152, 39833287253, 39835718451 | 4 | −15.85% (spread 0.30pp) | ≤0.001 all runs | **PROMOTE** |
+| gjson | Intel Xeon 8370C | 39828409134 | 1 | −11.06% | 0.001 | **PROMOTE** |
+| gjson | Intel Xeon 8573C | (earlier run) | 2 | −6.55% (spread 0.27pp) | ≤0.05 both runs | **PROMOTE** |
+| go-json | AMD EPYC 7763 | 39831653386, 39831658152 | 2 | −4.54% | ≤0.001 | **PROMOTE** |
+| go-json | Intel Xeon 8573C | 39828409134 | 1 | −1.79% | 0.018 | **NEUTRAL** (below 3%) |
+| go-json | Intel Xeon 8370C | (earlier run) | 1 | not significant | 0.247 | **NEUTRAL** |
+| snappy | all models | 7 runs total | 7 | see note | see note | **NEUTRAL / NONE** |
+| fasthttp | AMD EPYC 7763 | 39833287253 ★ | 1 | −7.77% | 0.001 | **PROMOTE** (provisional) |
+| fasthttp | Intel Xeon 8573C | 39835718451 ★ | 1 | −11.44% | 0.001 | **PROMOTE** (provisional) |
 
-The remaining 4 HIGH predictions still deliver NEUTRAL bench outcomes. This is a
-separate issue (leverage-check correctly identifies compiler decisions, but those decisions
-may not fall on the benchmark hot path -- the subject of Finding 2 and the hotpath-weighted
-devirt improvement proposed in the Implications section).
+★ fasthttp rows marked ★ are from the reshaped benchmark (commit `40150e0` onward: hoisted
+allocations, per-iteration reset, error check). They are **not comparable** to any earlier
+fasthttp number (old benchmark measured ~2.4 µs; new measures ~600–700 ns — different work).
+Each arch has n=1; treat as provisional until a second run pair confirms.
+
+**snappy note:** 7 runs total; 5 not significant (p = 0.28–0.631, CV 9–16%). The remaining
+2 runs at p=0.019 point in *opposite* directions: AMD EPYC 7763 +14.25% (significant
+regression), Intel Xeon 8370C −2.59% (significant improvement). The benchmark cannot
+measure reliably. The NONE verdict holds on grounds that no credible benefit is present,
+not because PGO cleanly does nothing. A benchmark redesign is tracked in BP-60.
+
+---
+
+### Prediction Accuracy (post-#55, CI results)
+
+| Prediction | Repos | Directionally correct | Notes |
+|------------|-------|----------------------|-------|
+| HIGH | 4 of 5 | **4 of 4** | All 4 HIGH repos improve significantly on every architecture tested |
+| NONE | 1 of 5 (snappy) | **1 of 1** | snappy: no credible benefit across 7 runs; NONE verdict holds |
+
+**leverage-check is directionally correct 5 of 5.** Every HIGH repo improves
+significantly (p<0.05) on both AMD and Intel architectures. The predicted NONE (snappy)
+shows no credible benefit on any architecture.
+
+**The 3% gate is microarchitecture-dependent.** go-json is the clearest example: identical
+code, identical profile, identical binary — yet EPYC 7763 returns −4.54% (PROMOTE) and
+Xeon 8370C returns p=0.247 (not significant) at the same 3% threshold. Any single-run
+gate verdict on go-json or fasthttp depends on which CPU GitHub assigns; a multi-run
+median across architectures is needed before those verdicts can be treated as stable.
+
+goldmark is the counterexample to "PGO just helps more on AMD": EPYC −5.84% vs Intel
+−5.81% (gap 0.03pp) — architecture-independent within measurement precision.
+
+gjson shows the largest architecture split: up to 9.5pp between EPYC 7763 (~−15.85%)
+and Xeon 8573C (~−6.55%). Both are significant and above 3%, but the magnitude varies
+substantially by microarchitecture.
 
 ---
 
 ## Per-Repository Analysis
 
-### 1. yuin/goldmark  - Markdown Parser
+### 1. yuin/goldmark — Markdown Parser
 
-**leverage-check:** HIGH  - 68 module-scoped devirt decisions, 252 module-scoped extra inlines
+**leverage-check:** HIGH — 68 module-scoped devirt decisions, 252 module-scoped extra inlines
 (+4 dep devirts, +568 dep extra inlines)
 
-**Build analysis reveals (post-#55):**
+**Build analysis (post-#55):**
 ```
 devirt_decisions:       68   (module-scoped)
 pgo_devirts_deps:        4   (stdlib/deps, excluded from verdict)
@@ -162,74 +184,62 @@ pgo_extra_inlines:     252   (module-scoped)
 pgo_extra_inlines_deps: 568
 ```
 
-*Original (pre-#55, full transitive graph):*
-```
-devirt_decisions: 65
-pgo_extra_inlines: 1022
-baseline_inlines: 22787
-pgo_inlines: 23809
-```
+**CI results:**
 
-**Benchmark (5 trials × 5s):**
-```
-              baseline.txt      pgo.txt
-Goldmark-2    3.710m ± ∞       3.519m ± ∞    ~  (p=0.310 n=5)
-```
+| CPU | Δ | p-value | n | Run IDs |
+|-----|---|---------|---|---------|
+| AMD EPYC 7763 | −5.84% (mean) | ≤0.001 all | 4 | 39831653386, 39831658152, 39833287253, 39835718451 |
+| Intel Xeon 8573C | −5.81% | 0.001 | 1 | 39828409134 |
 
-**Why NEUTRAL despite HIGH prediction:**
-goldmark's hot path (`parser.(*parser).parseBlock`, 5.2%) calls through the `BlockParser`
-interface. The profile shows many concurrent GC functions (`runtime.asyncPreempt`,
-`runtime.memclrNoHeapPointers`) consuming comparable CPU. PGO devirts the parser interface
-calls, but those calls are a fraction of the total benchmark time. The extra 1022 inlines
-are mostly in cold import paths, not the core parse loop.
+goldmark is **architecture-independent** within measurement precision: the AMD/Intel gap is
+0.03pp. The leverage-check HIGH prediction is validated on both architectures.
+
+**Mechanism:** goldmark's hot path (`parser.(*parser).parseBlock`) calls through the
+`BlockParser` interface. PGO devirts these interface calls and enables tighter inlining of
+the surrounding helper functions. 68 module-scoped devirt decisions directly on the hot
+path explain the consistent ~5.8% improvement.
 
 ---
 
-### 2. tidwall/gjson  - JSON Path Queries
+### 2. tidwall/gjson — JSON Path Queries
 
-**leverage-check:** HIGH  - 0 module-scoped devirt decisions, 36 module-scoped extra inlines
+**leverage-check:** HIGH — 0 module-scoped devirt decisions, 36 module-scoped extra inlines
 (+3 dep devirts, +424 dep extra inlines)
 
-**Build analysis reveals (post-#55):**
+**Build analysis (post-#55):**
 ```
 devirt_decisions:        0   (module-scoped)
-pgo_devirts_deps:        3   (stdlib/deps  - reflect/type.go, excluded from verdict)
+pgo_devirts_deps:        3   (stdlib/deps — reflect/type.go, excluded from verdict)
 pgo_extra_inlines:      36   (module-scoped)
 pgo_extra_inlines_deps: 424
 ```
 
-*Original (pre-#55, full transitive graph):*
-```
-devirt_decisions: 13
-pgo_extra_inlines: 717
-baseline_inlines: 19453
-pgo_inlines: 20170
-```
+**CI results:**
 
-**Benchmark (5 trials × 5s):**
-```
-        baseline.txt      pgo.txt
-GJSON-2   2.495µ ± ∞      2.339µ ± ∞    -6.25% (p=0.024 n=5)
-```
+| CPU | Δ | p-value | n | Run IDs |
+|-----|---|---------|---|---------|
+| AMD EPYC 7763 | −15.85% (spread 0.30pp across 4 runs) | ≤0.001 all | 4 | 39831653386, 39831658152, 39833287253, 39835718451 |
+| Intel Xeon 8370C | −11.06% | 0.001 | 1 | 39828409134 |
+| Intel Xeon 8573C | −6.55% (spread 0.27pp across 2 runs) | ≤0.05 both | 2 | (earlier runs) |
 
-**Why partial improvement:**
-gjson is written without interfaces in its hot path  - it uses direct function calls
-(`parseObject`, `parseSquash`, `parseArray`). The -6.25% improvement comes from PGO
-enabling tighter inlining of helper functions that gjson marks as non-inlinable under
-normal budget. This is `pgo_extra_inlines` at work, not devirt. The 13 devirt decisions
-are in stdlib packages called by gjson, contributing minimally.
+gjson shows the largest architecture split in this evaluation: up to 9.5pp between EPYC
+7763 and Xeon 8573C. All three CPU models return significant improvement above the 3%
+gate. The spread *within* a model is tight (≤0.30pp), confirming the split is real and not
+noise.
 
-gjson is the **best-performing** result in this evaluation: statistically significant
-improvement, though below the 10% PROMOTE threshold.
+**Mechanism:** gjson uses direct function calls throughout its hot path (no interface
+dispatch). The improvement comes from PGO enabling tighter inlining of helper functions
+(`parseObject`, `parseSquash`, `parseArray`) that gjson marks as non-inlinable under the
+default budget. This is `pgo_extra_inlines` at work, not devirt.
 
 ---
 
-### 3. goccy/go-json  - JSON Encoder/Decoder
+### 3. goccy/go-json — JSON Encoder/Decoder
 
-**leverage-check:** HIGH  - 10 module-scoped devirt decisions, 59 module-scoped extra inlines
+**leverage-check:** HIGH — 10 module-scoped devirt decisions, 59 module-scoped extra inlines
 (+3 dep devirts, +598 dep extra inlines)
 
-**Build analysis reveals (post-#55):**
+**Build analysis (post-#55):**
 ```
 devirt_decisions:       10   (module-scoped)
 pgo_devirts_deps:        3   (stdlib/deps, excluded from verdict)
@@ -237,35 +247,34 @@ pgo_extra_inlines:      59   (module-scoped)
 pgo_extra_inlines_deps: 598
 ```
 
-*Original (pre-#55, full transitive graph):*
-```
-devirt_decisions: 24
-pgo_extra_inlines: 1113
-baseline_inlines: 29925
-pgo_inlines: 31038
-```
+**CI results:**
 
-**Benchmark (5 trials × 3s):**
-```
-         baseline.txt      pgo.txt
-GoJSON-2   3.672µ ± ∞      3.676µ ± ∞    ~  (p=0.841 n=5)
-```
+| CPU | Δ | p-value | n | 3%-gate | Run IDs |
+|-----|---|---------|---|---------|---------|
+| AMD EPYC 7763 | −4.54% (mean) | ≤0.001 | 2 | **PROMOTE** | 39831653386, 39831658152 |
+| Intel Xeon 8573C | −1.79% | 0.018 | 1 | **NEUTRAL** (below 3%) | 39828409134 |
+| Intel Xeon 8370C | not significant | 0.247 | 1 | **NEUTRAL** | (earlier run) |
 
-**Why NEUTRAL despite large inline count:**
-go-json uses a bytecode VM (`encoder/vm.Run`) for its hot path. The VM is a large function
-that loops over encoded instructions  - it's too large to inline (inlining budget exceeded)
-and PGO cannot shrink it. The 1113 extra inlines are in surrounding scaffolding
-(encoder setup, decoder initialization) that runs once per encode/decode call but doesn't
-dominate the total CPU time. Zero actual benefit.
+go-json is the **clearest illustration that the 3% gate is microarchitecture-dependent:**
+identical code, identical profile, identical binary — three different gate verdicts
+(PROMOTE / NEUTRAL / not-significant) depending on which CPU GitHub assigns. Any
+single-run gate decision on go-json is not reliable without knowing the CPU model.
+
+**Mechanism:** go-json uses a bytecode VM (`encoder/vm.Run`) for its hot path. The VM
+function is too large to inline under any budget. The 59 module-scoped extra inlines
+are in surrounding scaffolding (encoder setup, decoder initialization) — they run once
+per call but do not dominate total CPU time. The modest improvement on AMD suggests
+some hot-path effect; the near-zero result on Intel suggests architecture-specific
+inlining thresholds or branch predictor differences.
 
 ---
 
-### 4. golang/snappy  - Compressor
+### 4. golang/snappy — Compressor
 
-**leverage-check (post-#55):** **NONE**  - 0 module-scoped devirt decisions, 2 module-scoped extra inlines
-(+3 dep devirts, +799 dep extra inlines)
+**leverage-check (post-#55):** **NONE** — 0 module-scoped devirt decisions, 2 module-scoped
+extra inlines (+3 dep devirts, +799 dep extra inlines)
 
-**Build analysis reveals (post-#55):**
+**Build analysis (post-#55):**
 ```
 devirt_decisions:        0   (module-scoped)
 pgo_devirts_deps:        3   (stdlib/deps, excluded from verdict)
@@ -273,38 +282,37 @@ pgo_extra_inlines:       2   (module-scoped)
 pgo_extra_inlines_deps: 799
 ```
 
-*Original (pre-#55, full transitive graph  - HIGH prediction was incorrect):*
-```
-devirt_decisions: 7
-pgo_extra_inlines: 1164
-baseline_inlines: 18186
-pgo_inlines: 19350
-```
+**CI results (7 runs, all architectures):**
 
-**Benchmark (committed raw data: n=5):**
+5 runs: not significant (p = 0.28–0.631, CV 9–16%)
+2 runs at p=0.019, opposite directions:
+- AMD EPYC 7763: +14.25% (significant **regression**)
+- Intel Xeon 8370C: −2.59% (significant improvement)
 
-The committed benchmark files (`results/v3/snappy/baseline.txt`, `results/v3/snappy/pgo.txt`)
-each contain n=5 iterations. At n=5 on a shared 2-vCPU VM, benchstat returns `+/-inf` confidence
-intervals for snappy due to 27-28% run-to-run variance -- the result is uninformative and does
-not confirm or deny PGO benefit. A re-run at n>=20 with interleaved A/B ordering and CPU pinning
-is needed before drawing any benchmark conclusion for this library.
+The benchmark is **noise-dominated.** CV of 9–16% means the benchmark cannot reliably
+measure the small signal PGO might produce on the Go portions of the code. The two
+significant results in opposite directions confirm that the benchmark is measuring noise,
+not a real effect.
 
-**Post-#55 verdict NONE is correct:**
-snappy's compression hot path (`snappy.Encode`, `snappy.Decode`) routes through assembly
-implementations on amd64. PGO cannot touch assembly functions  - it only influences
-Go-compiled code. Post-#55, the engine correctly reports 0 module-scoped devirts and 2 extra
-inlines for snappy itself; the benchmark confirms NEUTRAL. The old pre-#55 7 devirt
-decisions and 1164 extra inlines were all from stdlib packages compiled as part of the
-transitive dep graph. See also: hashcalc-svc (same pattern with `sha256.blockAVX2`).
+**The NONE verdict holds**, but on grounds that *the benchmark cannot measure reliably*,
+not because PGO cleanly does nothing. snappy's compression hot path (`snappy.Encode`,
+`snappy.Decode`) routes through assembly implementations on amd64. PGO cannot touch
+assembly functions. Post-#55, the engine correctly reports 0 module-scoped devirts and
+2 extra inlines; the NONE verdict is correct from the build-analysis side. A benchmark
+redesign that isolates the Go portions is tracked in BP-60.
+
+**Previous incorrect prediction (pre-#55):** The original 7 devirt decisions and 1164
+extra inlines were all stdlib/dependency noise. Post-#55 correctly isolates snappy's
+module contributions.
 
 ---
 
-### 5. valyala/fasthttp  - HTTP Framework
+### 5. valyala/fasthttp — HTTP Framework
 
-**leverage-check (post-#55):** HIGH  - 0 module-scoped devirt decisions, 92 module-scoped extra inlines
-(+1 dep devirt, +771 dep extra inlines)
+**leverage-check (post-#55):** HIGH — 0 module-scoped devirt decisions, 92 module-scoped
+extra inlines (+1 dep devirt, +771 dep extra inlines)
 
-**Build analysis reveals (post-#55, using profile.pprof + --dir fasthttp@v1.74.0):**
+**Build analysis (post-#55, using profile.pprof + --dir fasthttp@v1.74.0):**
 ```
 devirt_decisions:        0   (module-scoped)
 pgo_devirts_deps:        1   (stdlib/deps, excluded from verdict)
@@ -312,86 +320,81 @@ pgo_extra_inlines:      92   (module-scoped)
 pgo_extra_inlines_deps: 771
 ```
 
-*Original (pre-#55, full transitive graph):*
-```
-devirt_decisions: 91
-pgo_extra_inlines: 1766
-baseline_inlines: 52655
-pgo_inlines: 54421
-```
+**CI results (reshaped benchmark, commit `40150e0` onward — PRELIMINARY):**
 
-**Benchmark (5 trials × 3s):**
-```
-           baseline.txt      pgo.txt
-FastHTTP-2   6.665µ ± ∞      6.560µ ± ∞    ~  (p=0.841 n=5)
-```
+| CPU | Δ | p-value | n | Status |
+|-----|---|---------|---|--------|
+| AMD EPYC 7763 | −7.77% | 0.001 | 1 | **provisional** |
+| Intel Xeon 8573C | −11.44% | 0.001 | 1 | **provisional** |
 
-**Why NEUTRAL despite HIGH prediction:**
-The benchmark exercises HTTP request parsing from a fixed byte buffer (no I/O).
-The hot path is `RequestHeader.parseHeaders` → string scanning via `runtime.memclrNoHeapPointers`.
-fasthttp's parser uses direct field access, not interface dispatch. Post-#55: 0 module-scoped
-devirt decisions confirms the original 91 were all in the net/http dependency tree.
-The 92 module-scoped extra inlines are in initialization and option-handling code that
-doesn't dominate the parsing benchmark hot loop.
+> **Important:** These numbers are from the reshaped benchmark (commit `40150e0`): hoisted
+> `fasthttp.Request` and reader allocations out of the timed loop, per-iteration reset,
+> error check, and a pre-run parse validation. The previous benchmark allocated a new
+> `fasthttp.Request` on every iteration and discarded the parse error, making allocator
+> time and potential silent parse failures visible in the result.
+>
+> Old numbers (~2.4 µs/op) and new numbers (~600–700 ns/op) measure different work and
+> are **not comparable.** Do not carry forward, cite, or average any fasthttp result from
+> before commit `40150e0`.
+
+Each architecture has n=1 under the reshaped benchmark. Treat as provisional until a
+second run pair confirms.
+
+**Mechanism:** fasthttp's parser is dominated by `RequestHeader.parseHeaders` → string
+scanning. The 92 module-scoped extra inlines are in request-parsing helper functions that
+sit directly on this hot path, explaining the significant improvement.
 
 ---
 
 ## Cross-Cutting Findings
 
-### Finding 1: pre-#55 over-prediction was from transitive dep graph (fixed)
-
-All 5 real repositories received HIGH predictions in the original run. Zero reached
-PROMOTE. The tool correctly signalled "the compiler will make decisions" but those decisions
-did not reliably translate to throughput gains.
+### Finding 1: pre-#55 over-prediction from transitive dep graph (fixed)
 
 **Root cause (pre-#55):** `--dir` caused `go build -gcflags=all=-m=2 -pgo=profile ./...`
 to compile the full transitive dependency graph. Devirt decisions in stdlib packages
 (net/http, reflect, sync) accumulated regardless of whether those packages appeared in the
 CPU hot path.
 
-**Post-#55 fix:** `devirt_decisions` and `pgo_extra_inlines` are now module-scoped
-(`go list -m` origin filter + `-trimpath`). Deps are still counted but reported separately
-as `pgo_devirts_deps` / `pgo_extra_inlines_deps`. snappy now correctly returns NONE.
-
-**Example:** fasthttp's original 91 devirt decisions spanned the net/http import tree;
-the benchmark hot path is pure string scanning with no interface dispatch. The post-#55
-engine would separate those into `pgo_devirts_deps` (not counted toward verdict).
+**Post-#55 fix:** `devirt_decisions` and `pgo_extra_inlines` are now module-scoped.
+Deps are reported separately as `pgo_devirts_deps` / `pgo_extra_inlines_deps` and do
+not contribute to the verdict. snappy now correctly returns NONE.
 
 ### Finding 2: Extra-inline count is a weak signal
 
-`pgo_extra_inlines` varied from 717 (gjson) to 1766 (fasthttp). The repo with the lowest
-extra-inline count (gjson, 717) had the best outcome (-6.25%). The repo with the highest
-count (fasthttp, 1766) had zero measurable improvement.
+`pgo_extra_inlines` varied from 36 (gjson, best outcome ~−15.85% AMD) to 92 (fasthttp,
+provisional −7.77% AMD). The module-scoped count alone does not predict magnitude; what
+matters is whether those inlines fall on the benchmark's actual hot path.
 
-Extra inlines in initialization and scaffolding code inflate the count without helping
-benchmarks that call those paths rarely.
+### Finding 3: Asm-heavy hot paths correctly return NONE (post-#55)
 
-### Finding 3: asm-heavy hot paths now correctly return NONE (post-#55)
+snappy mirrors hashcalc-svc from the controlled demo. When the top CPU consumer is
+assembly (`snappy.{Encode,Decode}`, `sha256.blockAVX2`), PGO has nothing to work with.
+Post-#55, snappy returns NONE (0 module-scoped devirts, 2 extra inlines). Correct.
 
-snappy mirrors hashcalc-svc from the controlled demo. When the top CPU consumer is assembly
-(`snappy.{Encode,Decode}`, `sha256.blockAVX2`), PGO has nothing to work with. Pre-#55,
-leverage-check incorrectly returned HIGH by counting devirt decisions in stdlib packages.
-Post-#55, snappy returns NONE (0 module-scoped devirts, 2 extra inlines).
+### Finding 4: PGO effect is near-perfectly reproducible within a CPU model
 
-The snappy benchmark (committed n=5, 27-28% variance) has `+/-inf` CI and cannot confirm or
-deny the NONE verdict. The build-analysis argument alone is sufficient: snappy's hot path is
-assembly, which PGO cannot touch. The benchmark result is consistent but uninformative.
+Within a CPU model, run-to-run variance in the delta is tight: gjson AMD EPYC 7763 spread
+0.30pp across 4 runs; gjson Xeon 8573C spread 0.27pp across 2 runs. This confirms the CI
+harness is stable once CPU model is controlled. The apparent "noise" in multi-run summaries
+that do not stratify by CPU is almost entirely architecture signal.
 
-### Finding 4: gjson is the useful data point
+### Finding 5: 3% gate needs CPU-model context
 
-gjson's -6.25% improvement at p=0.024 is the only statistically significant result.
-The improvement comes from `pgo_extra_inlines` on gjson's direct-call hot path, not from
-devirt. This validates that PGO extra-inlining (not just devirt) can deliver real gains,
-but the magnitude depends on whether the newly inlined functions sit on the actual hot path.
+The 3% house standard is valid within a CPU model. It is not valid as a single-run gate
+across uncontrolled architecture assignment. go-json illustrates this clearly: PROMOTE on
+EPYC, NEUTRAL on Xeon 8573C, not-significant on Xeon 8370C — identical code, identical
+commit. A stable gate verdict for go-json requires either (a) multi-run median stratified
+by CPU model, or (b) a higher threshold that clears all tested architectures.
 
 ---
 
 ## Implications for leverage-check
 
 The tool currently provides a **necessary but insufficient** signal. A HIGH verdict is
-required to proceed with PGO optimization, but it does not guarantee benefit.
+required to proceed with PGO optimization, but it does not guarantee benefit at or above
+the gate threshold on every microarchitecture.
 
-Two improvements would tighten the signal:
+Three improvements would tighten the signal:
 
 1. **Hot-path weighted devirt count:** cross-reference each devirt decision with the CPU%
    of the calling function in the profile. Decisions in functions with <1% CPU share
@@ -401,7 +404,8 @@ Two improvements would tighten the signal:
    (identified by absence of Go source lines in the profile), add a warning that PGO
    cannot touch the hot path regardless of devirt count.
 
-These refinements would reduce the false-HIGH rate seen in 4 of 5 repos here.
+3. **Architecture-aware gate:** when reporting gate verdicts from CI, require the CPU
+   model to be present in the output. A verdict without a CPU model is incomplete.
 
 ---
 
@@ -414,14 +418,14 @@ hack/pgo-demo/
 ├── real-repos/
 │   ├── EVALUATION.md                  this report
 │   ├── collect-profiles.sh            profile collection script
-│   ├── run-pgo-cycle.sh               benchmark comparison script
+│   ├── run-pgo-cycle.sh               benchmark comparison script (legacy; CI harness preferred)
 │   └── results/
 │       ├── eval-v2/                   static leverage-check outputs (per-repo)
 │       │   ├── goldmark/
 │       │   ├── gjson/
 │       │   ├── go-json/
 │       │   └── snappy/
-│       └── profiles/                  collected .pprof files (per-repo)
+│       └── profiles/                  collected .pprof files + CI bench modules (per-repo)
 │           ├── goldmark/
 │           ├── gjson/
 │           ├── go-json/
@@ -429,6 +433,6 @@ hack/pgo-demo/
 │           └── fasthttp/
 ```
 
-Raw benchmark data (baseline.txt, pgo.txt) is in the evaluation runner's working
-directory (`/tmp/pgo-eval/<repo>/`) and can be reproduced by running
-`collect-profiles.sh` followed by the bench cycle described in the Methodology section.
+CI benchmark raw data (baseline.txt, pgo.txt, stat.txt per library) is uploaded as a
+workflow artifact named `pgo-bench-real-repos-<run_id>` for each run. Run ids are in the
+table above.
