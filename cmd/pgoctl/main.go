@@ -270,7 +270,7 @@ func newMergeCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&strategy, "strategy", "weighted", "merge strategy: weighted|latest|union")
-	cmd.Flags().Float64Var(&recencyWeight, "recency-weight", 2.0, "must be positive; deprecated — use --min-weight instead")
+	cmd.Flags().Float64Var(&recencyWeight, "recency-weight", 2.0, "must be positive; deprecated - use --min-weight instead")
 	cmd.Flags().Float64Var(&minWeight, "min-weight", 0.125, "minimum scale factor for very-old profiles (weighted strategy)")
 	cmd.Flags().Float64Var(&halfLifeH, "half-life", 24.0, "recency decay half-life in hours")
 	cmd.Flags().BoolVar(&dropInvalid, "drop-invalid", false, "skip unparseable profiles instead of failing")
