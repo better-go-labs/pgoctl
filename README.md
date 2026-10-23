@@ -254,7 +254,8 @@ pgoctl merge [flags] <profile...>
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--strategy` | `weighted` | Merge strategy: `weighted`, `latest`, `union` |
-| `--recency-weight` | `2.0` | Multiplier for the most recent profile |
+| `--min-weight` | `0.125` | Minimum scale factor for very-old profiles (weighted strategy) |
+| `--recency-weight` | `2.0` | Deprecated; must be positive. Has no effect on output - use `--min-weight` instead |
 | `--half-life` | `24.0` | Recency decay half-life in hours |
 | `--drop-invalid` | `false` | Skip unparseable profiles instead of failing |
 | `--out` | `default.pgo` | Output path (`-` for stdout) |
