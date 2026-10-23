@@ -22,10 +22,17 @@ const (
 
 // Options configures the merge operation.
 type Options struct {
-	Strategy      Strategy
+	Strategy Strategy
+	// RecencyWeight is validated positive for backward compatibility but no
+	// longer affects the decay formula; use MinWeight to control the floor.
 	RecencyWeight float64
-	HalfLife      time.Duration
-	DropInvalid   bool
+	// MinWeight is the minimum scale factor for very-old profiles so that
+	// long-lived history in a rolling default.pgo never vanishes entirely.
+	// Default 0.125 (one half-life below the 72 h natural floor at the
+	// default 24 h half-life).
+	MinWeight   float64
+	HalfLife    time.Duration
+	DropInvalid bool
 }
 
 // DefaultOptions returns Options with sensible defaults.
@@ -33,6 +40,7 @@ func DefaultOptions() Options {
 	return Options{
 		Strategy:      Weighted,
 		RecencyWeight: 2.0,
+		MinWeight:     0.125,
 		HalfLife:      24 * time.Hour,
 	}
 }
@@ -58,6 +66,9 @@ func captureTime(p *profile.Profile, fallback time.Time) time.Time {
 func Profiles(inputs []Input, opts Options, w io.Writer) error {
 	if len(inputs) == 0 {
 		return fmt.Errorf("at least one profile is required")
+	}
+	if opts.Strategy == Weighted && opts.RecencyWeight <= 0 {
+		return fmt.Errorf("recency-weight must be positive, got %g", opts.RecencyWeight)
 	}
 
 	profiles := make([]*profile.Profile, 0, len(inputs))
@@ -94,8 +105,8 @@ func Profiles(inputs []Input, opts Options, w io.Writer) error {
 		}
 
 	case Weighted:
-		// Exponential decay (weight = RecencyWeight * 0.5^(age/HalfLife)) so
-		// that recent profiles dominate while older ones still contribute.
+		// Newest profile is pinned to scale 1.0 so a single-input merge returns
+		// unchanged totals; older profiles decay toward MinWeight over time.
 		applyWeights(profiles, times, opts)
 
 	default:
@@ -109,8 +120,10 @@ func Profiles(inputs []Input, opts Options, w io.Writer) error {
 	return merged.Write(w)
 }
 
-// applyWeights scales each profile by an exponential recency weight before merge.
-// weight = RecencyWeight * 0.5^(age/HalfLife), clamped to [0.25, RecencyWeight].
+// applyWeights scales each profile by a recency-decayed weight before merge.
+// The newest profile always receives scale 1.0 so a single-input merge returns
+// unchanged sample totals; older profiles decay toward opts.MinWeight so that
+// long-lived history in a rolling default.pgo still contributes at the floor.
 func applyWeights(profiles []*profile.Profile, times []time.Time, opts Options) {
 	newest := times[0]
 	for _, t := range times[1:] {
@@ -122,10 +135,14 @@ func applyWeights(profiles []*profile.Profile, times []time.Time, opts Options) 
 	if halfLifeH <= 0 {
 		halfLifeH = 24.0
 	}
+	minW := opts.MinWeight
+	if minW <= 0 {
+		minW = 0.125
+	}
 	for i, p := range profiles {
 		ageH := newest.Sub(times[i]).Hours()
-		w := opts.RecencyWeight * math.Pow(0.5, ageH/halfLifeH)
-		w = math.Max(0.25, math.Min(opts.RecencyWeight, w))
+		d := math.Pow(0.5, ageH/halfLifeH)
+		w := math.Min(1.0, math.Max(minW, d))
 		p.Scale(w)
 	}
 }
