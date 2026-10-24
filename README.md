@@ -20,11 +20,11 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/pipeline-dark.svg">
-    <img src="docs/images/pipeline-light.svg" width="100%" alt="pgoctl pipeline in two rows. Prepare the profile: 1 pgoctl collect pulls a CPU profile from a pprof endpoint, Parca or a file into cpu.pprof; 2 pgoctl validate scores samples and stack coverage; 3 pgoctl merge folds it into the previous profile to make default.pgo. Decide: 4 pgoctl compare checks against the baseline whether the last PGO build helped, with promote, neutral or rollback; 5 pgoctl leverage-check diffs a -pgo build against a plain one and returns HIGH, LOW or NONE. HIGH or LOW leads to go build -pgo and a benchmark; NONE skips the benchmark. Deploy the PGO build, then profile it again; the next run's compare shows whether it helped.">
+    <img src="docs/images/pipeline-light.svg" width="100%" alt="pgoctl pipeline in two rows. Prepare the profile: 1 pgoctl collect pulls a CPU profile from a pprof endpoint, Parca or a file into cpu.pprof; 2 pgoctl validate scores samples and stack coverage; 3 pgoctl merge folds it into the previous profile to make default.pgo. Decide: 4 pgoctl leverage-check diffs a -pgo build against a plain one and returns HIGH, LOW or NONE; HIGH or LOW leads to go build -pgo and a benchmark, NONE skips the benchmark. 5 pgoctl compare checks the current profile against the previous default.pgo: did the PGO build help? It returns promote, neutral or rollback. Profile the deployed build again, and the loop starts over at step 1.">
   </picture>
 </p>
 
-The GitHub Action runs these steps in the same order, with `pgoctl explain` between `compare` and `leverage-check`.
+The GitHub Action runs these steps in the same order, then `pgoctl explain` after `compare`.
 
 ## Contents
 
@@ -298,14 +298,14 @@ Exit codes: **0** = HIGH, LOW or INCOMPLETE, **3** = NONE (CI gate), **2** = usa
 
 ## GitHub Action
 
-`action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI. It collects (or reuses) a profile, validates it, merges it, and compares it against a baseline. It then checks PGO leverage on the merged profile. Optionally, it uploads the artifact and posts a verdict comment on the PR.
+`action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI. It collects (or reuses) a profile, validates it, merges it, checks PGO leverage on the merged profile, and compares it against a baseline. Optionally, it uploads the artifact and posts a verdict comment on the PR.
 
 > Use it from any repository as `better-go-labs/pgoctl@v0.1.4`, or as `./` inside this repository.
 
 ### Leverage check
 
 After it merges the profiles, the Action runs [`pgoctl leverage-check`](#pgoctl-leverage-check) on the merged
-`default.pgo`. It is the last analysis step, because it needs the profile your `-pgo` build will use. A benchmark
+`default.pgo`, before `compare`. It needs merge first, because it checks the profile your `-pgo` build will use. A benchmark
 cycle on a profile with no PGO decisions measures only noise, so the check runs by default. Set
 `run-leverage-probe: 'false'` only when you already know the answer.
 
@@ -348,7 +348,7 @@ there.
 | `github-token` | Token used to post the PR comment |
 | `restore-previous-artifact` | Auto-download the most recent successful artifact for steady-state profile accumulation (requires `permissions: actions: read`; default: `false`) |
 | `previous-profile` | Path to a previous `default.pgo` to merge with; overrides `restore-previous-artifact` if set |
-| `run-leverage-probe` | Run the [leverage check](#leverage-check) on the merged `default.pgo` (two builds under `-gcflags=all=-m=2`) as the last analysis step, before any benchmark cycle. Emits `leverage-verdict`. Default: `true`; set `false` to skip |
+| `run-leverage-probe` | Run the [leverage check](#leverage-check) on the merged `default.pgo` (two builds under `-gcflags=all=-m=2`) right after merge and before compare, ahead of any benchmark cycle. Emits `leverage-verdict`. Default: `true`; set `false` to skip |
 | `leverage-probe-target` | Go build target for the leverage probe. Default: `./...` (all packages); point at the binary the profile came from to avoid double-building test helpers under `-m=2` |
 
 > **Note:** To enable progressive profile accumulation across runs, set `restore-previous-artifact: true` in your workflow.

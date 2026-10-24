@@ -37,10 +37,10 @@ STEPS = [
     ("collect", ["Pull a CPU profile from a pprof", "endpoint, Parca or a file."], ("chip", ["cpu.pprof"])),
     ("validate", ["Score samples and stack coverage;", "a thin profile fails here."], ("chip", ["quality score"])),
     ("merge", ["Fold it into the previous profile", "to make the PGO input."], ("chip", ["default.pgo"])),
-    ("compare", ["Against the baseline: did the", "last PGO build help?"],
-     ("badges", [("promote", "good"), ("neutral", "neutral"), ("rollback", "bad")])),
     ("leverage-check", ["Diff a -pgo build against a plain", "one: will this profile help?"],
      ("badges", [("HIGH", "good"), ("LOW", "warn"), ("NONE", "neutral")])),
+    ("compare", ["Current profile against the previous", "default.pgo: did the PGO build help?"],
+     ("badges", [("promote", "good"), ("neutral", "neutral"), ("rollback", "bad")])),
 ]
 
 
@@ -116,12 +116,12 @@ def render(t):
         arrow(f"M{xs[i] + COL + 10},{mid} L{xs[i + 1] - 10},{mid}")
 
     section(222, "2  DECIDE")
-    card(xs[0], r2, 4, STEPS[3])
-    card(xs[1], r2, 5, STEPS[4], accent=True)
+    # Leverage first, its two outcomes next, and compare judges the build.
+    card(xs[0], r2, 4, STEPS[3], accent=True)
+    card(xs[2], r2, 5, STEPS[4])
     mid2 = r2 + CARD_H / 2
-    arrow(f"M{xs[0] + COL + 10},{mid2} L{xs[1] - 10},{mid2}")
 
-    # merge feeds compare: down from card 3, across, into card 4.
+    # merge feeds the leverage check: down from card 3, across, into card 4.
     turn = r1 + CARD_H + 26
     m3 = xs[2] + COL / 2
     m1 = xs[0] + COL / 2
@@ -129,8 +129,8 @@ def render(t):
         f'L{m1 + 8},{turn} Q{m1},{turn} {m1},{turn + 8} L{m1},{r2 - 10}" fill="none" stroke="{t["muted"]}" '
         f'stroke-width="1.4" stroke-linecap="round" marker-end="url(#m)"/>')
 
-    # Outcomes of the leverage check.
-    ox = xs[2]
+    # Outcomes of the leverage check, in the middle column.
+    ox = xs[1]
     oh = 56
     o1, o2 = r2, r2 + CARD_H - oh
     for oy, label, tone, lines in ((o1, "HIGH or LOW", "good", ["go build -pgo,", "then benchmark"]),
@@ -140,9 +140,11 @@ def render(t):
         top = oy + oh / 2 + 4.5 - (len(lines) - 1) * 8.5
         for i, line in enumerate(lines):
             text(end + 12, top + i * 17, line, size=13, color="ink")
-    trunk = xs[1] + COL + GAP / 2
-    arrow(f"M{xs[1] + COL + 6},{mid2} L{trunk},{mid2} L{trunk},{o1 + oh / 2} L{ox - 10},{o1 + oh / 2}")
+    trunk = xs[0] + COL + GAP / 2
+    arrow(f"M{xs[0] + COL + 6},{mid2} L{trunk},{mid2} L{trunk},{o1 + oh / 2} L{ox - 10},{o1 + oh / 2}")
     arrow(f"M{trunk},{mid2} L{trunk},{o2 + oh / 2} L{ox - 10},{o2 + oh / 2}")
+    # Only a build goes on to compare.
+    arrow(f"M{ox + COL + 10},{o1 + oh / 2} L{xs[2] - 10},{o1 + oh / 2}")
 
     # The loop back to step 1, as a footer rather than a wire round the frame.
     fy = H - 26
@@ -160,7 +162,7 @@ def render(t):
     w2 = (tip[0] - tx * 4 - nx * 3.2, tip[1] - ty * 4 - ny * 3.2)
     add(f'<path d="M{w1[0]:.2f},{w1[1]:.2f} L{tip[0]:.2f},{tip[1]:.2f} L{w2[0]:.2f},{w2[1]:.2f}" fill="none" '
         f'stroke="{t["accent"]}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>')
-    text(M + 24, fy, "Deploy the PGO build, then profile it again. The next run's compare shows whether it helped.",
+    text(M + 24, fy, "Profile the deployed build again, and the loop starts over at step 1.",
          size=12.5, color="muted")
 
     add("</svg>")
