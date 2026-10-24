@@ -351,7 +351,7 @@ BOTH profiles before comparing (default 0 = no filtering).`,
 			return nil
 		},
 	}
-	cmd.Flags().Float64Var(&minImprovement, "min-improvement", 10.0, "min relative CPU %% improvement to promote")
+	cmd.Flags().Float64Var(&minImprovement, "min-improvement", 3.0, "min relative CPU %% improvement to promote (CPU-attribution delta, not wall-clock)")
 	cmd.Flags().Float64Var(&minRegression, "min-regression", 10.0, "min relative CPU %% regression to rollback (independent of --min-improvement)")
 	cmd.Flags().Float64Var(&minCPUPercent, "min-cpu-percent", 0.0, "drop functions below this CPU %% share in both profiles (0 = no filtering)")
 	cmd.Flags().IntVar(&topN, "top", 10, "number of function deltas to show")

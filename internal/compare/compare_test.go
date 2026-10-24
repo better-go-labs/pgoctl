@@ -137,7 +137,7 @@ func TestCompare_MinCPUPercentFilter(t *testing.T) {
 	// Summary (hotFn + warmFn only, both present in both profiles):
 	//   summaryNum = (51−60) + (34−30) = −9 + 4 = −5
 	//   summaryDen = 60 + 30 = 90
-	//   summary = −5/90×100 ≈ −5.56 → Neutral (within ±10% threshold)
+	//   summary = −5/90×100 ≈ −5.56 → Promote (exceeds 3% MinCPUImprovement threshold)
 	base := buildFnProfile(t, map[string]int{"main.hotFn": 600, "main.warmFn": 300, "main.coldFn": 100})
 	cand := buildFnProfile(t, map[string]int{"main.hotFn": 510, "main.warmFn": 340, "main.coldFn": 150})
 
@@ -159,8 +159,9 @@ func TestCompare_MinCPUPercentFilter(t *testing.T) {
 	if math.Abs(rpt.SummaryCPUDelta+5.56) > 0.01 {
 		t.Errorf("expected summary delta -5.56 with filter, got %.2f", rpt.SummaryCPUDelta)
 	}
-	if rpt.Verdict != compare.Neutral {
-		t.Errorf("expected Neutral, got %s (delta=%.2f)", rpt.Verdict, rpt.SummaryCPUDelta)
+	// −5.56% exceeds the DefaultGateConfig MinCPUImprovement (3.0%) → Promote
+	if rpt.Verdict != compare.Promote {
+		t.Errorf("expected Promote, got %s (delta=%.2f)", rpt.Verdict, rpt.SummaryCPUDelta)
 	}
 }
 
