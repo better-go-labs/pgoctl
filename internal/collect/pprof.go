@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -25,22 +26,38 @@ func deriveTimeout(opts Options) time.Duration {
 	return t
 }
 
-// FromPprof fetches a CPU profile from a standard Go pprof HTTP endpoint.
-// opts.URL must be the full URL including query params (e.g. /debug/pprof/profile?seconds=30).
-func FromPprof(opts Options) (*Result, error) {
-	timeout := deriveTimeout(opts)
+// pprofDefaultSeconds is net/http/pprof's duration when the URL has no seconds.
+const pprofDefaultSeconds = 30
 
-	rawURL := opts.URL
-	if opts.Window > 0 {
-		u, err := url.Parse(rawURL)
-		if err != nil {
-			return nil, fmt.Errorf("collect pprof: parse url: %w", err)
-		}
-		q := u.Query()
-		q.Set("seconds", fmt.Sprintf("%d", int(math.Round(opts.Window.Seconds()))))
-		u.RawQuery = q.Encode()
-		rawURL = u.String()
+// FromPprof fetches a CPU profile from a standard Go pprof HTTP endpoint.
+// opts.URL is the full URL, optionally with ?seconds=N. An explicit window
+// (opts.WindowSet) replaces seconds; otherwise the URL's seconds is kept, so a
+// default window cannot silently stretch a 30s request to minutes.
+func FromPprof(opts Options) (*Result, error) {
+	u, err := url.Parse(opts.URL)
+	if err != nil {
+		return nil, fmt.Errorf("collect pprof: parse url: %w", err)
 	}
+	q := u.Query()
+	seconds := pprofDefaultSeconds
+	switch {
+	case opts.WindowSet && opts.Window > 0:
+		seconds = int(math.Round(opts.Window.Seconds()))
+		q.Set("seconds", fmt.Sprintf("%d", seconds))
+		u.RawQuery = q.Encode()
+	case q.Get("seconds") != "":
+		n, err := strconv.Atoi(q.Get("seconds"))
+		if err != nil || n <= 0 {
+			return nil, fmt.Errorf("collect pprof: seconds=%q in --url is not a positive integer", q.Get("seconds"))
+		}
+		seconds = n
+	}
+	rawURL := u.String()
+
+	// Derive the timeout from the duration actually requested.
+	topts := opts
+	topts.Window = time.Duration(seconds) * time.Second
+	timeout := deriveTimeout(topts)
 
 	client := &http.Client{Timeout: timeout}
 	start := time.Now()
@@ -65,5 +82,6 @@ func FromPprof(opts Options) (*Result, error) {
 		Start:     start,
 		End:       time.Now(),
 		SizeBytes: len(data),
+		Seconds:   seconds,
 	}, nil
 }

@@ -292,6 +292,11 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 	score := opts.WeightDensity*density + opts.WeightRichness*richness + opts.WeightCoverage*coverage + opts.WeightDepth*depthOK
 
 	report.QualityScore = math.Round(score*1000) / 1000
+	// Every other gate records why it failed; without this a low score
+	// showed as "valid false" with no reason.
+	if score < opts.MinScore {
+		report.Errors = append(report.Errors, fmt.Sprintf("quality score too low: %.3f < %.3f", report.QualityScore, opts.MinScore))
+	}
 	report.Valid = score >= opts.MinScore && avgStackDepth >= opts.MinStackDepth && sampleCount >= opts.MinSamples && len(report.Errors) == 0
 
 	return report, nil

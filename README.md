@@ -1,6 +1,5 @@
 # pgoctl
 
-<!-- Badges activate on public launch. pkg.go.dev, Codecov, and Latest Release resolve once the repo is public and v0.1.0-alpha is published. -->
 <p align="center">
   <a href="https://github.com/better-go-labs/pgoctl/actions/workflows/build.yml"><img src="https://github.com/better-go-labs/pgoctl/actions/workflows/build.yml/badge.svg?branch=main" alt="Build"></a>
   <a href="https://github.com/better-go-labs/pgoctl/actions/workflows/golangci-lint.yml"><img src="https://github.com/better-go-labs/pgoctl/actions/workflows/golangci-lint.yml/badge.svg?branch=main" alt="golangci-lint"></a>
@@ -18,24 +17,20 @@
 
 ## Pipeline
 
-```mermaid
-flowchart TD
-    A["Profile Source\n(pprof / Parca / file)"] --> B["pgoctl collect"]
-    B --> C["cpu.pprof"]
-    C --> D["go build -pgo"]
-    D --> E["pgoctl compare"]
-    E --> F{"Verdict"}
-    F -->|improve| G["✅ Promote"]
-    F -->|neutral| H["➡️ Keep"]
-    F -->|regress| I["🔴 Rollback"]
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/pipeline-dark.svg">
+    <img src="docs/images/pipeline-light.svg" width="100%" alt="pgoctl pipeline in two rows. Prepare the profile: 1 pgoctl collect pulls a CPU profile from a pprof endpoint, Parca or a file into cpu.pprof; 2 pgoctl validate scores samples and stack coverage; 3 pgoctl merge folds it into the previous profile to make default.pgo. Decide: 4 pgoctl leverage-check diffs a -pgo build against a plain one and returns HIGH, LOW or NONE; HIGH or LOW leads to go build -pgo and a benchmark, NONE skips the benchmark. 5 pgoctl compare checks the current profile against the previous default.pgo: did the PGO build help? It returns promote, neutral or rollback. Profile the deployed build again, and the loop starts over at step 1.">
+  </picture>
+</p>
+
+The GitHub Action runs these steps in the same order, then `pgoctl explain` after `compare`.
 
 ## Contents
 
 - [Quick start](#quick-start)
   - [Via pprof endpoint](#via-pprof-endpoint-any-go-service)
   - [Via Parca](#via-parca-continuous-profiling)
-  - [PGO leverage probe](#pgo-leverage-probe-optional-pre-check)
   - [GitHub Action](#github-action-ci-integration)
   - [Smoke test](#smoke-test-no-external-services-required)
 - [CLI reference](#cli-reference)
@@ -45,7 +40,9 @@ flowchart TD
   - [merge](#pgoctl-merge)
   - [explain](#pgoctl-explain)
   - [compare](#pgoctl-compare)
+  - [leverage-check](#pgoctl-leverage-check)
 - [GitHub Action](#github-action)
+  - [Leverage check](#leverage-check)
 - [Docker](#docker)
 - [Configuration](#configuration)
 - [Demo service](#demo-service)
@@ -91,51 +88,14 @@ PARCA_URL=http://localhost:7070 ./demo.sh
 
 `demo.sh` runs collect, validate, merge, build, and explain end to end against your Parca server.
 
-### PGO leverage probe (optional pre-check)
-
-Before running a full benchmark cycle, the action can check whether the profile has enough
-PGO signal for the compiler to act on. Run it via `run-leverage-probe`:
-
-```yaml
-- id: pgo
-  uses: better-go-labs/pgoctl@v0.1.0
-  with:
-    profile-file: cpu.pprof
-    run-leverage-probe: 'true'
-    leverage-probe-target: ./cmd/myapp   # point at the binary the profile came from
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-
-- run: test "${{ steps.pgo.outputs.leverage-verdict }}" != "NONE"
-```
-
-`leverage-probe-target` defaults to `./...`, which builds every package under `-m=2`.
-Point it at the specific binary package the profile came from to avoid double-building test helpers.
-
-The probe emits `leverage-verdict` with one of four values:
-
-| Value | Meaning |
-|-------|---------|
-| `NONE` | 0 PGO-specific compiler decisions; optimization will not help |
-| `LOW` | 1-4 devirt decisions or 5-29 extra inlines; modest gains possible |
-| `HIGH` | >=5 devirt decisions or >=30 extra inlines; run a full benchmark cycle |
-| `INCOMPLETE` | leverage-check failed or produced no output; see the warning annotation |
-
-A `NONE` verdict emits a `::warning::` annotation and never fails the job by itself.
-To gate on it, add an explicit assertion as shown above.
-
-> **Note:** No release up to v0.1.3 ships `leverage-check` in its binary distribution.
-> The probe works only while the action builds `pgoctl` from source (i.e. no `pgoctl-version`
-> tag set in your workflow, or a version that is not yet released).
-
 ### GitHub Action (CI integration)
 
-> The Action is currently in this repo and used internally. Once the repo is public it will be
-> referenceable as `better-go-labs/pgoctl@v0.1.0`.
+> Reference the Action from any repository as `better-go-labs/pgoctl@v0.1.4`.
 
 From a pre-collected pprof file (skips collect):
 
 ```yaml
-- uses: better-go-labs/pgoctl@v0.1.0
+- uses: better-go-labs/pgoctl@v0.1.4
   with:
     profile-file: cpu.pprof      # pre-collected pprof; skips the collect step
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -144,7 +104,7 @@ From a pre-collected pprof file (skips collect):
 From a live pprof endpoint:
 
 ```yaml
-- uses: better-go-labs/pgoctl@v0.1.0
+- uses: better-go-labs/pgoctl@v0.1.4
   with:
     pprof-url: http://localhost:6060
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -153,7 +113,7 @@ From a live pprof endpoint:
 From a Parca server:
 
 ```yaml
-- uses: better-go-labs/pgoctl@v0.1.0
+- uses: better-go-labs/pgoctl@v0.1.4
   with:
     parca-url: http://parca:7070
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -196,7 +156,9 @@ pgoctl merge cpu.pprof --out default.pgo
 | `--source` | _(required)_ | Profiling backend: `parca` or `pprof` |
 | `--url` | _(required when source=pprof)_ | Full URL of the pprof HTTP endpoint |
 | `--out` | `cpu.pprof` | Output file path |
-| `--timeout` | _(source-specific)_ | HTTP request timeout |
+| `--window` | _(unset)_ | Profile duration. When given, it replaces the URL's `seconds`; otherwise the URL's `seconds` is used, or the endpoint's default (30s for Go) |
+| `--timeout` | _(derived)_ | HTTP request timeout; by default the profile duration plus `--timeout-buffer`, at least 120s |
+| `--timeout-buffer` | `30s` | Added to the profile duration when deriving `--timeout` |
 
 The endpoint is `GET /debug/pprof/profile?seconds=<N>`, standard on any Go binary that imports `net/http/pprof`. The standalone `cmd/baseline` collector wraps this for Prometheus (`make collect-baseline`).
 
@@ -213,10 +175,10 @@ pgoctl collect --source=parca \
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--source` | _(required)_ | Profiling backend: `parca` or `pprof` |
-| `--parca-addr` | _(required when source=parca)_ | Base URL of the Parca server (e.g. `http://localhost:7070`) |
+| `--parca-addr` | `http://localhost:7070` | Base URL of the Parca server |
 | `--query` | `process_cpu:cpu:nanoseconds:cpu:nanoseconds:delta` | Parca label selector |
 | `--window` | `5m` | Time window for the merged profile (e.g. `5m`, `1h`) |
-| `--out` | `cpu.pprof` | Output path (`-` for stdout) |
+| `--out` | `cpu.pprof` | Output file path |
 
 Calls `POST /parca.query.v1alpha1.QueryService/MergeProfile`, decodes the base64 pprof response, and validates it before writing. No extra Go dependencies.
 
@@ -256,7 +218,7 @@ pgoctl merge [flags] <profile...>
 |------|---------|-------------|
 | `--strategy` | `weighted` | Merge strategy: `weighted`, `latest`, `union` |
 | `--min-weight` | `0.125` | Minimum scale factor for very-old profiles (weighted strategy) |
-| `--recency-weight` | `2.0` | Deprecated; must be positive. Has no effect on output - use `--min-weight` instead |
+| `--recency-weight` | `2.0` | Deprecated and hidden from `--help`. Still accepted (must be positive) but has no effect; use `--min-weight` |
 | `--half-life` | `24.0` | Recency decay half-life in hours |
 | `--drop-invalid` | `false` | Skip unparseable profiles instead of failing |
 | `--out` | `default.pgo` | Output path (`-` for stdout) |
@@ -296,8 +258,8 @@ pgoctl compare [flags] <baseline.pprof> <candidate.pprof>
 |------|---------|-------------|
 | `--min-improvement` | `3.0` | Min CPU delta % to promote |
 | `--min-regression` | `3.0` | Min CPU regression % to rollback |
-| `--min-cpu-percent` | `0.0` | Drop functions below this CPU % in both profiles |
-| `--top` | `10` | Number of function deltas to show |
+| `--min-cpu-percent` | `1.0` | Drop functions below this CPU % in both profiles (`0` disables) |
+| `--top` | `10` | Number of function deltas to show, ranked by CPU share moved in percentage points |
 | `--json` | `false` | JSON output |
 
 Verdict: **promote** (improvement >= threshold), **rollback** (regression >= threshold), or **neutral**.
@@ -305,12 +267,70 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 
 ---
 
+### `pgoctl leverage-check`
+
+Check whether a profile gives the compiler anything to act on, before you spend a benchmark cycle on it.
+
+```
+pgoctl leverage-check [--dir DIR] [--package PKG] [--top N] [--format json|text] <profile.pprof>
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--dir` | | Go module to build-analyze. Without it the verdict is `INCOMPLETE` |
+| `--package` | `./...` | Build pattern; point it at the binary the profile came from |
+| `--top` | `20` | Hot functions to list (0 = all) |
+| `--format` | `text` | `text` or `json` |
+
+With `--dir`, the module is built twice under `-gcflags=all=-m=2`, once with `-pgo=<profile>` and once without.
+The compiler decisions are diffed and split into module-scoped and dependency-scoped counts. Only
+module-scoped decisions drive the verdict. The run costs two full builds of the target, so expect minutes on a
+large module. `--dir` must be the module root, the directory that holds `go.mod`.
+
+| Verdict | Meaning |
+|---------|---------|
+| `NONE` | No module-scoped devirtualizations and fewer than 5 module-scoped extra inlines; too few PGO decisions for a measurable gain |
+| `LOW` | 1-4 devirt decisions or 5-29 extra inlines, all module-scoped; modest gains possible |
+| `HIGH` | 5 or more devirt decisions, or 30 or more extra inlines; run a full benchmark cycle |
+| `INCOMPLETE` | No `--dir` given, so no build analysis |
+
+Exit codes: **0** = HIGH, LOW or INCOMPLETE, **3** = NONE (CI gate), **2** = usage error, **1** = build or parse error.
+
+---
+
 ## GitHub Action
 
-`action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI: collect (or reuse an existing profile), validate, and compare against a baseline, then optionally uploads the artifact and posts a verdict comment on the PR.
+`action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI. It collects (or reuses) a profile, validates it, merges it, checks PGO leverage on the merged profile, and compares it against a baseline. Optionally, it uploads the artifact and posts a verdict comment on the PR.
 
-> Currently for use within this repo (`./`). Once published publicly,
-> the reference will be `better-go-labs/pgoctl@v0.1.0`.
+> Use it from any repository as `better-go-labs/pgoctl@v0.1.4`, or as `./` inside this repository.
+
+### Leverage check
+
+After it merges the profiles, the Action runs [`pgoctl leverage-check`](#pgoctl-leverage-check) on the merged
+`default.pgo`, before `compare`. It needs merge first, because it checks the profile your `-pgo` build will use. A benchmark
+cycle on a profile with no PGO decisions measures only noise, so the check runs by default. Set
+`run-leverage-probe: 'false'` only when you already know the answer.
+
+The verdict is exposed as the `leverage-verdict` output, with the meanings in the
+[CLI reference](#pgoctl-leverage-check). In the Action, `INCOMPLETE` means the check itself failed. A `NONE` or
+`INCOMPLETE` verdict emits a `::warning::` annotation and never fails the job by itself. To gate on the verdict,
+accept only the two positive values, so a failed check does not pass:
+
+```yaml
+- id: pgo
+  uses: better-go-labs/pgoctl@v0.1.4
+  with:
+    profile-file: cpu.pprof
+    leverage-probe-target: ./cmd/myapp   # the binary the profile came from
+
+- env:
+    VERDICT: ${{ steps.pgo.outputs.leverage-verdict }}
+  run: '[ "$VERDICT" = HIGH ] || [ "$VERDICT" = LOW ]'
+```
+
+`leverage-probe-target` defaults to `./...`, which builds every package, test helpers included. Point it at the
+binary package the profile came from. The check runs in the workspace root, so the module's `go.mod` must be
+there.
 
 ### Inputs
 
@@ -330,7 +350,7 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 | `github-token` | Token used to post the PR comment |
 | `restore-previous-artifact` | Auto-download the most recent successful artifact for steady-state profile accumulation (requires `permissions: actions: read`; default: `false`) |
 | `previous-profile` | Path to a previous `default.pgo` to merge with; overrides `restore-previous-artifact` if set |
-| `run-leverage-probe` | Run PGO leverage pre-check (`go build -gcflags=-m=2`) before the benchmark cycle. Emits `leverage-verdict`. Default: `false` |
+| `run-leverage-probe` | Run the [leverage check](#leverage-check) on the merged `default.pgo` (two builds under `-gcflags=all=-m=2`) right after merge and before compare, ahead of any benchmark cycle. Emits `leverage-verdict`. Default: `true`; set `false` to skip |
 | `leverage-probe-target` | Go build target for the leverage probe. Default: `./...` (all packages); point at the binary the profile came from to avoid double-building test helpers under `-m=2` |
 
 > **Note:** To enable progressive profile accumulation across runs, set `restore-previous-artifact: true` in your workflow.
@@ -344,7 +364,7 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 | `profile-path` | Path to the collected/used profile |
 | `artifact-path` | Path to the produced artifact |
 | `validate-score` | Quality score from `pgoctl validate` |
-| `leverage-verdict` | PGO leverage pre-check verdict: `NONE`, `LOW`, `HIGH`, or `INCOMPLETE` (empty if `run-leverage-probe` is not set) |
+| `leverage-verdict` | PGO leverage check verdict: `NONE`, `LOW`, `HIGH`, or `INCOMPLETE` (empty only if `run-leverage-probe` is `false`) |
 
 ## Docker
 
@@ -388,7 +408,7 @@ The demo uses **Prometheus** (pure Go, pprof-enabled by default, widely deployed
 
 ## Benchmarks and evaluation
 
-The `pgo-bench-real-repos` CI workflow benchmarks five open-source Go libraries. It records per-run results under version control.
+The `pgo-bench-real-repos` CI workflow benchmarks five open-source Go libraries and renders a result file per run. A person commits the runs worth keeping after reviewing them.
 
 - [Benchmark methodology](benchmarks/README.md): how the harness runs and how to read a result row.
 - [Benchmark results index](benchmarks/results/index.md): all runs grouped by CPU model.
@@ -409,24 +429,36 @@ The `pgo-bench-real-repos` CI workflow benchmarks five open-source Go libraries.
 
 ```
 cmd/
-  pgoctl/     -- CLI entry point (validate/merge/compare/explain/collect)
-  baseline/   -- standalone pprof collector for dev/baseline capture
+  pgoctl/               -- CLI entry point (collect/validate/merge/explain/compare/leverage-check)
+  baseline/             -- standalone pprof collector for dev/baseline capture
 internal/
-  collect/    -- pprof and Parca HTTP adapters, source interface
-  compare/    -- profile comparison and gate logic
-  explain/    -- flat CPU attribution, package grouping, PGO verdict
-  merge/      -- weighted profile merge strategies
-  validate/   -- quality scoring, package-share gates
+  collect/              -- pprof and Parca HTTP adapters, source interface
+  compare/              -- profile comparison and gate logic
+  errors/               -- sentinel errors shared by the internal packages
+  explain/              -- flat CPU attribution, package grouping, PGO verdict
+  leverage/             -- PGO build-vs-baseline diff, devirt and inline counting, verdict
+  merge/                -- weighted profile merge strategies
+  pprofutil/            -- small helpers shared by the profile analyzers
+  profile/              -- shared types for profile metadata and quality reports
+  validate/             -- quality scoring, package-share gates
+hack/
+  loadgen/              -- load generator for the demo and e2e workflows
+  pgo-demo/             -- controlled demo services and the oss-repos evaluation
 scripts/
-  kind-prometheus.sh  -- provision kind cluster + kube-prometheus-stack
-  smoke.sh            -- e2e smoke test (no external service required)
-testdata/             -- captured .pprof files (LFS)
-demo.sh               -- interactive happy-path demo
+  kind-prometheus.sh    -- provision kind cluster + kube-prometheus-stack
+  smoke.sh              -- e2e smoke test (no external service required)
+  capture-pgoctl-profile.sh -- record a CPU profile of pgoctl itself
+  pgo-leverage/         -- positive-control module for the leverage probe workflow
+benchmarks/             -- benchmark methodology and per-run result files
+testdata/               -- captured .pprof files (LFS)
+docs/images/            -- README diagrams and pipeline.py, which regenerates them
+demo.sh                 -- interactive happy-path demo
+action.yml              -- composite GitHub Action wrapping the pipeline
 ```
 
 ## Status
 
-v0.1.0. See [Benchmarks and evaluation](#benchmarks-and-evaluation) for PGO benchmark results and the leverage-check evaluation.
+v0.1.4. See [Benchmarks and evaluation](#benchmarks-and-evaluation) for PGO benchmark results and the leverage-check evaluation.
 
 ## License
 

@@ -52,6 +52,18 @@ func TestExitCodes(t *testing.T) {
 	assert.Equal(t, 2, run("compare"), "compare missing arg should exit 2")
 	assert.Equal(t, 2, run("compare", "a.pprof"), "compare one arg should exit 2")
 
+	// Errors that do not go through exitError must still be printed.
+	stderrOf := func(args ...string) string {
+		cmd := exec.Command(bin, args...)
+		out, _ := cmd.CombinedOutput()
+		return string(out)
+	}
+	assert.Contains(t, stderrOf("validate", "--not-a-real-flag"), "unknown flag", "flag errors must be printed")
+	assert.Contains(t, stderrOf("collect"), "--source is required", "collect errors must be printed")
+	assert.Contains(t, stderrOf("collect", "--source=pprof", "--url=http://127.0.0.1:1/debug/pprof/profile?seconds=1"),
+		"connection refused", "network errors must be printed")
+	assert.Contains(t, stderrOf("collect", "--json"), `{"error":"--source is required"}`, "JSON mode prints a JSON error")
+
 	// Check that compare with bad files exits 2.
 	tmp := t.TempDir()
 	_ = os.WriteFile(filepath.Join(tmp, "bad.pprof"), []byte("not a pprof"), 0600)

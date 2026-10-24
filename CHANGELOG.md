@@ -7,13 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-25
+
 ### Added
 
-- `leverage-check` command: static pre-check that compares a PGO build against a baseline build to count module-scoped devirtualization decisions and extra inlines; emits verdict NONE | LOW | HIGH | INCOMPLETE with exit codes 0/3/1 (#50)
-- Action: optional `run-leverage-probe` input (default `false`) runs `leverage-check` before the benchmark cycle and exposes the result as the `leverage-verdict` output (`NONE` | `LOW` | `HIGH` | `INCOMPLETE`); a `NONE` verdict emits a `::warning::` annotation and never fails the job; pair with `leverage-probe-target` (default `./...`) to scope the build to the binary the profile came from (#51)
+- `leverage-check` command: static pre-check that compares a PGO build against a baseline build to count module-scoped devirtualization decisions and extra inlines; emits verdict NONE | LOW | HIGH | INCOMPLETE with exit codes 0 (HIGH, LOW, INCOMPLETE), 3 (NONE), 2 (usage error) and 1 (error) (#50)
+- Action: `run-leverage-probe` input (default `true`, set `false` to skip) runs `leverage-check` on the merged `default.pgo` right after merge and before `compare` and exposes the result as the `leverage-verdict` output (`NONE` | `LOW` | `HIGH` | `INCOMPLETE`); a `NONE` verdict emits a `::warning::` annotation and never fails the job; pair with `leverage-probe-target` (default `./...`) to scope the build to the binary the profile came from (#51)
+
+### Changed
+
+- `compare`: `--min-regression` defaults to 3 (was 10), matching the Action, so a +5% CPU-share regression is a rollback locally as well as in CI
+- `compare`: `--min-cpu-percent` defaults to 1 (was 0). Functions under 1% CPU in both profiles are left out of the top list and the summary, which can change the verdict; pass `--min-cpu-percent 0` for the old behaviour
+- `compare`: top deltas are ranked by CPU share moved in percentage points instead of by relative change, which put near-zero functions first
 
 ### Fixed
 
+- `collect --source=pprof` keeps the URL's `seconds` unless `--window` is given. The 5m default window used to replace it, so `?seconds=30` collected for 5 minutes
+- Errors that did not come from a command's own handler, such as an unknown flag, a missing argument or a refused connection, are printed again. `SilenceErrors` had made them exit 2 with no message; `--json` prints them as `{"error": ...}`
+- Action: the `parca-url` path passed flags `collect` does not have (`--duration`, and the address as `--url`) and failed on every run. It now passes `--parca-addr` and `--window`, and the Parca e2e workflow runs the Action through this path
+- `validate`: a profile that fails only the quality-score gate now reports `quality score too low` instead of `valid false` with no reason
+- Action: the build-from-source fallback now runs in the action's own checkout (`$GITHUB_ACTION_PATH`). It previously ran `go build ./cmd/pgoctl` in the caller's workspace, which fails in any repo other than this one, including with the default `pgoctl-version: latest`
 - `merge`: weighted strategy no longer doubles sample counts when merging a single profile. The newest profile now always receives scale factor 1.0; older profiles decay to `--min-weight` (default 0.125) over time. `--recency-weight` is deprecated - it had no effect on decay after this fix and is replaced by the explicit `--min-weight` floor (#56)
 - `leverage-check`: module vs dependency origin of each compiler decision now comes from `go list -deps` main-module import paths, with both builds run under `-trimpath` so positions no longer depend on `--dir` or on cached build output. The previous `./` path prefix test counted every subpackage as a dependency
 - `leverage-check`: `devirt_decisions` is module-scoped like `pgo_extra_inlines`; the full count stays in `pgo_devirts` (JSON) and the std/deps share is in the new `pgo_devirts_deps`. A profile whose only PGO devirts are in dependencies now gets verdict NONE (exit 3)
@@ -98,7 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `profile-collect.yml` — end-to-end profile-collection workflow: provisions a kind cluster with Prometheus, drives load via the built-in load generator, captures a CPU profile, validates coverage gates, and merges into `default.pgo`
 
 
-[Unreleased]: https://github.com/better-go-labs/pgoctl/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/better-go-labs/pgoctl/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/better-go-labs/pgoctl/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/better-go-labs/pgoctl/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/better-go-labs/pgoctl/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/better-go-labs/pgoctl/compare/v0.1.0-alpha...v0.1.0

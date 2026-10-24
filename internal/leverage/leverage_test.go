@@ -557,6 +557,19 @@ func TestVerdictForAnalysis_None(t *testing.T) {
 	}
 }
 
+// snappy's committed evaluation is 0 module devirts and 2 module extra
+// inlines, and its NONE verdict depends on the <5 inline band.
+func TestVerdictForAnalysis_None_BelowInlineThreshold(t *testing.T) {
+	ba := &BuildAnalysis{DevirtDecisions: 0, PGOExtraInlines: 2}
+	v, reason := verdictForAnalysis(ba, nil)
+	if v != VerdictNone {
+		t.Fatalf("expected NONE for 0 devirts and 2 extra inlines, got %s", v)
+	}
+	if !strings.Contains(reason, "2 extra inline") {
+		t.Errorf("reason should report the actual inline count, got %q", reason)
+	}
+}
+
 func TestVerdictForAnalysis_None_WithTopFn(t *testing.T) {
 	ba := &BuildAnalysis{DevirtDecisions: 0, PGOExtraInlines: 0}
 	topEntries := []FunctionEntry{{Function: "main.hotFn", Package: "main", FlatPct: 80.0}}

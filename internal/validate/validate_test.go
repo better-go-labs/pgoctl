@@ -361,3 +361,24 @@ func TestValidateFile_SamplesSumCount(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(20), report.Samples, "4 rows x 5 samples")
 }
+
+// A profile that fails only the score gate must say so; it used to report
+// valid=false with no error, so text output gave no reason.
+func TestValidateFile_LowScoreRecordsReason(t *testing.T) {
+	data := generateCPUProfile(t, 200)
+	f, err := os.CreateTemp(t.TempDir(), "cpu*.pprof")
+	require.NoError(t, err)
+	_, err = f.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	opts := validate.DefaultOptions()
+	opts.MinSamples = 1
+	opts.MinStackDepth = 1
+	opts.MinScore = 1.01
+	report, err := validate.ValidateFile(f.Name(), opts)
+	require.NoError(t, err)
+	assert.False(t, report.Valid)
+	require.NotEmpty(t, report.Errors)
+	assert.Contains(t, report.Errors[len(report.Errors)-1], "quality score too low")
+}

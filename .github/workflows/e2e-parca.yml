@@ -134,6 +134,26 @@ jobs:
             --min-duration 0 \
             /tmp/e2e-collected.pprof
 
+      # ── Same collection through the Action's parca-url path ──────────────────
+      # The Action's Parca branch once passed flags collect does not have and
+      # failed on every run; nothing exercised it until this step.
+      - name: Put pgoctl on PATH for the Action
+        run: echo /tmp >> "$GITHUB_PATH"
+
+      - id: action
+        name: Action with parca-url
+        uses: ./
+        with:
+          parca-url: http://localhost:7070
+          duration: '120'
+          validate-flags: '--min-samples 1 --min-score 0.0 --min-duration 0'
+          run-leverage-probe: 'false'
+          upload-artifact: 'false'
+          comment-on-pr: 'false'
+
+      - name: Assert the Action collected a profile
+        run: test -s "${{ steps.action.outputs.profile-path }}"
+
       # ── Artifacts ────────────────────────────────────────────────────────────
       - name: Upload collected profile
         if: always()

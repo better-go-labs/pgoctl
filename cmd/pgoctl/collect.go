@@ -22,7 +22,7 @@ func newCollectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "collect",
 		Short: "Collect a CPU pprof from a continuous profiling source",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			if source == "" {
 				return fmt.Errorf("--source is required")
 			}
@@ -33,6 +33,7 @@ func newCollectCmd() *cobra.Command {
 				Query:         query,
 				URL:           url,
 				Window:        window,
+				WindowSet:     cmd.Flags().Changed("window"),
 				Timeout:       timeout,
 				TimeoutBuffer: timeoutBuffer,
 				Out:           out,
@@ -63,8 +64,12 @@ func newCollectCmd() *cobra.Command {
 				return fmt.Errorf("write %s: %w", opts.Out, err)
 			}
 
-			_, _ = fmt.Fprintf(os.Stderr, "collected %d bytes → %s (source=%s, window=%s)\n",
-				result.SizeBytes, opts.Out, source, window)
+			span := fmt.Sprintf("window=%s", window)
+			if result.Source == collect.SourcePprof {
+				span = fmt.Sprintf("seconds=%d", result.Seconds)
+			}
+			_, _ = fmt.Fprintf(os.Stderr, "collected %d bytes → %s (source=%s, %s)\n",
+				result.SizeBytes, opts.Out, source, span)
 			return nil
 		},
 	}
@@ -73,7 +78,7 @@ func newCollectCmd() *cobra.Command {
 	cmd.Flags().StringVar(&parcaAddr, "parca-addr", "http://localhost:7070", "Parca server address")
 	cmd.Flags().StringVar(&query, "query", "process_cpu:cpu:nanoseconds:cpu:nanoseconds:delta", "Parca profile selector (required when source=parca)")
 	cmd.Flags().StringVar(&url, "url", "", "full URL for pprof HTTP endpoint (required when source=pprof)")
-	cmd.Flags().DurationVar(&window, "window", 5*time.Minute, "lookback window duration")
+	cmd.Flags().DurationVar(&window, "window", 5*time.Minute, "lookback window for parca; for pprof, overrides the URL's seconds only when given")
 	cmd.Flags().DurationVar(&timeout, "timeout", 0, "HTTP request timeout (default: derived from window)")
 	cmd.Flags().DurationVar(&timeoutBuffer, "timeout-buffer", 0, "buffer added to window when deriving HTTP timeout (default 30s)")
 	cmd.Flags().StringVar(&out, "out", "cpu.pprof", "output file path")
