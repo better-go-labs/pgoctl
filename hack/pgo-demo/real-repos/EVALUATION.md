@@ -412,8 +412,9 @@ Three improvements would tighten the signal:
    of the calling function in the profile. Decisions in functions with <1% CPU share
    should not count toward the HIGH threshold.
 
-2. **Asm-fraction detection:** if >30% of top-20 flat CPU samples are in `asm` functions,
-   add a warning that PGO cannot touch the hot path regardless of devirt count.
+2. **Asm-fraction detection:** check if >30% of top-20 flat CPU samples are in `asm`
+   functions. If so, add a warning that PGO cannot touch the hot path regardless of
+   devirt count.
    Identify asm functions by the absence of Go source lines in the profile.
 
 3. **Architecture-aware gate:** when reporting gate verdicts from CI, require the CPU

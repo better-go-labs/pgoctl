@@ -349,7 +349,7 @@ jobs:
             for run_file in /tmp/bench/run-*.md; do
               if [ -f "$run_file" ]; then
                 # Extract CPU from the HTML comment
-                cpu=$(grep -m1 '^<!-- run:' "$run_file" 2>/dev/null | sed 's/.*cpu: \([^|]*\).*/\1/' || echo "")
+                cpu=$(grep -m1 '^<!-- run:' "$run_file" 2>/dev/null | sed 's/.*cpu: \([^|]*\).*/\1/; s/^[[:space:]]*//; s/[[:space:]]*$//' || echo "")
                 if [ -n "$cpu" ]; then
                   run_id=$(basename "$run_file" | sed 's/run-//; s/\.md//')
                   # Add to map (CPU as key, accumulate runs)
@@ -363,7 +363,7 @@ jobs:
             done
 
             # Sort CPUs and output sections
-            for cpu in $(echo "${!cpu_runs[@]}" | tr ' ' '\n' | sort); do
+            printf '%s\n' "${!cpu_runs[@]}" | sort | while IFS= read -r cpu; do
               echo "## $cpu"
               echo ""
               # Compute cpu slug from cpu name (same logic as per-run step)
