@@ -96,15 +96,8 @@ func computePackageShares(p *profile.Profile) (map[string]float64, error) {
 		total += v
 		// Leaf function = Location[0] per pprof convention (innermost frame first).
 		// Location[0].Line[0] is the deepest inlined frame within that location.
-		for _, loc := range s.Location {
-			if loc == nil || len(loc.Line) == 0 {
-				continue
-			}
-			fn := loc.Line[0].Function
-			if fn != nil && fn.Name != "" {
-				funcTotal[fn.Name] += v
-				break
-			}
+		if name := leafFunction(s); name != "" {
+			funcTotal[name] += v
 		}
 	}
 
@@ -149,6 +142,43 @@ type Options struct {
 	WeightDepth        float64
 	RichnessFactor     float64
 	PackageShareGates  []PackageShareGate
+
+	// WorkloadSignal options. These are cheap "don't-bother" filters computed
+	// from the profile itself; none of them replace the A/B build+bench
+	// ground-truth, but they let pgoctl warn early when a profile is unlikely
+	// to produce a measurable PGO win.
+
+	// MinCPUBoundFraction: if > 0 and the computed fraction is below this value,
+	// a warning is emitted (not an error — IO/runtime-bound workloads may still
+	// benefit from other PGO effects).
+	MinCPUBoundFraction float64
+
+	// PeakednessTopN is the number of top functions used to compute cumulative
+	// CPU share (ProfilePeakedness). Default 10.
+	PeakednessTopN int
+
+	// MinPeakedness: if > 0, profiles whose top-N share is below this percent
+	// receive a warning (diffuse workloads are harder for PGO to optimise).
+	MinPeakedness float64
+
+	// CrossPackageHotThresholdPct is the per-function flat-CPU% threshold used
+	// to mark a function as "hot" when counting cross-package call boundaries.
+	// Default 0 (all functions count).
+	CrossPackageHotThresholdPct float64
+
+	// MinCrossPackageChainDensity: if > 0, profiles below this density receive a
+	// warning. Dense cross-package chains give PGO's devirt/inlining more work.
+	MinCrossPackageChainDensity float64
+
+	// ComputeWorkloadSignals enables all three workload-shape signals. When false
+	// (the default) the signals block is skipped and ValidateFile behaves as
+	// before this change.
+	ComputeWorkloadSignals bool
+
+	// DriftAgainstPath is an optional path to a reference CPU profile (.pb.gz or
+	// raw pprof). When non-empty and ComputeWorkloadSignals is true, ValidateFile
+	// computes drift_pct (TVD) between the current profile and the reference.
+	DriftAgainstPath string
 }
 
 // DefaultOptions returns Options with sensible defaults for production profiles.
@@ -279,6 +309,55 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 						gate.Prefix, combined, gate.MinPercent))
 				}
 			}
+		}
+	}
+
+	// Workload-shape signals (opt-in; never fail validation, only warn).
+	if opts.ComputeWorkloadSignals {
+		topN := opts.PeakednessTopN
+		if topN <= 0 {
+			topN = 10
+		}
+		ws := &profiletypes.WorkloadSignals{
+			CPUBoundFraction:         CPUBoundFraction(p),
+			Peakedness:               ProfilePeakedness(p, topN),
+			CrossPackageChainDensity: CrossPackageChainDensity(p, opts.CrossPackageHotThresholdPct),
+		}
+
+		if opts.DriftAgainstPath != "" {
+			refData, err := os.ReadFile(opts.DriftAgainstPath)
+			if err != nil {
+				report.Warnings = append(report.Warnings, fmt.Sprintf(
+					"drift_pct skipped: cannot read reference profile %s: %v",
+					opts.DriftAgainstPath, err))
+			} else {
+				refP, err := profile.ParseData(refData)
+				if err != nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf(
+						"drift_pct skipped: cannot parse reference profile %s: %v",
+						opts.DriftAgainstPath, err))
+				} else {
+					ws.DriftPct = ProfileDriftPct(p, refP)
+				}
+			}
+		}
+
+		report.WorkloadSignals = ws
+
+		if opts.MinCPUBoundFraction > 0 && ws.CPUBoundFraction < opts.MinCPUBoundFraction {
+			report.Warnings = append(report.Warnings, fmt.Sprintf(
+				"cpu_bound_fraction %.2f < %.2f: workload may be IO/runtime-bound; PGO win is uncertain",
+				ws.CPUBoundFraction, opts.MinCPUBoundFraction))
+		}
+		if opts.MinPeakedness > 0 && ws.Peakedness < opts.MinPeakedness {
+			report.Warnings = append(report.Warnings, fmt.Sprintf(
+				"peakedness (top-%d) %.1f%% < %.1f%%: diffuse workload; PGO inlining leverage is limited",
+				topN, ws.Peakedness, opts.MinPeakedness))
+		}
+		if opts.MinCrossPackageChainDensity > 0 && ws.CrossPackageChainDensity < opts.MinCrossPackageChainDensity {
+			report.Warnings = append(report.Warnings, fmt.Sprintf(
+				"cross_package_chain_density %.3f < %.3f: few cross-package hot chains; devirt/inlining targets are limited",
+				ws.CrossPackageChainDensity, opts.MinCrossPackageChainDensity))
 		}
 	}
 

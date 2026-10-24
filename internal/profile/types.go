@@ -17,13 +17,45 @@ type ProfileMeta struct {
 	SHA256       string        `json:"sha256"`
 }
 
+// WorkloadSignals holds workload-shape signals computed beyond the existing
+// devirt/inline-fire pre-check. CPUBoundFraction, Peakedness, and
+// CrossPackageChainDensity are always populated when ComputeWorkloadSignals is
+// enabled. DriftPct is only populated when a reference profile is supplied via
+// Options.DriftAgainstPath.
+type WorkloadSignals struct {
+	// CPUBoundFraction is the share (0–1) of on-CPU time attributed to
+	// user/library Go functions vs runtime, GC, scheduler, syscall, and IO.
+	// Higher values mean more optimisable code is on-CPU, making PGO more likely
+	// to move the needle.
+	CPUBoundFraction float64 `json:"cpu_bound_fraction"`
+
+	// Peakedness is the cumulative flat-CPU share of the top-N hottest
+	// functions (N configured by Options.PeakednessTopN, default 10).
+	// Higher values indicate a concentrated hot-path where inlining decisions
+	// have large leverage.
+	Peakedness float64 `json:"peakedness"`
+
+	// CrossPackageChainDensity is the CPU-weighted fraction (0–1) of sampled
+	// call-chains that contain at least one cross-package call boundary.
+	// Higher values mean PGO's cross-package inlining optimisations have more
+	// targets.
+	CrossPackageChainDensity float64 `json:"cross_package_chain_density"`
+
+	// DriftPct is the Total Variation Distance (TVD) between this profile's
+	// leaf-function distribution and a reference profile's. Range [0, 1]:
+	// 0 = identical hot-path; 1 = completely disjoint. Only populated when a
+	// reference profile is supplied via --drift-against.
+	DriftPct float64 `json:"drift_pct,omitempty"`
+}
+
 // QualityReport is the output of a pgoctl validate run.
 type QualityReport struct {
-	Valid         bool               `json:"valid"`
-	QualityScore  float64            `json:"quality_score"`
-	Samples       int64              `json:"samples"`
-	UniqueStacks  int64              `json:"unique_stacks"`
-	PackageShares map[string]float64 `json:"package_shares,omitempty"`
-	Errors        []string           `json:"errors,omitempty"`
-	Warnings      []string           `json:"warnings,omitempty"`
+	Valid           bool               `json:"valid"`
+	QualityScore    float64            `json:"quality_score"`
+	Samples         int64              `json:"samples"`
+	UniqueStacks    int64              `json:"unique_stacks"`
+	PackageShares   map[string]float64 `json:"package_shares,omitempty"`
+	WorkloadSignals *WorkloadSignals   `json:"workload_signals,omitempty"`
+	Errors          []string           `json:"errors,omitempty"`
+	Warnings        []string           `json:"warnings,omitempty"`
 }

@@ -237,6 +237,13 @@ pgoctl validate [flags] <path>
 | `--min-score` | `0.6` | Minimum quality score (0-1) |
 | `--min-package-share` | _(none)_ | Minimum combined flat CPU % for a package prefix (e.g. `tsdb:5`) |
 | `--json` | `false` | JSON output |
+| `--workload-signals` | `false` | Compute workload-shape signals (cpu-bound fraction, peakedness, cross-pkg chain density) |
+| `--min-cpu-bound-fraction` | `0` | Warn if CPU-bound fraction of on-CPU time is below this value (0–1, 0=disabled) |
+| `--peakedness-top-n` | `10` | Number of top functions for peakedness cumulative share |
+| `--min-peakedness` | `0` | Warn if top-N cumulative CPU% is below this value (0=disabled) |
+| `--cross-pkg-hot-threshold` | `0` | Per-function flat CPU% threshold to count as hot for cross-package chain density (0=all) |
+| `--min-cross-pkg-density` | `0` | Warn if cross-package chain density is below this value (0–1, 0=disabled) |
+| `--drift-against` | `""` | Path to a reference profile (.pb.gz or pprof); enables `drift_pct` (TVD) in workload signals (requires `--workload-signals`) |
 
 Exit codes: **0** = valid, **1** = below quality gate, **2** = input error.
 
@@ -378,6 +385,14 @@ min-score: 0.3
 min-package-share:
   - github.com/prometheus/prometheus/tsdb:5.0
   - github.com/prometheus/prometheus/promql:1.5
+# workload-shape signals
+workload-signals: true
+min-cpu-bound-fraction: 0.3
+peakedness-top-n: 10
+min-peakedness: 0
+cross-pkg-hot-threshold: 0
+min-cross-pkg-density: 0
+drift-against: ""
 ```
 
 ## Demo service
