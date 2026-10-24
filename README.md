@@ -20,20 +20,11 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/pipeline-dark.svg">
-    <img src="docs/images/pipeline-light.svg" width="100%" alt="pgoctl pipeline. Row one: a pprof endpoint, Parca or a file goes through pgoctl collect, then pgoctl validate, then pgoctl merge. Row two: pgoctl compare, then pgoctl leverage-check. HIGH or LOW leads to go build -pgo and a benchmark; NONE skips the benchmark. A dashed loop returns from the build to profiling again.">
+    <img src="docs/images/pipeline-light.svg" width="100%" alt="pgoctl pipeline in two rows. Prepare the profile: 1 pgoctl collect pulls a CPU profile from a pprof endpoint, Parca or a file into cpu.pprof; 2 pgoctl validate scores samples and stack coverage; 3 pgoctl merge folds it into the previous profile to make default.pgo. Decide: 4 pgoctl compare checks against the baseline whether the last PGO build helped, with promote, neutral or rollback; 5 pgoctl leverage-check diffs a -pgo build against a plain one and returns HIGH, LOW or NONE. HIGH or LOW leads to go build -pgo and a benchmark; NONE skips the benchmark. Deploy the PGO build, then profile it again; the next run's compare shows whether it helped.">
   </picture>
 </p>
 
-| Step | What it answers |
-|------|-----------------|
-| `collect` | Where does the CPU profile come from: a pprof endpoint, Parca or a file? |
-| `validate` | Is the profile good enough to build with? |
-| `merge` | What does the new profile look like, folded into the previous one? |
-| `compare` | Did the last PGO build help: promote, neutral or rollback? |
-| `leverage-check` | Will this profile change what the compiler does? |
-
-After you deploy the PGO build, profile it again. The next run's `compare` tells you whether the build helped.
-The GitHub Action runs the same steps in this order, with `explain` between `compare` and `leverage-check`.
+The GitHub Action runs these steps in the same order, with `pgoctl explain` between `compare` and `leverage-check`.
 
 ## Contents
 

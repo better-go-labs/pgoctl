@@ -1,40 +1,80 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="940" height="296" viewBox="0 0 940 296" role="img" aria-label="pgoctl pipeline">
-<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9198a1"/></marker><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4493f8"/></marker></defs>
-<rect width="940" height="296" fill="#0d1117"/>
-<text x="40" y="64" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" font-weight="600" letter-spacing="1.2" fill="#9198a1">1  GET AND PREPARE THE PROFILE</text>
-<rect x="40" y="74.0" width="200" height="44" rx="8" fill="#161b22" stroke="#6e7681" stroke-width="1.2"/>
-<text x="140.0" y="101" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#e6edf3">pprof / Parca / file</text>
-<rect x="288" y="74.0" width="150" height="44" rx="8" fill="#161b22" stroke="#6e7681" stroke-width="1.2"/>
-<text x="363.0" y="101" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#e6edf3">pgoctl collect</text>
-<rect x="534" y="74.0" width="158" height="44" rx="8" fill="#161b22" stroke="#6e7681" stroke-width="1.2"/>
-<text x="613.0" y="101" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#e6edf3">pgoctl validate</text>
-<rect x="740" y="74.0" width="133" height="44" rx="8" fill="#161b22" stroke="#6e7681" stroke-width="1.2"/>
-<text x="806.5" y="101" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#e6edf3">pgoctl merge</text>
-<path d="M240,96 L286,96" fill="none" stroke="#9198a1" stroke-width="1.6" marker-end="url(#a)"/>
-<path d="M438,96 L532,96" fill="none" stroke="#9198a1" stroke-width="1.6" marker-end="url(#a)"/>
-<rect x="447.6" y="71" width="76.8" height="18" rx="4" fill="#0d1117"/>
-<text x="486.0" y="84" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#9198a1">cpu.pprof</text>
-<path d="M692,96 L738,96" fill="none" stroke="#9198a1" stroke-width="1.6" marker-end="url(#a)"/>
-<text x="40" y="170" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" font-weight="600" letter-spacing="1.2" fill="#9198a1">2  DECIDE</text>
-<rect x="40" y="206.0" width="150" height="44" rx="8" fill="#161b22" stroke="#6e7681" stroke-width="1.2"/>
-<text x="115.0" y="233" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#e6edf3">pgoctl compare</text>
-<rect x="238" y="206.0" width="208" height="44" rx="8" fill="#0c2d6b" stroke="#4493f8" stroke-width="2"/>
-<text x="342.0" y="233" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#e6edf3">pgoctl leverage-check</text>
-<path d="M806.5,118.0 L806.5,166.0 L115.0,166.0 L115.0,204.0" fill="none" stroke="#9198a1" stroke-width="1.6" marker-end="url(#a)"/>
-<rect x="415.15" y="155.0" width="91.2" height="18" rx="4" fill="#0d1117"/>
-<text x="460.75" y="168.0" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#9198a1">default.pgo</text>
-<path d="M190,228 L236,228" fill="none" stroke="#9198a1" stroke-width="1.6" marker-end="url(#a)"/>
-<rect x="574" y="176.0" width="276" height="44" rx="8" fill="#161b22" stroke="#6e7681" stroke-width="1.2"/>
-<text x="712.0" y="203" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#e6edf3">go build -pgo, then benchmark</text>
-<rect x="574" y="236.0" width="183" height="44" rx="8" fill="#161b22" stroke="#6e7681" stroke-width="1.2"/>
-<text x="665.5" y="263" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#e6edf3">skip the benchmark</text>
-<path d="M446,228 L474,228 L474,198 L572,198" fill="none" stroke="#4493f8" stroke-width="1.6" marker-end="url(#b)"/>
-<path d="M474,228 L474,258 L572,258" fill="none" stroke="#9198a1" stroke-width="1.6" marker-end="url(#a)"/>
-<rect x="478.4" y="174" width="91.2" height="18" rx="4" fill="#0d1117"/>
-<text x="524.0" y="187" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#4493f8">HIGH or LOW</text>
-<rect x="503.6" y="234" width="40.8" height="18" rx="4" fill="#0d1117"/>
-<text x="524.0" y="247" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#9198a1">NONE</text>
-<path d="M850,198 L922,198 L922,22 L18,22 L18,96 L38,96" fill="none" stroke="#9198a1" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#a)"/>
-<rect x="334.4" y="11" width="271.2" height="18" rx="4" fill="#0d1117"/>
-<text x="470.0" y="24" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#9198a1">deploy the build, then profile again</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-label="pgoctl pipeline">
+<defs><marker id="m" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1,1 L9,5 L1,9" fill="none" stroke="#8b93a1" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="0.5" y="0.5" width="959" height="419" rx="8" fill="#0f1115" stroke="#262b34"/>
+<text x="24" y="30" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#8b93a1" text-anchor="start" letter-spacing="0.66">1  PREPARE THE PROFILE</text>
+<rect x="24.0" y="44" width="272.0" height="124" rx="8" fill="#171a20" stroke="#262b34" stroke-width="1"/>
+<circle cx="50.0" cy="70" r="11" fill="#1e222a" stroke="#262b34"/>
+<text x="50.0" y="74.5" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="600" fill="#8b93a1" text-anchor="middle">1</text>
+<text x="70.0" y="75" font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15" font-weight="500" fill="#e6e8ec"><tspan fill="#8b93a1">pgoctl </tspan>collect</text>
+<text x="40.0" y="102" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">Pull a CPU profile from a pprof</text>
+<text x="40.0" y="120" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">endpoint, Parca or a file.</text>
+<rect x="40.0" y="136" width="83.7" height="20" rx="4" fill="#1e222a" stroke="#262b34"/>
+<text x="49.0" y="150" font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b93a1" text-anchor="start">cpu.pprof</text>
+<rect x="344.0" y="44" width="272.0" height="124" rx="8" fill="#171a20" stroke="#262b34" stroke-width="1"/>
+<circle cx="370.0" cy="70" r="11" fill="#1e222a" stroke="#262b34"/>
+<text x="370.0" y="74.5" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="600" fill="#8b93a1" text-anchor="middle">2</text>
+<text x="390.0" y="75" font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15" font-weight="500" fill="#e6e8ec"><tspan fill="#8b93a1">pgoctl </tspan>validate</text>
+<text x="360.0" y="102" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">Score samples and stack coverage;</text>
+<text x="360.0" y="120" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">a thin profile fails here.</text>
+<rect x="360.0" y="136" width="112.89999999999999" height="20" rx="4" fill="#1e222a" stroke="#262b34"/>
+<text x="369.0" y="150" font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b93a1" text-anchor="start">quality score</text>
+<rect x="664.0" y="44" width="272.0" height="124" rx="8" fill="#171a20" stroke="#262b34" stroke-width="1"/>
+<circle cx="690.0" cy="70" r="11" fill="#1e222a" stroke="#262b34"/>
+<text x="690.0" y="74.5" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="600" fill="#8b93a1" text-anchor="middle">3</text>
+<text x="710.0" y="75" font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15" font-weight="500" fill="#e6e8ec"><tspan fill="#8b93a1">pgoctl </tspan>merge</text>
+<text x="680.0" y="102" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">Fold it into the previous profile</text>
+<text x="680.0" y="120" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">to make the PGO input.</text>
+<rect x="680.0" y="136" width="98.3" height="20" rx="4" fill="#1e222a" stroke="#262b34"/>
+<text x="689.0" y="150" font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#8b93a1" text-anchor="start">default.pgo</text>
+<path d="M306.0,106.0 L334.0,106.0" fill="none" stroke="#8b93a1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m)"/>
+<path d="M626.0,106.0 L654.0,106.0" fill="none" stroke="#8b93a1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m)"/>
+<text x="24" y="222" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#8b93a1" text-anchor="start" letter-spacing="0.66">2  DECIDE</text>
+<rect x="24.0" y="236" width="272.0" height="124" rx="8" fill="#171a20" stroke="#262b34" stroke-width="1"/>
+<circle cx="50.0" cy="262" r="11" fill="#1e222a" stroke="#262b34"/>
+<text x="50.0" y="266.5" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="600" fill="#8b93a1" text-anchor="middle">4</text>
+<text x="70.0" y="267" font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15" font-weight="500" fill="#e6e8ec"><tspan fill="#8b93a1">pgoctl </tspan>compare</text>
+<text x="40.0" y="294" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">Against the baseline: did the</text>
+<text x="40.0" y="312" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">last PGO build help?</text>
+<rect x="40.0" y="328" width="74.9" height="20" rx="10" fill="#15301f"/>
+<circle cx="51.0" cy="338" r="3" fill="#4fc47f"/>
+<text x="59.0" y="342" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#4fc47f" text-anchor="start">promote</text>
+<rect x="119.9" y="328" width="74.9" height="20" rx="10" fill="#262b34"/>
+<circle cx="130.9" cy="338" r="3" fill="#a0a7b4"/>
+<text x="138.9" y="342" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#a0a7b4" text-anchor="start">neutral</text>
+<rect x="199.8" y="328" width="81.60000000000001" height="20" rx="10" fill="#3a1a1a"/>
+<circle cx="210.8" cy="338" r="3" fill="#f07171"/>
+<text x="218.8" y="342" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#f07171" text-anchor="start">rollback</text>
+<rect x="344.0" y="236" width="272.0" height="124" rx="8" fill="#1b2440" stroke="#7b9bff" stroke-width="1.5"/>
+<circle cx="370.0" cy="262" r="11" fill="#7b9bff" stroke="#7b9bff"/>
+<text x="370.0" y="266.5" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="600" fill="#171a20" text-anchor="middle">5</text>
+<text x="390.0" y="267" font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15" font-weight="500" fill="#e6e8ec"><tspan fill="#8b93a1">pgoctl </tspan>leverage-check</text>
+<text x="360.0" y="294" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">Diff a -pgo build against a plain</text>
+<text x="360.0" y="312" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#8b93a1" text-anchor="start">one: will this profile help?</text>
+<rect x="360.0" y="328" width="60.4" height="20" rx="10" fill="#15301f"/>
+<circle cx="371.0" cy="338" r="3" fill="#4fc47f"/>
+<text x="379.0" y="342" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#4fc47f" text-anchor="start">HIGH</text>
+<rect x="425.4" y="328" width="52.3" height="20" rx="10" fill="#332a14"/>
+<circle cx="436.4" cy="338" r="3" fill="#e2b25a"/>
+<text x="444.4" y="342" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#e2b25a" text-anchor="start">LOW</text>
+<rect x="482.7" y="328" width="60.4" height="20" rx="10" fill="#262b34"/>
+<circle cx="493.7" cy="338" r="3" fill="#a0a7b4"/>
+<text x="501.7" y="342" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#a0a7b4" text-anchor="start">NONE</text>
+<path d="M306.0,298.0 L334.0,298.0" fill="none" stroke="#8b93a1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m)"/>
+<path d="M800.0,174 L800.0,186 Q800.0,194 792.0,194 L168.0,194 Q160.0,194 160.0,202 L160.0,226" fill="none" stroke="#8b93a1" stroke-width="1.4" stroke-linecap="round" marker-end="url(#m)"/>
+<rect x="664.0" y="236" width="272.0" height="56" rx="8" fill="#171a20" stroke="#262b34"/>
+<rect x="678.0" y="254.0" width="104.89999999999999" height="20" rx="10" fill="#15301f"/>
+<circle cx="689.0" cy="264.0" r="3" fill="#4fc47f"/>
+<text x="697.0" y="268.0" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#4fc47f" text-anchor="start">HIGH or LOW</text>
+<text x="794.9" y="260.0" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6e8ec" text-anchor="start">go build -pgo,</text>
+<text x="794.9" y="277.0" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6e8ec" text-anchor="start">then benchmark</text>
+<rect x="664.0" y="304" width="272.0" height="56" rx="8" fill="#171a20" stroke="#262b34"/>
+<rect x="678.0" y="322.0" width="60.4" height="20" rx="10" fill="#262b34"/>
+<circle cx="689.0" cy="332.0" r="3" fill="#a0a7b4"/>
+<text x="697.0" y="336.0" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#a0a7b4" text-anchor="start">NONE</text>
+<text x="750.4" y="336.5" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6e8ec" text-anchor="start">skip the benchmark</text>
+<path d="M622.0,298.0 L640.0,298.0 L640.0,264.0 L654.0,264.0" fill="none" stroke="#8b93a1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m)"/>
+<path d="M640.0,298.0 L640.0,332.0 L654.0,332.0" fill="none" stroke="#8b93a1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m)"/>
+<path d="M35.86,384.90 A6,6 0 1,1 28.14,384.90" fill="none" stroke="#7b9bff" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M28.29,388.96 L29.29,383.94 L24.17,384.06" fill="none" stroke="#7b9bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="48" y="394" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#8b93a1" text-anchor="start">Deploy the PGO build, then profile it again. The next run's compare shows whether it helped.</text>
 </svg>
