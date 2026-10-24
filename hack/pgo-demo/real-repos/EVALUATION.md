@@ -162,8 +162,8 @@ shows no credible benefit on any architecture.
 
 **The 3% gate is microarchitecture-dependent.** go-json is the clearest example: identical
 code, identical profile, identical binary. EPYC 7763 returns −3.66 to −6.02%
-(PROMOTE on all 4 runs), Xeon 8573C returns −1.52 to −2.06% (NEUTRAL, below 3%), and
-Xeon 8370C returns p=0.247 (not significant): three models, three verdicts. Any
+(PROMOTE on all 4 runs). Xeon 8573C returns −1.52 to −2.06% (NEUTRAL, below 3%).
+Xeon 8370C returns p=0.247 (not significant). Three models, three verdicts. Any
 single-run gate decision on go-json depends on which CPU GitHub assigns. A multi-run
 median stratified by CPU model is required before those verdicts are stable.
 
@@ -266,9 +266,9 @@ pgo_extra_inlines_deps: 598
 | Intel Xeon 8573C | −1.52, −2.06 | p=0.000 / p=0.002 | 2 | **NEUTRAL** (below 3%) | 39831653386, 39833287253 |
 | Intel Xeon 8370C | not significant | 0.247 | 1 | **NEUTRAL** | 39835718451 |
 
-go-json is the **clearest illustration that the 3% gate is microarchitecture-dependent:**
-identical code, identical profile, identical binary, three different gate verdicts
-(PROMOTE / NEUTRAL / not-significant) depending on which CPU GitHub assigns. Any
+go-json is the **clearest illustration that the 3% gate is microarchitecture-dependent.**
+Identical code, identical profile, and identical binary give three different gate verdicts.
+The verdict (PROMOTE / NEUTRAL / not-significant) depends on which CPU GitHub assigns. Any
 single-run gate decision on go-json is not reliable without knowing the CPU model.
 
 **Mechanism:** go-json uses a bytecode VM (`encoder/vm.Run`) for its hot path. The VM
@@ -385,8 +385,8 @@ Post-#55, snappy returns NONE (0 module-scoped devirts, 2 extra inlines). Correc
 
 ### Finding 4: PGO effect is near-perfectly reproducible within a CPU model
 
-Within a CPU model, run-to-run variance in the delta is tight: gjson EPYC 7763 spread
-0.30pp across 4 runs; gjson Xeon 8573C spread 0.27pp across 2 runs. This confirms the CI
+Within a CPU model, run-to-run variance in the delta is tight. gjson EPYC 7763 spread
+0.30pp across 4 runs. gjson Xeon 8573C spread 0.27pp across 2 runs. This confirms the CI
 harness is stable once CPU model is controlled. The apparent "noise" in multi-run
 summaries that do not stratify by CPU is almost entirely architecture signal.
 
