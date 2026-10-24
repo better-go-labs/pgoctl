@@ -1,5 +1,5 @@
 name: 'pgoctl-action'
-description: 'Check PGO leverage, then collect, validate, merge and compare PGO profiles for Go services'
+description: 'Collect, validate, merge and compare PGO profiles for Go services, then check PGO leverage'
 
 branding:
   icon: 'activity'
@@ -79,7 +79,7 @@ inputs:
     required: false
     default: '5'
   run-leverage-probe:
-    description: 'Run the PGO leverage check (two builds under -gcflags=all=-m=2) before the benchmark cycle. Emits leverage-verdict output. On by default; set to false to skip.'
+    description: 'Run the PGO leverage check on the merged default.pgo (two builds under -gcflags=all=-m=2) as the last analysis step, before any benchmark cycle. Emits leverage-verdict output. On by default; set to false to skip.'
     required: false
     default: 'true'
   leverage-probe-target:
@@ -230,65 +230,6 @@ runs:
           exit $exit_code
         fi
 
-    # ── PGO leverage check (early gate, on by default) ──────────────────
-    - name: PGO leverage probe
-      id: leverage
-      if: inputs.run-leverage-probe == 'true'
-      shell: bash
-      env:
-        LEVERAGE_TARGET: ${{ inputs.leverage-probe-target }}
-      run: |
-        set +e
-        echo "=== PGO leverage probe ==="
-        PKG="${LEVERAGE_TARGET:-./...}"
-
-        LEVERAGE_JSON="$RUNNER_TEMP/leverage.json"
-        LEVERAGE_STDERR="$RUNNER_TEMP/leverage.stderr"
-
-        pgoctl leverage-check --dir . --package "$PKG" --format json cpu.pprof \
-          > "$LEVERAGE_JSON" 2>"$LEVERAGE_STDERR"
-        LEVERAGE_STATUS=$?
-
-        if [ -s "$LEVERAGE_STDERR" ]; then
-          echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
-          if { [ $LEVERAGE_STATUS -ne 0 ] && [ $LEVERAGE_STATUS -ne 3 ]; }; then
-            HEAD_ERR=$(head -1 "$LEVERAGE_STDERR")
-            echo "::warning::leverage-check failed: $HEAD_ERR"
-          fi
-        fi
-        # devirt_sites in the JSON look like file.go:line:col: message, which the Go
-        # problem matcher registered by setup-go would flag as compiler errors in the
-        # Actions UI. Drop the matcher before echoing the JSON (no need to re-add it).
-        echo "::remove-matcher owner=go::"
-        cat "$LEVERAGE_JSON"
-
-        # exit 3 = NONE verdict (valid JSON); only fallback on real error (exit 1 or >3)
-        if { [ $LEVERAGE_STATUS -ne 0 ] && [ $LEVERAGE_STATUS -ne 3 ]; } || [ ! -s "$LEVERAGE_JSON" ]; then
-          printf '{"verdict":"INCOMPLETE","verdict_reason":"leverage-check failed; no build analysis available"}\n' > "$LEVERAGE_JSON"
-        fi
-
-        VERDICT=$(python3 -c "import json; d=json.load(open('$LEVERAGE_JSON')); print(d.get('verdict','INCOMPLETE'))" 2>/dev/null || echo "INCOMPLETE")
-        REASON=$(python3 -c "import json; d=json.load(open('$LEVERAGE_JSON')); print(d.get('verdict_reason',''))" 2>/dev/null || echo "")
-        SAMPLES=$(python3 -c "import json; d=json.load(open('$LEVERAGE_JSON')); print(d.get('total_samples',0))" 2>/dev/null || echo "0")
-        DEVIRT=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('devirt_decisions','-'))" 2>/dev/null || echo "-")
-        INLINES=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('pgo_extra_inlines','-'))" 2>/dev/null || echo "-")
-        DEVIRT_DEPS=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('pgo_devirts_deps','-'))" 2>/dev/null || echo "-")
-        INLINES_DEPS=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('pgo_extra_inlines_deps','-'))" 2>/dev/null || echo "-")
-
-        echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
-
-        {
-          echo "### PGO Leverage: \`${VERDICT}\`"
-          echo ""
-          echo "> Samples: ${SAMPLES} | Devirt decisions: ${DEVIRT} | Devirt deps: ${DEVIRT_DEPS} | Extra inlines: ${INLINES} | Inlines deps: ${INLINES_DEPS}"
-          [ -n "$REASON" ] && echo "" && echo "$REASON"
-        } >> "$GITHUB_STEP_SUMMARY"
-
-        if [ "$VERDICT" = "NONE" ]; then
-          echo "::warning::PGO-leverage = NONE: no codegen lever found. Consider skipping the full benchmark cycle."
-        fi
-        set -e
-
     # ── restore previous artifact (for steady-state accumulation) ────
     - name: Restore previous artifact
       id: restore-artifact
@@ -397,6 +338,69 @@ runs:
           echo "verdict-reason=$reason" >> "$GITHUB_OUTPUT"
           echo "duration-sec=$duration" >> "$GITHUB_OUTPUT"
         fi
+
+    # ── PGO leverage check (last analysis step, on by default) ────────
+    # Runs on the merged default.pgo, the profile a -pgo build will use,
+    # so it needs merge to have run first.
+    - name: PGO leverage check
+      id: leverage
+      # Still report a verdict when compare or explain errored, as long as
+      # default.pgo exists.
+      if: ${{ !cancelled() && steps.merge.outcome == 'success' && inputs.run-leverage-probe == 'true' }}
+      shell: bash
+      env:
+        LEVERAGE_TARGET: ${{ inputs.leverage-probe-target }}
+      run: |
+        set +e
+        echo "=== PGO leverage probe ==="
+        PKG="${LEVERAGE_TARGET:-./...}"
+
+        LEVERAGE_JSON="$RUNNER_TEMP/leverage.json"
+        LEVERAGE_STDERR="$RUNNER_TEMP/leverage.stderr"
+
+        pgoctl leverage-check --dir . --package "$PKG" --format json default.pgo \
+          > "$LEVERAGE_JSON" 2>"$LEVERAGE_STDERR"
+        LEVERAGE_STATUS=$?
+
+        if [ -s "$LEVERAGE_STDERR" ]; then
+          echo "=== leverage-check stderr ===" && cat "$LEVERAGE_STDERR"
+          if { [ $LEVERAGE_STATUS -ne 0 ] && [ $LEVERAGE_STATUS -ne 3 ]; }; then
+            HEAD_ERR=$(head -1 "$LEVERAGE_STDERR")
+            echo "::warning::leverage-check failed: $HEAD_ERR"
+          fi
+        fi
+        # devirt_sites in the JSON look like file.go:line:col: message, which the Go
+        # problem matcher registered by setup-go would flag as compiler errors in the
+        # Actions UI. Drop the matcher before echoing the JSON (no need to re-add it).
+        echo "::remove-matcher owner=go::"
+        cat "$LEVERAGE_JSON"
+
+        # exit 3 = NONE verdict (valid JSON); only fallback on real error (exit 1 or >3)
+        if { [ $LEVERAGE_STATUS -ne 0 ] && [ $LEVERAGE_STATUS -ne 3 ]; } || [ ! -s "$LEVERAGE_JSON" ]; then
+          printf '{"verdict":"INCOMPLETE","verdict_reason":"leverage-check failed; no build analysis available"}\n' > "$LEVERAGE_JSON"
+        fi
+
+        VERDICT=$(python3 -c "import json; d=json.load(open('$LEVERAGE_JSON')); print(d.get('verdict','INCOMPLETE'))" 2>/dev/null || echo "INCOMPLETE")
+        REASON=$(python3 -c "import json; d=json.load(open('$LEVERAGE_JSON')); print(d.get('verdict_reason',''))" 2>/dev/null || echo "")
+        SAMPLES=$(python3 -c "import json; d=json.load(open('$LEVERAGE_JSON')); print(d.get('total_samples',0))" 2>/dev/null || echo "0")
+        DEVIRT=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('devirt_decisions','-'))" 2>/dev/null || echo "-")
+        INLINES=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('pgo_extra_inlines','-'))" 2>/dev/null || echo "-")
+        DEVIRT_DEPS=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('pgo_devirts_deps','-'))" 2>/dev/null || echo "-")
+        INLINES_DEPS=$(python3 -c "import json; ba=json.load(open('$LEVERAGE_JSON')).get('build_analysis') or {}; print(ba.get('pgo_extra_inlines_deps','-'))" 2>/dev/null || echo "-")
+
+        echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### PGO Leverage: \`${VERDICT}\`"
+          echo ""
+          echo "> Samples: ${SAMPLES} | Devirt decisions: ${DEVIRT} | Devirt deps: ${DEVIRT_DEPS} | Extra inlines: ${INLINES} | Inlines deps: ${INLINES_DEPS}"
+          [ -n "$REASON" ] && echo "" && echo "$REASON"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$VERDICT" = "NONE" ]; then
+          echo "::warning::PGO-leverage = NONE: no codegen lever found. Consider skipping the full benchmark cycle."
+        fi
+        set -e
 
     # ── upload artifact ───────────────────────────────────────
     - name: Upload PGO artifact
