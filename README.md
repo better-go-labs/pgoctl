@@ -18,16 +18,26 @@
 ## Pipeline
 
 ```mermaid
-flowchart TD
-    A["Profile Source\n(pprof / Parca / file)"] --> B["pgoctl collect"]
-    B --> C["cpu.pprof"]
-    C --> D["go build -pgo"]
-    D --> E["pgoctl compare"]
-    E --> F{"Verdict"}
-    F -->|improve| G["✅ Promote"]
-    F -->|neutral| H["➡️ Keep"]
-    F -->|regress| I["🔴 Rollback"]
+flowchart LR
+    subgraph S1["1. Get a profile"]
+        direction TB
+        SRC["pprof endpoint,<br/>Parca or a file"] --> COL["pgoctl collect"] --> CPU["cpu.pprof"]
+    end
+    subgraph S2["2. Build the PGO input"]
+        direction TB
+        VAL["pgoctl validate<br/>quality gate"] --> MRG["pgoctl merge<br/>with the previous profile"] --> PGO["default.pgo"]
+    end
+    subgraph S3["3. Decide"]
+        direction TB
+        CMP["pgoctl compare<br/>did the last PGO build help?"] --> LEV{"pgoctl leverage-check<br/>will this profile help?"}
+        LEV -->|HIGH or LOW| BLD["go build -pgo=default.pgo<br/>then benchmark"]
+        LEV -->|NONE| SKIP["skip the benchmark"]
+    end
+    S1 --> S2 --> S3
+    S3 -.->|deploy, then profile again| S1
 ```
+
+`pgoctl compare` returns promote, neutral or rollback for the new profile against a baseline. The GitHub Action runs the steps in this order: collect, validate, merge, compare, explain, leverage-check.
 
 ## Contents
 
