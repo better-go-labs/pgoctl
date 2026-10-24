@@ -19,25 +19,25 @@
 
 ```mermaid
 flowchart LR
-    subgraph S1["1. Get a profile"]
-        direction TB
-        SRC["pprof endpoint,<br/>Parca or a file"] --> COL["pgoctl collect"] --> CPU["cpu.pprof"]
-    end
-    subgraph S2["2. Build the PGO input"]
-        direction TB
-        VAL["pgoctl validate<br/>quality gate"] --> MRG["pgoctl merge<br/>with the previous profile"] --> PGO["default.pgo"]
-    end
-    subgraph S3["3. Decide"]
-        direction TB
-        CMP["pgoctl compare<br/>did the last PGO build help?"] --> LEV{"pgoctl leverage-check<br/>will this profile help?"}
-        LEV -->|HIGH or LOW| BLD["go build -pgo=default.pgo<br/>then benchmark"]
-        LEV -->|NONE| SKIP["skip the benchmark"]
-    end
-    S1 --> S2 --> S3
-    S3 -.->|deploy, then profile again| S1
+    SRC[Profile source] --> COL[pgoctl collect]
+    COL -->|cpu.pprof| VAL[pgoctl validate]
+    VAL --> MRG[pgoctl merge]
+    MRG -->|default.pgo| CMP[pgoctl compare]
+    CMP --> LEV{pgoctl leverage-check}
+    LEV -->|HIGH or LOW| BLD[go build -pgo]
+    LEV -->|NONE| SKIP[Skip the benchmark]
 ```
 
-`pgoctl compare` returns promote, neutral or rollback for the new profile against a baseline. The GitHub Action runs the steps in this order: collect, validate, merge, compare, explain, leverage-check.
+| Step | What it answers |
+|------|-----------------|
+| `collect` | Where does the CPU profile come from: a pprof endpoint, Parca or a file? |
+| `validate` | Is the profile good enough to build with? |
+| `merge` | What does the new profile look like, folded into the previous one? |
+| `compare` | Did the last PGO build help: promote, neutral or rollback? |
+| `leverage-check` | Will this profile change what the compiler does? |
+
+After you deploy the PGO build, profile it again. The next run's `compare` tells you whether the build helped.
+The GitHub Action runs the same steps in this order, with `explain` between `compare` and `leverage-check`.
 
 ## Contents
 
@@ -300,8 +300,8 @@ large module. `--dir` must be the module root, the directory that holds `go.mod`
 
 | Verdict | Meaning |
 |---------|---------|
-| `NONE` | No module-scoped devirtualizations and fewer than 5 extra inlines; PGO has nothing to act on |
-| `LOW` | 1-4 devirt decisions or 5-29 extra inlines; modest gains possible |
+| `NONE` | No module-scoped devirtualizations and fewer than 5 module-scoped extra inlines; too few PGO decisions for a measurable gain |
+| `LOW` | 1-4 devirt decisions or 5-29 extra inlines, all module-scoped; modest gains possible |
 | `HIGH` | 5 or more devirt decisions, or 30 or more extra inlines; run a full benchmark cycle |
 | `INCOMPLETE` | No `--dir` given, so no build analysis |
 
