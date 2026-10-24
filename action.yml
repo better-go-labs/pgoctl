@@ -1,5 +1,5 @@
 name: 'pgoctl-action'
-description: 'Collect, validate, merge, and compare PGO profiles for Go services'
+description: 'Collect, validate, merge and compare PGO profiles for Go services, with an optional PGO leverage pre-check'
 
 branding:
   icon: 'activity'

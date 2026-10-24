@@ -1,6 +1,5 @@
 # pgoctl
 
-<!-- Badges activate on public launch. pkg.go.dev, Codecov, and Latest Release resolve once the repo is public and v0.1.0-alpha is published. -->
 <p align="center">
   <a href="https://github.com/better-go-labs/pgoctl/actions/workflows/build.yml"><img src="https://github.com/better-go-labs/pgoctl/actions/workflows/build.yml/badge.svg?branch=main" alt="Build"></a>
   <a href="https://github.com/better-go-labs/pgoctl/actions/workflows/golangci-lint.yml"><img src="https://github.com/better-go-labs/pgoctl/actions/workflows/golangci-lint.yml/badge.svg?branch=main" alt="golangci-lint"></a>
@@ -125,8 +124,7 @@ To gate on it, add an explicit assertion as shown above.
 
 ### GitHub Action (CI integration)
 
-> The Action is currently in this repo and used internally. Once the repo is public it will be
-> referenceable as `better-go-labs/pgoctl@v0.1.4`.
+> Reference the Action from any repository as `better-go-labs/pgoctl@v0.1.4`.
 
 From a pre-collected pprof file (skips collect):
 
@@ -303,10 +301,9 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 
 ## GitHub Action
 
-`action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI: collect (or reuse an existing profile), validate, and compare against a baseline, then optionally uploads the artifact and posts a verdict comment on the PR.
+`action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI: collect (or reuse an existing profile), validate, optionally check PGO leverage, and compare against a baseline, then optionally uploads the artifact and posts a verdict comment on the PR.
 
-> Currently for use within this repo (`./`). Once published publicly,
-> the reference will be `better-go-labs/pgoctl@v0.1.4`.
+> Use it from any repository as `better-go-labs/pgoctl@v0.1.4`, or as `./` inside this repository.
 
 ### Inputs
 
