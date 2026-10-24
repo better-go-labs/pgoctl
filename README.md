@@ -17,16 +17,12 @@
 
 ## Pipeline
 
-```mermaid
-flowchart LR
-    SRC[Profile source] --> COL[pgoctl collect]
-    COL -->|cpu.pprof| VAL[pgoctl validate]
-    VAL --> MRG[pgoctl merge]
-    MRG -->|default.pgo| CMP[pgoctl compare]
-    CMP --> LEV{pgoctl leverage-check}
-    LEV -->|HIGH or LOW| BLD[go build -pgo]
-    LEV -->|NONE| SKIP[Skip the benchmark]
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/pipeline-dark.svg">
+    <img src="docs/images/pipeline-light.svg" width="100%" alt="pgoctl pipeline. Row one: a pprof endpoint, Parca or a file goes through pgoctl collect, then pgoctl validate, then pgoctl merge. Row two: pgoctl compare, then pgoctl leverage-check. HIGH or LOW leads to go build -pgo and a benchmark; NONE skips the benchmark. A dashed loop returns from the build to profiling again.">
+  </picture>
+</p>
 
 | Step | What it answers |
 |------|-----------------|
@@ -452,6 +448,7 @@ scripts/
   kind-prometheus.sh  -- provision kind cluster + kube-prometheus-stack
   smoke.sh            -- e2e smoke test (no external service required)
 testdata/             -- captured .pprof files (LFS)
+docs/images/          -- README diagrams and pipeline.py, which regenerates them
 demo.sh               -- interactive happy-path demo
 ```
 
