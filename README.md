@@ -156,7 +156,9 @@ pgoctl merge cpu.pprof --out default.pgo
 | `--source` | _(required)_ | Profiling backend: `parca` or `pprof` |
 | `--url` | _(required when source=pprof)_ | Full URL of the pprof HTTP endpoint |
 | `--out` | `cpu.pprof` | Output file path |
-| `--timeout` | _(source-specific)_ | HTTP request timeout |
+| `--window` | _(unset)_ | Profile duration. When given, it replaces the URL's `seconds`; otherwise the URL's `seconds` is used, or the endpoint's default (30s for Go) |
+| `--timeout` | _(derived)_ | HTTP request timeout; by default the profile duration plus `--timeout-buffer`, at least 120s |
+| `--timeout-buffer` | `30s` | Added to the profile duration when deriving `--timeout` |
 
 The endpoint is `GET /debug/pprof/profile?seconds=<N>`, standard on any Go binary that imports `net/http/pprof`. The standalone `cmd/baseline` collector wraps this for Prometheus (`make collect-baseline`).
 
@@ -173,10 +175,10 @@ pgoctl collect --source=parca \
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--source` | _(required)_ | Profiling backend: `parca` or `pprof` |
-| `--parca-addr` | _(required when source=parca)_ | Base URL of the Parca server (e.g. `http://localhost:7070`) |
+| `--parca-addr` | `http://localhost:7070` | Base URL of the Parca server |
 | `--query` | `process_cpu:cpu:nanoseconds:cpu:nanoseconds:delta` | Parca label selector |
 | `--window` | `5m` | Time window for the merged profile (e.g. `5m`, `1h`) |
-| `--out` | `cpu.pprof` | Output path (`-` for stdout) |
+| `--out` | `cpu.pprof` | Output file path |
 
 Calls `POST /parca.query.v1alpha1.QueryService/MergeProfile`, decodes the base64 pprof response, and validates it before writing. No extra Go dependencies.
 
@@ -216,7 +218,7 @@ pgoctl merge [flags] <profile...>
 |------|---------|-------------|
 | `--strategy` | `weighted` | Merge strategy: `weighted`, `latest`, `union` |
 | `--min-weight` | `0.125` | Minimum scale factor for very-old profiles (weighted strategy) |
-| `--recency-weight` | `2.0` | Deprecated; must be positive. Has no effect on output - use `--min-weight` instead |
+| `--recency-weight` | `2.0` | Deprecated and hidden from `--help`. Still accepted (must be positive) but has no effect; use `--min-weight` |
 | `--half-life` | `24.0` | Recency decay half-life in hours |
 | `--drop-invalid` | `false` | Skip unparseable profiles instead of failing |
 | `--out` | `default.pgo` | Output path (`-` for stdout) |
@@ -256,8 +258,8 @@ pgoctl compare [flags] <baseline.pprof> <candidate.pprof>
 |------|---------|-------------|
 | `--min-improvement` | `3.0` | Min CPU delta % to promote |
 | `--min-regression` | `3.0` | Min CPU regression % to rollback |
-| `--min-cpu-percent` | `0.0` | Drop functions below this CPU % in both profiles |
-| `--top` | `10` | Number of function deltas to show |
+| `--min-cpu-percent` | `1.0` | Drop functions below this CPU % in both profiles (`0` disables) |
+| `--top` | `10` | Number of function deltas to show, ranked by CPU share moved in percentage points |
 | `--json` | `false` | JSON output |
 
 Verdict: **promote** (improvement >= threshold), **rollback** (regression >= threshold), or **neutral**.
@@ -406,7 +408,7 @@ The demo uses **Prometheus** (pure Go, pprof-enabled by default, widely deployed
 
 ## Benchmarks and evaluation
 
-The `pgo-bench-real-repos` CI workflow benchmarks five open-source Go libraries. It records per-run results under version control.
+The `pgo-bench-real-repos` CI workflow benchmarks five open-source Go libraries and renders a result file per run. A person commits the runs worth keeping after reviewing them.
 
 - [Benchmark methodology](benchmarks/README.md): how the harness runs and how to read a result row.
 - [Benchmark results index](benchmarks/results/index.md): all runs grouped by CPU model.
@@ -427,20 +429,31 @@ The `pgo-bench-real-repos` CI workflow benchmarks five open-source Go libraries.
 
 ```
 cmd/
-  pgoctl/     -- CLI entry point (validate/merge/compare/explain/collect)
-  baseline/   -- standalone pprof collector for dev/baseline capture
+  pgoctl/               -- CLI entry point (collect/validate/merge/explain/compare/leverage-check)
+  baseline/             -- standalone pprof collector for dev/baseline capture
 internal/
-  collect/    -- pprof and Parca HTTP adapters, source interface
-  compare/    -- profile comparison and gate logic
-  explain/    -- flat CPU attribution, package grouping, PGO verdict
-  merge/      -- weighted profile merge strategies
-  validate/   -- quality scoring, package-share gates
+  collect/              -- pprof and Parca HTTP adapters, source interface
+  compare/              -- profile comparison and gate logic
+  errors/               -- sentinel errors shared by the internal packages
+  explain/              -- flat CPU attribution, package grouping, PGO verdict
+  leverage/             -- PGO build-vs-baseline diff, devirt and inline counting, verdict
+  merge/                -- weighted profile merge strategies
+  pprofutil/            -- small helpers shared by the profile analyzers
+  profile/              -- shared types for profile metadata and quality reports
+  validate/             -- quality scoring, package-share gates
+hack/
+  loadgen/              -- load generator for the demo and e2e workflows
+  pgo-demo/             -- controlled demo services and the oss-repos evaluation
 scripts/
-  kind-prometheus.sh  -- provision kind cluster + kube-prometheus-stack
-  smoke.sh            -- e2e smoke test (no external service required)
-testdata/             -- captured .pprof files (LFS)
-docs/images/          -- README diagrams and pipeline.py, which regenerates them
-demo.sh               -- interactive happy-path demo
+  kind-prometheus.sh    -- provision kind cluster + kube-prometheus-stack
+  smoke.sh              -- e2e smoke test (no external service required)
+  capture-pgoctl-profile.sh -- record a CPU profile of pgoctl itself
+  pgo-leverage/         -- positive-control module for the leverage probe workflow
+benchmarks/             -- benchmark methodology and per-run result files
+testdata/               -- captured .pprof files (LFS)
+docs/images/            -- README diagrams and pipeline.py, which regenerates them
+demo.sh                 -- interactive happy-path demo
+action.yml              -- composite GitHub Action wrapping the pipeline
 ```
 
 ## Status
