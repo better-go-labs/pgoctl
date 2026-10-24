@@ -58,7 +58,7 @@ type GateConfig struct {
 
 // DefaultGateConfig returns a GateConfig with sensible default thresholds.
 func DefaultGateConfig() GateConfig {
-	return GateConfig{MinCPUImprovement: 3.0, MinCPURegression: 10.0, TopN: 10}
+	return GateConfig{MinCPUImprovement: 3.0, MinCPURegression: 3.0, MinCPUPercent: 1.0, TopN: 10}
 }
 
 // ProfileFiles loads two pprof files and compares CPU function attribution.
@@ -135,8 +135,15 @@ func compareProfiles(base, cand *profile.Profile, gate GateConfig) *Report {
 		}
 	}
 
+	// Rank by CPU share moved, in percentage points. Ranking by relative
+	// delta put near-zero functions first (0.01% to 0.05% reads as +400%).
 	sort.Slice(deltas, func(i, j int) bool {
-		return math.Abs(deltas[i].DeltaPct) > math.Abs(deltas[j].DeltaPct)
+		mi := math.Abs(deltas[i].CandPct - deltas[i].BasePct)
+		mj := math.Abs(deltas[j].CandPct - deltas[j].BasePct)
+		if mi != mj {
+			return mi > mj
+		}
+		return deltas[i].Function < deltas[j].Function
 	})
 
 	top := gate.TopN

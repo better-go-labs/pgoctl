@@ -165,12 +165,10 @@ func TestCompare_MinCPUPercentFilter(t *testing.T) {
 	}
 }
 
-func TestCompare_NoFilterByDefault(t *testing.T) {
-	// Default GateConfig has MinCPUPercent=0 → no filtering: coldFn stays in
-	// the comparison. All three functions are present in both profiles, so:
-	//   summaryNum = (51−60) + (34−30) + (15−10) = −9 + 4 + 5 = 0
-	//   summaryDen = 60 + 30 + 10 = 100
-	//   summary = 0 (gains and regressions cancel across the full 100% share)
+func TestCompare_DefaultFilterKeepsFunctionsAboveOnePercent(t *testing.T) {
+	// The default MinCPUPercent is 1, so a function at 10% stays in. All three
+	// functions are present in both profiles, so:
+	//   summaryNum = (51-60) + (34-30) + (15-10) = 0, summary = 0
 	base := buildFnProfile(t, map[string]int{"main.hotFn": 600, "main.warmFn": 300, "main.coldFn": 100})
 	cand := buildFnProfile(t, map[string]int{"main.hotFn": 510, "main.warmFn": 340, "main.coldFn": 150})
 
@@ -179,7 +177,7 @@ func TestCompare_NoFilterByDefault(t *testing.T) {
 		t.Fatalf("compare: %v", err)
 	}
 	if rpt.FilteredFunctions != 0 {
-		t.Errorf("default behaviour must not filter, got %d filtered", rpt.FilteredFunctions)
+		t.Errorf("no function is under 1%%, got %d filtered", rpt.FilteredFunctions)
 	}
 	found := false
 	for _, d := range rpt.TopDeltas {
@@ -188,11 +186,53 @@ func TestCompare_NoFilterByDefault(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("coldFn should be present when filtering is disabled")
+		t.Error("coldFn at 10% should survive the default 1% filter")
 	}
-	// All three functions present in both profiles → summaryNum = Σ(b−c) = 0
 	if math.Abs(rpt.SummaryCPUDelta) > 0.01 {
-		t.Errorf("expected summary delta ~0 without filter, got %.2f", rpt.SummaryCPUDelta)
+		t.Errorf("expected summary delta ~0, got %.2f", rpt.SummaryCPUDelta)
+	}
+}
+
+// A function under 1% in both profiles is noise for a PGO decision and is
+// dropped by default.
+func TestCompare_DefaultFilterDropsSubPercentFunctions(t *testing.T) {
+	base := buildFnProfile(t, map[string]int{"main.hot": 995, "main.tiny": 5})
+	cand := buildFnProfile(t, map[string]int{"main.hot": 991, "main.tiny": 9})
+	rpt, err := compare.Profiles(base, cand, compare.DefaultGateConfig())
+	if err != nil {
+		t.Fatalf("compare: %v", err)
+	}
+	if rpt.FilteredFunctions != 1 {
+		t.Fatalf("expected main.tiny filtered by the 1%% default, got %d filtered", rpt.FilteredFunctions)
+	}
+	for _, d := range rpt.TopDeltas {
+		if d.Function == "main.tiny" {
+			t.Error("main.tiny (0.5% to 0.9%) should not be reported")
+		}
+	}
+}
+
+// Ranking by percentage points puts the function that moved the most CPU
+// first, not the one with the largest relative change on a tiny base.
+func TestCompare_TopDeltasRankedBySharePoints(t *testing.T) {
+	// big: 50% to 45% (-10% relative, 5 points). small: 2% to 6% (+200%, 4 points).
+	base := buildFnProfile(t, map[string]int{"main.big": 500, "main.small": 20, "main.rest": 480})
+	cand := buildFnProfile(t, map[string]int{"main.big": 450, "main.small": 60, "main.rest": 490})
+	gate := compare.DefaultGateConfig()
+	gate.MinCPUPercent = 0
+	rpt, err := compare.Profiles(base, cand, gate)
+	if err != nil {
+		t.Fatalf("compare: %v", err)
+	}
+	if len(rpt.TopDeltas) < 2 || rpt.TopDeltas[0].Function != "main.big" || rpt.TopDeltas[1].Function != "main.small" {
+		t.Fatalf("want main.big then main.small, got %+v", rpt.TopDeltas)
+	}
+}
+
+func TestDefaultGateConfig(t *testing.T) {
+	g := compare.DefaultGateConfig()
+	if g.MinCPUImprovement != 3 || g.MinCPURegression != 3 || g.MinCPUPercent != 1 || g.TopN != 10 {
+		t.Errorf("unexpected defaults: %+v", g)
 	}
 }
 
