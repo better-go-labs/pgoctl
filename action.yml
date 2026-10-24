@@ -158,10 +158,11 @@ runs:
               echo "::warning::Release download failed for ${VERSION}; falling back to build from source"
             fi
           fi
-          # Fallback: build from source
+          # Fallback: build from the action's own checkout, not the caller's
+          # workspace, so repos that use this action by tag get a binary too.
           if [[ "$INSTALLED" != "true" ]]; then
-            echo "Building pgoctl from source..."
-            go build -o /tmp/pgoctl ./cmd/pgoctl
+            echo "Building pgoctl from source at ${GITHUB_ACTION_PATH}..."
+            go build -C "${GITHUB_ACTION_PATH}" -o /tmp/pgoctl ./cmd/pgoctl
             echo /tmp >> "$GITHUB_PATH"
           fi
         fi
