@@ -1,6 +1,6 @@
 # Benchmark Results Index
 
-_Generated from CI artifacts. Do not edit by hand — add runs by committing the generated per-run files._
+_Generated from CI artifacts. Do not edit by hand. Add runs by committing the generated per-run files._
 
 ## AMD EPYC 7763 64-Core Processor
 

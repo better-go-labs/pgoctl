@@ -139,7 +139,7 @@ leverage-check output (full analysis):
 ```
 
 **Interpretation:**  
-snappy.decode dominates at 25.4% of CPU time yet generates zero module-scoped devirt decisions. The tight encode/decode loops are already monomorphic and well-optimized. While 2 extra inlines occur in the module (and 799 in deps from reflection machinery), the NONE verdict correctly reflects that snappy's hot path cannot benefit from PGO's devirtualization or call-site guidance.
+snappy.decode dominates at 25.4% of CPU time yet generates zero module-scoped devirt decisions. The tight encode/decode loops are already monomorphic and well-optimized. The module has 2 extra inlines (799 in deps from reflection machinery). The NONE verdict correctly reflects that snappy's hot path cannot benefit from PGO devirtualization or call-site guidance.
 
 **Lesson:** Pure compression algorithms with assembly-free tight loops resist PGO, even at high CPU concentration.
 
@@ -224,7 +224,7 @@ The new `pgo_extra_inlines_deps` and `pgo_devirts_deps` fields distinguish libra
 
 2. **Profile exact production versions:** fasthttp's v1.57.0 vs v1.74.0 shows that version mismatches invalidate predictions.
 
-3. **Interpret module vs deps separately:** A library with HIGH verdict but 0 module devirt (e.g., gjson, fasthttp) benefits from inlining guidance; one with high module devirt (goldmark) benefits from both devirt and inlining.
+3. **Interpret module vs deps separately:** A library with HIGH verdict but 0 module devirt (e.g., gjson, fasthttp) benefits from inlining guidance. A library with high module devirt (goldmark) benefits from both devirt and inlining.
 
 4. **Don't assume domain = PGO benefit:** Even high-CPU libraries (snappy at 25%) can be NONE if the hot path is monomorphic.
 

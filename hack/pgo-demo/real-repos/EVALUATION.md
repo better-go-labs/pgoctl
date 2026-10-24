@@ -9,7 +9,7 @@
 > The manual-VM v3 numbers (n=5, `±∞` CI, unlogged 2-vCPU Skylake VM) are retired as
 > evidence; they cannot reliably detect the 2–7% PGO gains at issue.
 >
-> **Key finding:** PGO effect is per-exact-CPU-model — tight within a model,
+> **Key finding:** PGO effect is per exact CPU model: tight within a model,
 > large gaps between models. Always report the CPU model alongside any delta;
 > never average deltas across CPU models.
 
@@ -43,13 +43,13 @@ go test -bench=<BenchmarkName> -run=^$ -count=1 -benchtime=10s -cpuprofile=profi
 
 Two invocation modes:
 
-1. **Static only** — profile analysis without build:
+1. **Static only** (profile analysis without build):
    ```
    pgoctl leverage-check profile.pprof
    ```
    Returns `INCOMPLETE` (no devirt count without `--dir`).
 
-2. **Full analysis** — with `--dir` pointing to the library's own module directory:
+2. **Full analysis** (with `--dir` pointing to the library's own module directory):
    ```
    pgoctl leverage-check profile.pprof --dir $(go env GOMODCACHE)/<library@version> --json
    ```
@@ -96,7 +96,7 @@ application hot path.
 
 ---
 
-### Real Open-Source Libraries — Leverage-Check Predictions
+### Real Open-Source Libraries: Leverage-Check Predictions
 
 | Repository | Category | Prediction | Devirt (mod) | Devirt (deps) | Extra Inlines (mod) | Extra Inlines (deps) |
 |------------|----------|------------|-------------|--------------|--------------------|--------------------|
@@ -111,7 +111,7 @@ separately and do not contribute to the verdict.
 
 ---
 
-### Real Open-Source Libraries — CI Benchmark Results by CPU Model
+### Real Open-Source Libraries: CI Benchmark Results by CPU Model
 
 GitHub-hosted runners assign AMD or Intel CPUs without announcement. Results are
 stratified by exact CPU model. Do not average across models.
@@ -134,11 +134,11 @@ stratified by exact CPU model. Do not average across models.
 
 ★ fasthttp rows marked ★ are from the reshaped benchmark (commit `40150e0` onward: hoisted
 allocations, per-iteration reset, error check). **Not comparable** to earlier runs
-(old benchmark ~2.4 µs/op; new ~600–700 ns/op — different work). Old-loop runs
+(old benchmark ~2.4 µs/op; new ~600–700 ns/op; different work). Old-loop runs
 (EPYC: 39828409134, 39831658152 → −4.84%, −5.38%; Xeon 8573C: 39831653386 → −2.46%)
 are listed here for traceability only; do not use these values.
 
-EPYC has n=2 for the new loop; Xeon 8573C and 8370C each have n=1 — treat as provisional
+EPYC has n=2 for the new loop; Xeon 8573C and 8370C each have n=1. Treat as provisional
 until a second run pair confirms on those models.
 
 **snappy note:** 7 runs total (39828409134, 39831653386, 39831658152, 39833250644,
@@ -163,14 +163,14 @@ significantly (p<0.05) on both AMD and Intel architectures. The predicted NONE (
 shows no credible benefit on any architecture.
 
 **The 3% gate is microarchitecture-dependent.** go-json is the clearest example: identical
-code, identical profile, identical binary — yet EPYC 7763 returns −3.66 to −6.02%
+code, identical profile, identical binary. Yet EPYC 7763 returns −3.66 to −6.02%
 (PROMOTE on all 4 runs), Xeon 8573C returns −1.52 to −2.06% (NEUTRAL, below 3%), and
-Xeon 8370C returns p=0.247 (not significant) — three models, three verdicts. Any
+Xeon 8370C returns p=0.247 (not significant): three models, three verdicts. Any
 single-run gate decision on go-json depends on which CPU GitHub assigns; a multi-run
 median stratified by CPU model is needed before those verdicts can be treated as stable.
 
 goldmark is the counterexample to "PGO just helps more on AMD": EPYC 7763 range −5.39
-to −6.54%, Xeon 8573C range −5.22 to −6.40%, Xeon 8370C −4.40% — all three models show
+to −6.54%, Xeon 8573C range −5.22 to −6.40%, Xeon 8370C −4.40%. All three models show
 consistent 4–7% improvement (max gap ~2pp across CPU models), architecture-independent
 within measurement precision.
 
@@ -182,9 +182,9 @@ significant and above 3%, but magnitude varies substantially by microarchitectur
 
 ## Per-Repository Analysis
 
-### 1. yuin/goldmark — Markdown Parser
+### 1. yuin/goldmark: Markdown Parser
 
-**leverage-check:** HIGH — 68 module-scoped devirt decisions, 252 module-scoped extra inlines
+**leverage-check:** HIGH. 68 module-scoped devirt decisions, 252 module-scoped extra inlines
 (+4 dep devirts, +568 dep extra inlines)
 
 **Build analysis (post-#55):**
@@ -214,15 +214,15 @@ path explain the consistent ~5.8% improvement.
 
 ---
 
-### 2. tidwall/gjson — JSON Path Queries
+### 2. tidwall/gjson: JSON Path Queries
 
-**leverage-check:** HIGH — 0 module-scoped devirt decisions, 36 module-scoped extra inlines
+**leverage-check:** HIGH. 0 module-scoped devirt decisions, 36 module-scoped extra inlines
 (+3 dep devirts, +424 dep extra inlines)
 
 **Build analysis (post-#55):**
 ```
 devirt_decisions:        0   (module-scoped)
-pgo_devirts_deps:        3   (stdlib/deps — reflect/type.go, excluded from verdict)
+pgo_devirts_deps:        3   (stdlib/deps, reflect/type.go, excluded from verdict)
 pgo_extra_inlines:      36   (module-scoped)
 pgo_extra_inlines_deps: 424
 ```
@@ -247,9 +247,9 @@ default budget. This is `pgo_extra_inlines` at work, not devirt.
 
 ---
 
-### 3. goccy/go-json — JSON Encoder/Decoder
+### 3. goccy/go-json: JSON Encoder/Decoder
 
-**leverage-check:** HIGH — 10 module-scoped devirt decisions, 59 module-scoped extra inlines
+**leverage-check:** HIGH. 10 module-scoped devirt decisions, 59 module-scoped extra inlines
 (+3 dep devirts, +598 dep extra inlines)
 
 **Build analysis (post-#55):**
@@ -269,22 +269,22 @@ pgo_extra_inlines_deps: 598
 | Intel Xeon 8370C | not significant | 0.247 | 1 | **NEUTRAL** | 39835718451 |
 
 go-json is the **clearest illustration that the 3% gate is microarchitecture-dependent:**
-identical code, identical profile, identical binary — three different gate verdicts
+identical code, identical profile, identical binary: three different gate verdicts
 (PROMOTE / NEUTRAL / not-significant) depending on which CPU GitHub assigns. Any
 single-run gate decision on go-json is not reliable without knowing the CPU model.
 
 **Mechanism:** go-json uses a bytecode VM (`encoder/vm.Run`) for its hot path. The VM
 function is too large to inline under any budget. The 59 module-scoped extra inlines
-are in surrounding scaffolding (encoder setup, decoder initialization) — they run once
+are in surrounding scaffolding (encoder setup, decoder initialization). They run once
 per call but do not dominate total CPU time. The modest improvement on AMD suggests
 some hot-path effect; the near-zero result on Intel suggests architecture-specific
 inlining thresholds or branch predictor differences.
 
 ---
 
-### 4. golang/snappy — Compressor
+### 4. golang/snappy: Compressor
 
-**leverage-check (post-#55):** **NONE** — 0 module-scoped devirt decisions, 2 module-scoped
+**leverage-check (post-#55):** **NONE**. 0 module-scoped devirt decisions, 2 module-scoped
 extra inlines (+3 dep devirts, +799 dep extra inlines)
 
 **Build analysis (post-#55):**
@@ -320,9 +320,9 @@ module contributions.
 
 ---
 
-### 5. valyala/fasthttp — HTTP Framework
+### 5. valyala/fasthttp: HTTP Framework
 
-**leverage-check (post-#55):** HIGH — 0 module-scoped devirt decisions, 92 module-scoped
+**leverage-check (post-#55):** HIGH. 0 module-scoped devirt decisions, 92 module-scoped
 extra inlines (+1 dep devirt, +771 dep extra inlines)
 
 **Build analysis (post-#55, using profile.pprof + --dir fasthttp@v1.74.0):**
@@ -333,7 +333,7 @@ pgo_extra_inlines:      92   (module-scoped)
 pgo_extra_inlines_deps: 771
 ```
 
-**CI results — reshaped benchmark only (commit `40150e0` onward — PRELIMINARY):**
+**CI results: reshaped benchmark only (commit `40150e0` onward, PRELIMINARY):**
 
 | CPU | Δ values (%) | p-value | n | Run IDs | Status |
 |-----|--------------|---------|---|---------|--------|
@@ -397,7 +397,7 @@ that do not stratify by CPU is almost entirely architecture signal.
 
 The 3% house standard is valid within a CPU model. It is not valid as a single-run gate
 across uncontrolled architecture assignment. go-json illustrates this clearly: PROMOTE on
-EPYC, NEUTRAL on Xeon 8573C, not-significant on Xeon 8370C — identical code, identical
+EPYC, NEUTRAL on Xeon 8573C, not-significant on Xeon 8370C. Identical code, identical
 commit. A stable gate verdict for go-json requires either (a) multi-run median stratified
 by CPU model, or (b) a higher threshold that clears all tested architectures.
 
