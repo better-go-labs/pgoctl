@@ -176,11 +176,11 @@ runs:
           echo "Using existing profile: ${{ inputs.profile-file }}"
           cp "${{ inputs.profile-file }}" cpu.pprof
         elif [[ -n "${{ inputs.parca-url }}" ]]; then
-          echo "Collecting ${DURATION}s CPU profile from ${{ inputs.parca-url }}"
+          echo "Collecting ${{ inputs.duration }}s CPU profile from ${{ inputs.parca-url }}"
           pgoctl collect \
             --source=parca \
-            --url="${{ inputs.parca-url }}" \
-            --duration="${{ inputs.duration }}" \
+            --parca-addr="${{ inputs.parca-url }}" \
+            --window="${{ inputs.duration }}s" \
             --out=cpu.pprof
         elif [[ -n "${{ inputs.pprof-url }}" ]]; then
           echo "Collecting ${{ inputs.duration }}s CPU profile from ${{ inputs.pprof-url }}"
