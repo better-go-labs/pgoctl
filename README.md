@@ -1,6 +1,6 @@
 # pgoctl
 
-<!-- Badges activate on public launch — pkg.go.dev, Codecov, and Latest Release resolve once the repo is public and v0.1.0-alpha is published. -->
+<!-- Badges activate on public launch. pkg.go.dev, Codecov, and Latest Release resolve once the repo is public and v0.1.0-alpha is published. -->
 <p align="center">
   <a href="https://github.com/better-go-labs/pgoctl/actions/workflows/build.yml"><img src="https://github.com/better-go-labs/pgoctl/actions/workflows/build.yml/badge.svg?branch=main" alt="Build"></a>
   <a href="https://github.com/better-go-labs/pgoctl/actions/workflows/golangci-lint.yml"><img src="https://github.com/better-go-labs/pgoctl/actions/workflows/golangci-lint.yml/badge.svg?branch=main" alt="golangci-lint"></a>
@@ -49,6 +49,7 @@ flowchart TD
 - [Docker](#docker)
 - [Configuration](#configuration)
 - [Demo service](#demo-service)
+- [Benchmarks and evaluation](#benchmarks-and-evaluation)
 - [Requirements](#requirements)
 - [Project layout](#project-layout)
 - [Status](#status)
@@ -327,7 +328,7 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 | `comment-on-pr` | Whether to post a verdict comment (default: `true`) |
 | `github-token` | Token used to post the PR comment |
 | `restore-previous-artifact` | Auto-download the most recent successful artifact for steady-state profile accumulation (requires `permissions: actions: read`; default: `false`) |
-| `previous-profile` | Path to a previous `default.pgo` to merge with — overrides `restore-previous-artifact` if set |
+| `previous-profile` | Path to a previous `default.pgo` to merge with; overrides `restore-previous-artifact` if set |
 | `run-leverage-probe` | Run PGO leverage pre-check (`go build -gcflags=-m=2`) before the benchmark cycle. Emits `leverage-verdict`. Default: `false` |
 | `leverage-probe-target` | Go build target for the leverage probe. Default: `./...` (all packages); point at the binary the profile came from to avoid double-building test helpers under `-m=2` |
 
@@ -380,9 +381,17 @@ min-package-share:
 
 ## Demo service
 
-We benchmark against **Prometheus** (pure Go, pprof-enabled by default, widely deployed on Kubernetes).
+The demo uses **Prometheus** (pure Go, pprof-enabled by default, widely deployed on Kubernetes) as its profiling target. It is the target for profile collection and the leverage probe, not a benchmark suite.
 
 `demo.sh` runs the interactive happy-path pipeline. Set `PARCA_URL` to point it at your Parca server, or set `PROFILE_FILE` to use an existing pprof and skip collect entirely.
+
+## Benchmarks and evaluation
+
+The `pgo-bench-real-repos` CI workflow benchmarks five open-source Go libraries. It records per-run results under version control.
+
+- [Benchmark methodology](benchmarks/README.md): how the harness runs and how to read a result row.
+- [Benchmark results index](benchmarks/results/index.md): all runs grouped by CPU model.
+- [Leverage-check evaluation report](hack/pgo-demo/oss-repos/EVALUATION.md): predictions versus CI results across five libraries.
 
 ## Requirements
 
@@ -412,12 +421,11 @@ scripts/
   smoke.sh            -- e2e smoke test (no external service required)
 testdata/             -- captured .pprof files (LFS)
 demo.sh               -- interactive happy-path demo
-BENCHMARKS.md         -- before/after PGO numbers
 ```
 
 ## Status
 
-v0.1.0. See [BENCHMARKS.md](BENCHMARKS.md) for before/after PGO numbers on Prometheus.
+v0.1.0. See [Benchmarks and evaluation](#benchmarks-and-evaluation) for PGO benchmark results and the leverage-check evaluation.
 
 ## License
 

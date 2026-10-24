@@ -83,3 +83,10 @@ Each file names the GitHub Actions run ID and commit SHA. The run ID is the stab
 Benchstat statistics (change, p-value) come directly from benchstat output. CV,
 standard error, and the floor are derived values computed from the raw benchmark
 output files.
+
+---
+
+## Related
+
+- [Benchmark results index](results/index.md): all committed runs grouped by CPU model.
+- [Leverage-check evaluation report](../hack/pgo-demo/oss-repos/EVALUATION.md): predictions versus CI results across the five libraries.

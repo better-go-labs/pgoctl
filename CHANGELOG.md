@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `leverage-check`: compiler lines are matched on their message, so escape-analysis lines that quote source text containing a marker string are no longer counted as PGO decisions
 - `leverage-check`: with `--dir`, function names resolve to real import paths from `go list -deps`, so dotted packages like `github.com/satori/go.uuid` no longer truncate to `github.com/satori/go`; without `--dir` the string heuristic still applies
 
+### Removed
+
+- Prometheus PGO benchmark: removed the `pgo-bench.yml` workflow and `BENCHMARKS.md`; Prometheus stays the profiling target for collection and the leverage probe, not a benchmark suite
+
 
 ## [0.1.3] - 2026-09-02
 
