@@ -47,11 +47,22 @@ func newRootCmd() *cobra.Command {
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
 		if code, ok := isExitError(err); ok {
+			// exitError paths print their own message, or are verdicts.
 			os.Exit(code)
 		}
-		// cobra parse/usage error — already printed by cobra
+		// SilenceErrors is set, so cobra printed nothing: flag and argument
+		// errors and plain RunE errors would otherwise exit 2 silently.
+		printError(err)
 		os.Exit(2)
 	}
+}
+
+func printError(err error) {
+	if jsonOutput {
+		_ = json.NewEncoder(os.Stderr).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	fmt.Fprintf(os.Stderr, "error: %s\n", err)
 }
 
 func newValidateCmd() *cobra.Command {
@@ -305,7 +316,8 @@ Verdict:
   neutral  — within both thresholds
 
 --min-cpu-percent drops functions whose CPU share is below the given %% in
-BOTH profiles before comparing (default 0 = no filtering).`,
+BOTH profiles before comparing (default 1; 0 disables filtering). The top
+deltas are ranked by CPU share moved, in percentage points.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			gate := compare.GateConfig{
@@ -352,8 +364,8 @@ BOTH profiles before comparing (default 0 = no filtering).`,
 		},
 	}
 	cmd.Flags().Float64Var(&minImprovement, "min-improvement", 3.0, "min relative CPU %% improvement to promote (CPU-attribution delta, not wall-clock)")
-	cmd.Flags().Float64Var(&minRegression, "min-regression", 10.0, "min relative CPU %% regression to rollback (independent of --min-improvement)")
-	cmd.Flags().Float64Var(&minCPUPercent, "min-cpu-percent", 0.0, "drop functions below this CPU %% share in both profiles (0 = no filtering)")
+	cmd.Flags().Float64Var(&minRegression, "min-regression", 3.0, "min relative CPU %% regression to rollback (independent of --min-improvement)")
+	cmd.Flags().Float64Var(&minCPUPercent, "min-cpu-percent", 1.0, "drop functions below this CPU %% share in both profiles (0 = no filtering)")
 	cmd.Flags().IntVar(&topN, "top", 10, "number of function deltas to show")
 	return cmd
 }
