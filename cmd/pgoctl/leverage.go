@@ -46,10 +46,11 @@ optimization decisions are diffed to count:
 Requires a buildable Go module at --dir. Without --dir the verdict is INCOMPLETE.
 
 Verdict taxonomy:
-  HIGH        ≥5 devirt decisions or ≥30 extra inlines — run full benchmark
-  LOW         1–4 devirt or 5–29 extra inlines — benchmark; gains likely modest
-  NONE        0 decisions — no codegen lever; skip benchmark (exit 3)
-  INCOMPLETE  no --dir provided — collect build analysis first
+  HIGH        5+ devirt decisions or 30+ extra inlines: run a full benchmark
+  LOW         1-4 devirt decisions or 5-29 extra inlines: benchmark, gains likely modest
+  NONE        0 devirt decisions and fewer than 5 extra inlines: no codegen lever,
+              skip the benchmark (exit 3)
+  INCOMPLETE  no --dir given: rerun with --dir for build analysis
 
 Exit codes: 0 = HIGH/LOW/INCOMPLETE, 3 = NONE (CI gate), 2 = usage/parse error, 1 = error`,
 		Args: cobra.ExactArgs(1),

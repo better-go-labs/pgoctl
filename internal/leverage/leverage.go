@@ -23,7 +23,8 @@ import (
 type Verdict string
 
 const (
-	// VerdictNone indicates zero PGO-specific compiler decisions; optimization will not help.
+	// VerdictNone means no module devirtualizations and fewer than 5 module extra
+	// inlines: too few PGO decisions to move the hot path, so skip the benchmark.
 	VerdictNone Verdict = "NONE"
 	// VerdictLow indicates modest PGO leverage: 1–4 devirt decisions or 5–29 extra inlines.
 	VerdictLow Verdict = "LOW"
@@ -193,7 +194,7 @@ func verdictForAnalysis(ba *BuildAnalysis, topEntries []FunctionEntry) (Verdict,
 		if ba.PGOExtraInlines > 0 {
 			parts = append(parts, fmt.Sprintf("%d extra inline(s) with PGO", ba.PGOExtraInlines))
 		}
-		return VerdictHigh, fmt.Sprintf("HIGH: strong PGO leverage — %s; run a full benchmark cycle", strings.Join(parts, ", "))
+		return VerdictHigh, fmt.Sprintf("HIGH: strong PGO leverage (%s); run a full benchmark cycle", strings.Join(parts, ", "))
 	case ba.DevirtDecisions >= 1 || ba.PGOExtraInlines >= 5:
 		parts := []string{}
 		if ba.DevirtDecisions > 0 {
@@ -202,13 +203,13 @@ func verdictForAnalysis(ba *BuildAnalysis, topEntries []FunctionEntry) (Verdict,
 		if ba.PGOExtraInlines > 0 {
 			parts = append(parts, fmt.Sprintf("%d extra inline(s) with PGO", ba.PGOExtraInlines))
 		}
-		return VerdictLow, fmt.Sprintf("LOW: marginal PGO leverage — %s; benchmark may show modest gains", strings.Join(parts, ", "))
+		return VerdictLow, fmt.Sprintf("LOW: marginal PGO leverage (%s); benchmark may show modest gains", strings.Join(parts, ", "))
 	default:
 		topFn := ""
 		if len(topEntries) > 0 {
 			topFn = fmt.Sprintf("; top hot function %s", topEntries[0].Function)
 		}
-		return VerdictNone, fmt.Sprintf("NONE: 0 PGO-specific compiler decisions — no codegen lever for this hot path%s", topFn)
+		return VerdictNone, fmt.Sprintf("NONE: %d devirtualization decision(s) and %d extra inline(s) with PGO, below the LOW thresholds of 1 and 5; no codegen lever for this hot path%s", ba.DevirtDecisions, ba.PGOExtraInlines, topFn)
 	}
 }
 
