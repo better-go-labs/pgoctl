@@ -34,7 +34,7 @@ flowchart TD
 - [Quick start](#quick-start)
   - [Via pprof endpoint](#via-pprof-endpoint-any-go-service)
   - [Via Parca](#via-parca-continuous-profiling)
-  - [PGO leverage probe](#pgo-leverage-probe-optional-pre-check)
+  - [PGO leverage check](#pgo-leverage-check)
   - [GitHub Action](#github-action-ci-integration)
   - [Smoke test](#smoke-test-no-external-services-required)
 - [CLI reference](#cli-reference)
@@ -90,17 +90,17 @@ PARCA_URL=http://localhost:7070 ./demo.sh
 
 `demo.sh` runs collect, validate, merge, build, and explain end to end against your Parca server.
 
-### PGO leverage probe (optional pre-check)
+### PGO leverage check
 
-Before running a full benchmark cycle, the action can check whether the profile has enough
-PGO signal for the compiler to act on. Run it via `run-leverage-probe`:
+The action first checks whether the profile gives the compiler anything to act on. A benchmark
+cycle on a profile with no PGO decisions measures only noise, so this check runs by default.
+Set `run-leverage-probe: 'false'` only when you already know the answer.
 
 ```yaml
 - id: pgo
   uses: better-go-labs/pgoctl@v0.1.4
   with:
     profile-file: cpu.pprof
-    run-leverage-probe: 'true'
     leverage-probe-target: ./cmd/myapp   # point at the binary the profile came from
     github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -301,7 +301,7 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 
 ## GitHub Action
 
-`action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI: collect (or reuse an existing profile), validate, optionally check PGO leverage, and compare against a baseline, then optionally uploads the artifact and posts a verdict comment on the PR.
+`action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI: collect (or reuse an existing profile), validate, check PGO leverage, and compare against a baseline, then optionally uploads the artifact and posts a verdict comment on the PR.
 
 > Use it from any repository as `better-go-labs/pgoctl@v0.1.4`, or as `./` inside this repository.
 
@@ -323,7 +323,7 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 | `github-token` | Token used to post the PR comment |
 | `restore-previous-artifact` | Auto-download the most recent successful artifact for steady-state profile accumulation (requires `permissions: actions: read`; default: `false`) |
 | `previous-profile` | Path to a previous `default.pgo` to merge with; overrides `restore-previous-artifact` if set |
-| `run-leverage-probe` | Run PGO leverage pre-check (`go build -gcflags=-m=2`) before the benchmark cycle. Emits `leverage-verdict`. Default: `false` |
+| `run-leverage-probe` | Run the [PGO leverage check](#pgo-leverage-check) (two builds under `-gcflags=all=-m=2`) before the benchmark cycle. Emits `leverage-verdict`. Default: `true`; set `false` to skip |
 | `leverage-probe-target` | Go build target for the leverage probe. Default: `./...` (all packages); point at the binary the profile came from to avoid double-building test helpers under `-m=2` |
 
 > **Note:** To enable progressive profile accumulation across runs, set `restore-previous-artifact: true` in your workflow.
@@ -337,7 +337,7 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 | `profile-path` | Path to the collected/used profile |
 | `artifact-path` | Path to the produced artifact |
 | `validate-score` | Quality score from `pgoctl validate` |
-| `leverage-verdict` | PGO leverage pre-check verdict: `NONE`, `LOW`, `HIGH`, or `INCOMPLETE` (empty if `run-leverage-probe` is not set) |
+| `leverage-verdict` | PGO leverage check verdict: `NONE`, `LOW`, `HIGH`, or `INCOMPLETE` (empty only if `run-leverage-probe` is `false`) |
 
 ## Docker
 

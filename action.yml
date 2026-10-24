@@ -1,5 +1,5 @@
 name: 'pgoctl-action'
-description: 'Collect, validate, merge and compare PGO profiles for Go services, with an optional PGO leverage pre-check'
+description: 'Check PGO leverage, then collect, validate, merge and compare PGO profiles for Go services'
 
 branding:
   icon: 'activity'
@@ -79,9 +79,9 @@ inputs:
     required: false
     default: '5'
   run-leverage-probe:
-    description: 'Run PGO leverage pre-check (go build -gcflags=-m=2) before the benchmark cycle. Emits leverage-verdict output.'
+    description: 'Run the PGO leverage check (two builds under -gcflags=all=-m=2) before the benchmark cycle. Emits leverage-verdict output. On by default; set to false to skip.'
     required: false
-    default: 'false'
+    default: 'true'
   leverage-probe-target:
     description: 'Go build target for the leverage probe (default: ./... for all packages)'
     required: false
@@ -122,7 +122,7 @@ outputs:
     description: 'Profile duration in seconds from pgoctl explain'
     value: ${{ steps.explain.outputs.duration-sec }}
   leverage-verdict:
-    description: 'PGO leverage pre-check verdict: NONE | LOW | HIGH | INCOMPLETE (empty if probe not run)'
+    description: 'PGO leverage check verdict: NONE | LOW | HIGH | INCOMPLETE (empty only if run-leverage-probe is false)'
     value: ${{ steps.leverage.outputs.verdict }}
 
 runs:
@@ -230,7 +230,7 @@ runs:
           exit $exit_code
         fi
 
-    # ── PGO leverage probe (optional early gate) ────────────────────────
+    # ── PGO leverage check (early gate, on by default) ──────────────────
     - name: PGO leverage probe
       id: leverage
       if: inputs.run-leverage-probe == 'true'
