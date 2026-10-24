@@ -19,6 +19,7 @@ type Options struct {
 	Query         string        // Parca selector, e.g. "process_cpu:cpu:nanoseconds:cpu:nanoseconds"
 	URL           string        // full URL for pprof HTTP endpoint
 	Window        time.Duration // lookback window ending at End
+	WindowSet     bool          // Window was given explicitly; for pprof it then overrides the URL's seconds
 	End           time.Time     // wall clock end; zero means time.Now()
 	Timeout       time.Duration // HTTP timeout; zero means source-specific default
 	TimeoutBuffer time.Duration // buffer added to Window when deriving Timeout; zero means 30s default
@@ -32,4 +33,5 @@ type Result struct {
 	Start     time.Time
 	End       time.Time
 	SizeBytes int
+	Seconds   int // profile duration requested from a pprof endpoint; 0 for Parca
 }

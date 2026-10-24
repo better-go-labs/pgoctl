@@ -95,13 +95,55 @@ func TestFromPprof_WithWindow(t *testing.T) {
 	defer srv.Close()
 
 	opts := Options{
-		URL:     srv.URL + "/debug/pprof/profile",
-		Window:  10 * time.Second,
-		Timeout: 5 * time.Second,
+		URL:       srv.URL + "/debug/pprof/profile?seconds=30",
+		Window:    10 * time.Second,
+		WindowSet: true,
+		Timeout:   5 * time.Second,
 	}
-	_, err := FromPprof(opts)
+	res, err := FromPprof(opts)
 	require.NoError(t, err)
 	require.Equal(t, "10", gotSeconds)
+	require.Equal(t, 10, res.Seconds)
+}
+
+// The README examples pass ?seconds=30 and rely on it; the flag's default
+// window must not replace it.
+func TestFromPprof_URLSecondsKeptWithoutExplicitWindow(t *testing.T) {
+	profileData := buildProfileBytes(t, 100)
+	var gotSeconds string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSeconds = r.URL.Query().Get("seconds")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(profileData)
+	}))
+	defer srv.Close()
+
+	res, err := FromPprof(Options{URL: srv.URL + "/debug/pprof/profile?seconds=30", Window: 5 * time.Minute, Timeout: 5 * time.Second})
+	require.NoError(t, err)
+	require.Equal(t, "30", gotSeconds)
+	require.Equal(t, 30, res.Seconds)
+}
+
+func TestFromPprof_NoSecondsUsesEndpointDefault(t *testing.T) {
+	profileData := buildProfileBytes(t, 100)
+	var gotSeconds string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSeconds = r.URL.Query().Get("seconds")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(profileData)
+	}))
+	defer srv.Close()
+
+	res, err := FromPprof(Options{URL: srv.URL + "/debug/pprof/profile", Window: 5 * time.Minute, Timeout: 5 * time.Second})
+	require.NoError(t, err)
+	require.Equal(t, "", gotSeconds)
+	require.Equal(t, pprofDefaultSeconds, res.Seconds)
+}
+
+func TestFromPprof_BadSecondsInURL(t *testing.T) {
+	_, err := FromPprof(Options{URL: "http://127.0.0.1:1/debug/pprof/profile?seconds=abc"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not a positive integer")
 }
 
 func TestFromPprof_ServerError(t *testing.T) {
