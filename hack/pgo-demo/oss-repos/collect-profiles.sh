@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# collect-profiles.sh — collect CPU profiles from real open-source Go repos
+# collect-profiles.sh - collect CPU profiles from open-source Go repos
 # for pgoctl leverage-check validation.
 #
 # Usage: ./collect-profiles.sh [outdir]
@@ -42,11 +42,11 @@ collect_bench() {
   if [[ -f "$workdir/profile.pprof" ]]; then
     log "$name: profile collected OK ($(du -h "$workdir/profile.pprof" | cut -f1))"
   else
-    log "$name: WARNING — no profile collected"
+    log "$name: WARNING - no profile collected"
   fi
 }
 
-# ── 1. goldmark — Markdown parser (HIGH expected: interface-heavy node walking) ──────────────
+# ── 1. goldmark - Markdown parser (HIGH expected: interface-heavy node walking) ──────────────
 collect_bench "goldmark" "github.com/yuin/goldmark" 'package bench_test
 
 import (
@@ -81,7 +81,7 @@ func BenchmarkGoldmark(b *testing.B) {
 	}
 }'
 
-# ── 2. go-json — JSON encoder/decoder (HIGH expected: reflection+interface-heavy) ─────────
+# ── 2. go-json - JSON encoder/decoder (HIGH expected: reflection+interface-heavy) ─────────
 collect_bench "go-json" "github.com/goccy/go-json" 'package bench_test
 
 import (
@@ -128,7 +128,7 @@ func BenchmarkGoJSON(b *testing.B) {
 	}
 }'
 
-# ── 3. gjson — JSON path queries (HIGH expected: CPU-bound text parsing) ─────────────────
+# ── 3. gjson - JSON path queries (HIGH expected: CPU-bound text parsing) ─────────────────
 collect_bench "gjson" "github.com/tidwall/gjson" 'package bench_test
 
 import (
@@ -155,7 +155,7 @@ func BenchmarkGJSON(b *testing.B) {
 	}
 }'
 
-# ── 4. fasthttp — HTTP request parsing (LOW/NONE expected: partly I/O bound) ────────────
+# ── 4. fasthttp - HTTP request parsing (LOW/NONE expected: partly I/O bound) ────────────
 collect_bench "fasthttp" "github.com/valyala/fasthttp" 'package bench_test
 
 import (
@@ -187,7 +187,7 @@ func BenchmarkFastHTTPParsing(b *testing.B) {
 	}
 }'
 
-# ── 5. snappy — Compression (NONE/LOW expected: C-extension or assembly hot-path) ────────
+# ── 5. snappy - Compression (NONE/LOW expected: C-extension or assembly hot-path) ────────
 collect_bench "snappy" "github.com/golang/snappy" 'package bench_test
 
 import (

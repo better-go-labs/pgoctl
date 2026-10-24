@@ -1,8 +1,8 @@
-name: PGO Benchmark - Real-Repo Libraries
-# Validates pgoctl leverage-check predictions against 5 real open-source Go libraries.
-# Uses the same interleaved-round harness as pgo-bench.yml:
-#   single ubuntu-latest job, GOMAXPROCS=2, 10 rounds alternating baseline/pgo per library,
-#   pre-compiled test binaries, 90s per-binary timeout.
+name: PGO Benchmark - Open-Source Libraries
+# Validates pgoctl leverage-check predictions against 5 open-source Go libraries.
+# Harness: a single ubuntu-latest job with GOMAXPROCS=2.
+#   It runs 10 rounds alternating baseline/pgo per library.
+#   Test binaries are pre-compiled, with a 90s per-binary timeout.
 # Results carry a GitHub Actions run_id, removing the manual-VM provenance from results/v3.
 #
 # Trigger: workflow_dispatch or PR changes to bench modules / profiles / this workflow.
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'hack/pgo-demo/real-repos/results/profiles/**'
+      - 'hack/pgo-demo/oss-repos/results/profiles/**'
       - '.github/workflows/pgo-bench-real-repos.yml'
 
 permissions:
@@ -34,11 +34,11 @@ jobs:
           cache: true
           cache-dependency-path: |
             go.sum
-            hack/pgo-demo/real-repos/results/profiles/goldmark/_bench/go.sum
-            hack/pgo-demo/real-repos/results/profiles/gjson/_bench/go.sum
-            hack/pgo-demo/real-repos/results/profiles/go-json/_bench/go.sum
-            hack/pgo-demo/real-repos/results/profiles/snappy/_bench/go.sum
-            hack/pgo-demo/real-repos/results/profiles/fasthttp/_bench/go.sum
+            hack/pgo-demo/oss-repos/results/profiles/goldmark/_bench/go.sum
+            hack/pgo-demo/oss-repos/results/profiles/gjson/_bench/go.sum
+            hack/pgo-demo/oss-repos/results/profiles/go-json/_bench/go.sum
+            hack/pgo-demo/oss-repos/results/profiles/snappy/_bench/go.sum
+            hack/pgo-demo/oss-repos/results/profiles/fasthttp/_bench/go.sum
           check-latest: true
 
       - name: Install benchstat
@@ -46,7 +46,7 @@ jobs:
 
       - name: Pre-compile test binaries (baseline + PGO for each library)
         run: |
-          BENCH_ROOT="${GITHUB_WORKSPACE}/hack/pgo-demo/real-repos/results/profiles"
+          BENCH_ROOT="${GITHUB_WORKSPACE}/hack/pgo-demo/oss-repos/results/profiles"
           mkdir -p /tmp/bench
 
           for name in goldmark gjson go-json snappy fasthttp; do
@@ -178,10 +178,10 @@ jobs:
           }
 
           {
-            echo "## PGO Benchmark - Real-Repo Libraries"
+            echo "## PGO Benchmark - Open-Source Libraries"
             echo ""
             echo "_${ROUNDS:-10} interleaved rounds, GOMAXPROCS=2, benchtime=5s per round. Run: \`$GITHUB_RUN_ID\` on \`$GITHUB_SHA\`._"
-            echo "_Signal threshold: ≥2-3% geomean improvement at p<0.05 (house standard matching pgo-bench.yml)._"
+            echo "_Signal threshold: ≥2-3% geomean improvement at p<0.05 (house standard)._"
             echo ""
             echo "| Library | Bench | CPU | Baseline CV | PGO CV | Δ | p-value | leverage-check |"
             echo "|---------|-------|-----|-------------|--------|---|---------|---------------|"

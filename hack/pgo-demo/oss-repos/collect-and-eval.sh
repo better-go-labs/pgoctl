@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# collect-and-eval.sh — collect CPU profiles from real open-source Go libraries
+# collect-and-eval.sh - collect CPU profiles from open-source Go libraries
 # and run pgoctl leverage-check against each library's own source directory.
 #
 # Usage: ./collect-and-eval.sh [outdir]

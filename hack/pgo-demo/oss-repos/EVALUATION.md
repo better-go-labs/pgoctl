@@ -1,4 +1,4 @@
-# pgoctl leverage-check: Validation Against Real Open-Source Go Repositories
+# pgoctl leverage-check: Validation Against Open-Source Go Repositories
 
 **Date:** 2026-09-18 (CI results: 2026-10-22)
 **Tool:** `pgoctl leverage-check`
@@ -17,13 +17,23 @@
 
 ## Scope
 
-This document validates `pgoctl leverage-check` across five real open-source Go repositories.
+This document validates `pgoctl leverage-check` across five open-source Go repositories.
 They span CPU-bound parsers, JSON processors, a compressor, and an HTTP framework.
 It compares the tool's prediction (HIGH/LOW/NONE) against CI benchmark results (baseline vs PGO build),
 and traces cases where the prediction and observed speedup disagree.
 
-The controlled hashcalc/passthrough pair in `hack/pgo-demo/results/GOCONF-DATA-REPORT.md`
-serves as the anchor baseline.
+The controlled hashcalc/passthrough demo pair serves as the anchor baseline.
+
+### Verdict taxonomy
+
+`leverage-check` assigns one of four verdicts from the build analysis:
+
+- `HIGH`: 5 or more devirtualization decisions, or 30 or more extra inlines
+- `LOW`: 1 to 4 devirt decisions, or 5 to 29 extra inlines
+- `NONE`: 0 devirt decisions and fewer than 5 extra inlines
+- `INCOMPLETE`: no build analysis available
+
+All counts are module-scoped (post-#55).
 
 ---
 
@@ -64,8 +74,7 @@ All benchmark results in this document come from
 `.github/workflows/pgo-bench-real-repos.yml` running on GitHub-hosted `ubuntu-latest`.
 
 - Single job; pre-compiled test binaries per library
-- **10 interleaved rounds** (baseline/PGO alternating per library per round, same pattern
-  as `pgo-bench.yml`)
+- **10 interleaved rounds** (baseline/PGO alternating per library per round)
 - `GOMAXPROCS=2`; 90 s per-binary timeout; `benchtime=5s` per round
 - Results carry a GitHub Actions `run_id`; raw data uploaded as workflow artifact
 - Signal threshold: ≥2–3% improvement at p<0.05 (house standard)
@@ -88,13 +97,12 @@ CPU models must never be averaged.
 | hashcalc-svc | CPU-bound (crypto + asm) | HIGH | +0.6% RPS | **NEUTRAL** |
 | passthrough-svc | I/O-bound (HTTP proxy) | HIGH | -1.0% RPS | **NEUTRAL** |
 
-Both services receive HIGH predictions and deliver NEUTRAL outcomes. Analysis in
-`GOCONF-DATA-REPORT.md`: the devirt decisions fall on library/stdlib code, not the
-application hot path.
+Both services receive HIGH predictions and deliver NEUTRAL outcomes. The devirt decisions
+fall on library/stdlib code, not the application hot path.
 
 ---
 
-### Real Open-Source Libraries: Leverage-Check Predictions
+### Open-Source Libraries: Leverage-Check Predictions
 
 | Repository | Category | Prediction | Devirt (mod) | Devirt (deps) | Extra Inlines (mod) | Extra Inlines (deps) |
 |------------|----------|------------|-------------|--------------|--------------------|--------------------|
@@ -107,9 +115,23 @@ application hot path.
 Devirt and extra-inline counts are module-scoped (post-#55). Dep counts are shown
 separately and do not contribute to the verdict.
 
+### Profile Hot Path and Expected Leverage
+
+The table below pairs each prediction with its profile. Samples, top module hot function,
+and flat percentage come from `results/v3/*/leverage.json`. Expected leverage is the
+a-priori guess from the library domain; it matches the verdict for all five repos.
+
+| Repository | Samples | Expected | Verdict | Top module hot function | Flat % |
+|------------|---------|----------|---------|-------------------------|--------|
+| goldmark | 6061 | HIGH | **HIGH** | `parser.(*parser).parseBlock` | 5.21 |
+| gjson | 4310 | HIGH | **HIGH** | `gjson.parseObject` | 18.33 |
+| go-json | 3791 | HIGH | **HIGH** | `encoder/vm.Run` | 7.25 |
+| snappy | 4495 | NONE | **NONE** | `snappy.decode` | 25.36 |
+| fasthttp | 2320 | HIGH | **HIGH** | `(*RequestHeader).parseHeaders` | 3.58 |
+
 ---
 
-### Real Open-Source Libraries: CI Benchmark Results by CPU Model
+### Open-Source Libraries: CI Benchmark Results by CPU Model
 
 GitHub-hosted runners assign AMD or Intel CPUs without announcement. Results are
 stratified by exact CPU model. Do not average across models.
@@ -426,9 +448,7 @@ Three improvements would tighten the signal:
 
 ```
 hack/pgo-demo/
-├── results/
-│   └── GOCONF-DATA-REPORT.md          controlled demo (hashcalc, passthrough)
-├── real-repos/
+├── oss-repos/
 │   ├── EVALUATION.md                  this report
 │   ├── collect-profiles.sh            profile collection script
 │   ├── run-pgo-cycle.sh               benchmark comparison script (legacy; CI harness preferred)

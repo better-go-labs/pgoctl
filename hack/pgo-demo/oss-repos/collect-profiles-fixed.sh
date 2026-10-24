@@ -9,7 +9,7 @@ mkdir -p "$OUTDIR"
 
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 
-# ── fasthttp — HTTP request parsing (fixed version) ────────────────────────
+# ── fasthttp - HTTP request parsing (fixed version) ────────────────────────
 collect_bench_fasthttp() {
   local name="fasthttp"
   local workdir="$OUTDIR/$name"
@@ -63,11 +63,11 @@ BENCH
   if [[ -f "$workdir/profile.pprof" ]]; then
     log "$name: profile collected OK ($(du -h "$workdir/profile.pprof" | cut -f1))"
   else
-    log "$name: WARNING — no profile collected"
+    log "$name: WARNING - no profile collected"
   fi
 }
 
-# ── snappy — Compression ──────────────────────────────────────────────────
+# ── snappy - Compression ──────────────────────────────────────────────────
 collect_bench_snappy() {
   local name="snappy"
   local workdir="$OUTDIR/$name"
@@ -116,7 +116,7 @@ BENCH
   if [[ -f "$workdir/profile.pprof" ]]; then
     log "$name: profile collected OK ($(du -h "$workdir/profile.pprof" | cut -f1))"
   else
-    log "$name: WARNING — no profile collected"
+    log "$name: WARNING - no profile collected"
   fi
 }
 

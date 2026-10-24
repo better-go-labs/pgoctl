@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-pgo-cycle.sh — run full collect → build → benchmark PGO cycle for a repo.
+# run-pgo-cycle.sh - run full collect → build → benchmark PGO cycle for a repo.
 #
 # Usage: ./run-pgo-cycle.sh <name> <profile.pprof> <module_dir>
 #
