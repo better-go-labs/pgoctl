@@ -366,12 +366,19 @@ jobs:
             for cpu in $(echo "${!cpu_runs[@]}" | tr ' ' '\n' | sort); do
               echo "## $cpu"
               echo ""
+              # Compute cpu slug from cpu name (same logic as per-run step)
+              cpu_lc=$(echo "$cpu" | tr '[:upper:]' '[:lower:]')
+              cpu_slug=$(echo "$cpu_lc" | sed \
+                -e 's/amd epyc \([0-9a-z]*\).*/epyc-\1/' \
+                -e 's/intel(r) xeon(r) \(platinum\|gold\|silver\) \([0-9a-z]*\).*/xeon-\2/' \
+                -e 's/intel(r) xeon(r) \([0-9a-z]*\).*/xeon-\1/' \
+                | sed 's/[^a-z0-9-]/-/g; s/--*/-/g; s/^-//; s/-$//')
               for run_id in ${cpu_runs[$cpu]}; do
-                # Extract run ID and date from filename (YYYY-MM-DD-<run_id>-<cpu_slug>.md)
-                date=$(echo "$run_id" | cut -d- -f1-3)
-                run_num=$(echo "$run_id" | cut -d- -f4)
-                cpu_slug=$(echo "$run_id" | cut -d- -f5-)
-                echo "- [$date · run $run_num](results/$run_id.md)"
+                # Read run date from the temp file's HTML comment
+                run_date=$(grep -m1 '^<!-- run:' "/tmp/bench/run-${run_id}.md" 2>/dev/null \
+                  | sed 's/.*date: \([^|]*\).*/\1/' | tr -d ' ' || date -u +%Y-%m-%d)
+                # Link target matches the committed filename: DATE-RUNID-CPUSLUG.md
+                echo "- [${run_date} · run ${run_id}](${run_date}-${run_id}-${cpu_slug}.md)"
               done
               echo ""
             done

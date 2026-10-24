@@ -17,11 +17,10 @@
 
 ## Scope
 
-This document validates `pgoctl leverage-check` across five real open-source Go repositories
-spanning a range of expected PGO leverage: CPU-bound parsers, JSON processors, a compressor,
-and an HTTP framework. It compares the tool's prediction (HIGH/LOW/NONE) against CI benchmark
-results (baseline vs PGO build), and traces cases where the prediction and observed speedup
-disagree.
+This document validates `pgoctl leverage-check` across five real open-source Go repositories.
+They span CPU-bound parsers, JSON processors, a compressor, and an HTTP framework.
+It compares the tool's prediction (HIGH/LOW/NONE) against CI benchmark results (baseline vs PGO build),
+and traces cases where the prediction and observed speedup disagree.
 
 The controlled hashcalc/passthrough pair in `hack/pgo-demo/results/GOCONF-DATA-REPORT.md`
 serves as the anchor baseline.
@@ -72,9 +71,8 @@ All benchmark results in this document come from
 - Signal threshold: ≥2–3% improvement at p<0.05 (house standard)
 
 **Uncertainty caveat:** The within-run CI interval reported by benchstat (e.g. ±1%,
-p=0.000) describes variability *within that one run* only. Machine-to-machine variation
-across runs on different GitHub-hosted VMs can dwarf within-run CI: baseline medians have
-been observed 7–18% apart across runs on the same commit (go-json 14%, snappy 18%).
+p=0.000) describes variability *within that one run* only. Machine-to-machine variation can dwarf within-run CI: baseline medians differ 7–18%
+across runs on the same commit (go-json 14%, snappy 18%).
 This variation is largely explained by CPU model assignment (GitHub assigns AMD or Intel
 unannounced). The CPU model must be reported alongside any delta; deltas from different
 CPU models must never be averaged.
@@ -163,13 +161,13 @@ significantly (p<0.05) on both AMD and Intel architectures. The predicted NONE (
 shows no credible benefit on any architecture.
 
 **The 3% gate is microarchitecture-dependent.** go-json is the clearest example: identical
-code, identical profile, identical binary. Yet EPYC 7763 returns −3.66 to −6.02%
+code, identical profile, identical binary. EPYC 7763 returns −3.66 to −6.02%
 (PROMOTE on all 4 runs), Xeon 8573C returns −1.52 to −2.06% (NEUTRAL, below 3%), and
 Xeon 8370C returns p=0.247 (not significant): three models, three verdicts. Any
-single-run gate decision on go-json depends on which CPU GitHub assigns; a multi-run
-median stratified by CPU model is needed before those verdicts can be treated as stable.
+single-run gate decision on go-json depends on which CPU GitHub assigns. A multi-run
+median stratified by CPU model is required before those verdicts are stable.
 
-goldmark is the counterexample to "PGO just helps more on AMD": EPYC 7763 range −5.39
+goldmark is the counterexample to "PGO just helps more on AMD". EPYC 7763 range −5.39
 to −6.54%, Xeon 8573C range −5.22 to −6.40%, Xeon 8370C −4.40%. All three models show
 consistent 4–7% improvement (max gap ~2pp across CPU models), architecture-independent
 within measurement precision.
@@ -209,8 +207,8 @@ prediction is validated on all architectures tested.
 
 **Mechanism:** goldmark's hot path (`parser.(*parser).parseBlock`) calls through the
 `BlockParser` interface. PGO devirts these interface calls and enables tighter inlining of
-the surrounding helper functions. 68 module-scoped devirt decisions directly on the hot
-path explain the consistent ~5.8% improvement.
+surrounding helper functions. The 68 module-scoped devirt decisions on the hot path
+explain the consistent ~5.8% improvement.
 
 ---
 
@@ -235,10 +233,10 @@ pgo_extra_inlines_deps: 424
 | Intel Xeon 8573C | −6.69, −6.42 | ≤0.001 both | 2 | 39831653386, 39833287253 |
 | Intel Xeon 8370C | −11.06 | 0.001 | 1 | 39835718451 |
 
-gjson shows the largest architecture split in this evaluation: up to ~9.3pp between EPYC
-7763 (range −15.74 to −16.04%) and Xeon 8573C (range −6.42 to −6.69%). All three CPU
-models return significant improvement above the 3% gate. The spread *within* a model is
-tight (≤0.30pp), confirming the split is real and not noise.
+gjson shows the largest architecture split: up to ~9.3pp between EPYC 7763 (range
+−15.74 to −16.04%) and Xeon 8573C (range −6.42 to −6.69%). All three CPU models return
+significant improvement above the 3% gate. The spread *within* a model is tight (≤0.30pp),
+confirming the split is real and not noise.
 
 **Mechanism:** gjson uses direct function calls throughout its hot path (no interface
 dispatch). The improvement comes from PGO enabling tighter inlining of helper functions
@@ -269,7 +267,7 @@ pgo_extra_inlines_deps: 598
 | Intel Xeon 8370C | not significant | 0.247 | 1 | **NEUTRAL** | 39835718451 |
 
 go-json is the **clearest illustration that the 3% gate is microarchitecture-dependent:**
-identical code, identical profile, identical binary: three different gate verdicts
+identical code, identical profile, identical binary, three different gate verdicts
 (PROMOTE / NEUTRAL / not-significant) depending on which CPU GitHub assigns. Any
 single-run gate decision on go-json is not reliable without knowing the CPU model.
 
@@ -302,17 +300,16 @@ pgo_extra_inlines_deps: 799
 - AMD EPYC 7763: +14.25% (significant **regression**)
 - Intel Xeon 8370C: −2.59% (significant improvement)
 
-The benchmark is **noise-dominated.** CV of 9–16% means the benchmark cannot reliably
-measure the small signal PGO might produce on the Go portions of the code. The two
-significant results in opposite directions confirm that the benchmark is measuring noise,
-not a real effect.
+The benchmark is **noise-dominated.** A CV of 9–16% means the benchmark cannot reliably
+measure any small PGO signal on the Go portions. The two significant results in opposite
+directions confirm that the benchmark measures noise, not a real effect.
 
-**The NONE verdict holds**, but on grounds that *the benchmark cannot measure reliably*,
+**The NONE verdict holds**, but because *the benchmark cannot measure reliably*,
 not because PGO cleanly does nothing. snappy's compression hot path (`snappy.Encode`,
-`snappy.Decode`) routes through assembly implementations on amd64. PGO cannot touch
-assembly functions. Post-#55, the engine correctly reports 0 module-scoped devirts and
-2 extra inlines; the NONE verdict is correct from the build-analysis side. A benchmark
-redesign that isolates the Go portions is tracked in BP-60.
+`snappy.Decode`) routes through assembly on amd64. PGO cannot touch assembly functions.
+Post-#55, the engine reports 0 module-scoped devirts and 2 extra inlines; the NONE verdict
+is correct from the build-analysis side. A benchmark redesign that isolates the Go portions
+is tracked in BP-60.
 
 **Previous incorrect prediction (pre-#55):** The original 7 devirt decisions and 1164
 extra inlines were all stdlib/dependency noise. Post-#55 correctly isolates snappy's
@@ -388,16 +385,16 @@ Post-#55, snappy returns NONE (0 module-scoped devirts, 2 extra inlines). Correc
 
 ### Finding 4: PGO effect is near-perfectly reproducible within a CPU model
 
-Within a CPU model, run-to-run variance in the delta is tight: gjson AMD EPYC 7763 spread
+Within a CPU model, run-to-run variance in the delta is tight: gjson EPYC 7763 spread
 0.30pp across 4 runs; gjson Xeon 8573C spread 0.27pp across 2 runs. This confirms the CI
-harness is stable once CPU model is controlled. The apparent "noise" in multi-run summaries
-that do not stratify by CPU is almost entirely architecture signal.
+harness is stable once CPU model is controlled. The apparent "noise" in multi-run
+summaries that do not stratify by CPU is almost entirely architecture signal.
 
 ### Finding 5: 3% gate needs CPU-model context
 
 The 3% house standard is valid within a CPU model. It is not valid as a single-run gate
 across uncontrolled architecture assignment. go-json illustrates this clearly: PROMOTE on
-EPYC, NEUTRAL on Xeon 8573C, not-significant on Xeon 8370C. Identical code, identical
+EPYC, NEUTRAL on Xeon 8573C, not-significant on Xeon 8370C, identical code, identical
 commit. A stable gate verdict for go-json requires either (a) multi-run median stratified
 by CPU model, or (b) a higher threshold that clears all tested architectures.
 
@@ -415,9 +412,9 @@ Three improvements would tighten the signal:
    of the calling function in the profile. Decisions in functions with <1% CPU share
    should not count toward the HIGH threshold.
 
-2. **Asm-fraction detection:** if >30% of top-20 flat CPU samples are in `asm` functions
-   (identified by absence of Go source lines in the profile), add a warning that PGO
-   cannot touch the hot path regardless of devirt count.
+2. **Asm-fraction detection:** if >30% of top-20 flat CPU samples are in `asm` functions,
+   add a warning that PGO cannot touch the hot path regardless of devirt count.
+   Identify asm functions by the absence of Go source lines in the profile.
 
 3. **Architecture-aware gate:** when reporting gate verdicts from CI, require the CPU
    model to be present in the output. A verdict without a CPU model is incomplete.

@@ -10,7 +10,7 @@ pgoctl builds are benchmarked against the [Prometheus tsdb](https://github.com/p
 2. Select the branch you want to benchmark (default: `main`).
 3. Click **Run workflow**.
 
-The workflow will fail fast with a clear message if `testdata/prometheus_cpu.pprof` is missing. Run the `profile-collect` workflow first to generate it.
+The workflow fails fast with a clear message if `testdata/prometheus_cpu.pprof` is missing. Run the `profile-collect` workflow first to generate it.
 
 ### Automatic trigger
 
@@ -45,9 +45,9 @@ Overall: the hot paths that dominate the production profile (tsdb, chunkenc, sto
 
 ## What to watch
 
-Two regressions are being tracked (see issue *"Track: memory B/op uptick and FastRegexMatcher regression from initial PGO run"*):
+Two regressions need tracking (see issue *"Track: memory B/op uptick and FastRegexMatcher regression from initial PGO run"*):
 
-1. **`FastRegexMatcher/((fo(bar))|.+foo)`: +13.67% sec/op.** A regex pattern that was not hot in the production profile and appears to have been de-prioritized by the optimizer.
+1. **`FastRegexMatcher/((fo(bar))|.+foo)`: +13.67% sec/op.** A regex pattern not hot in the production profile. The optimizer likely de-prioritized it.
 2. **Memory `B/op` uptick**: tsdb **+3.56%** and storage **+3.44%**. PGO traded some allocation footprint for speed on these paths.
 
 Both patterns were cold in this profile. A broader profile should stabilize or reverse them. See the tracking issue for acceptance criteria.

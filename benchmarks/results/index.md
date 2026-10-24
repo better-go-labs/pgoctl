@@ -4,19 +4,19 @@ _Generated from CI artifacts. Do not edit by hand. Add runs by committing the ge
 
 ## AMD EPYC 7763 64-Core Processor
 
-- [2026-10-22 · run 39828409134](results/2026-10-22-39828409134-epyc-7763.md) _(old fasthttp benchmark, pre-40150e0)_
-- [2026-10-22 · run 39831658152](results/2026-10-22-39831658152-epyc-7763.md) _(old fasthttp benchmark, pre-40150e0)_
-- [2026-10-22 · run 39833250644](results/2026-10-22-39833250644-epyc-7763.md)
-- [2026-10-22 · run 39835714756](results/2026-10-22-39835714756-epyc-7763.md)
+- [2026-10-22 · run 39828409134](2026-10-22-39828409134-epyc-7763.md) _(old fasthttp benchmark, pre-40150e0)_
+- [2026-10-22 · run 39831658152](2026-10-22-39831658152-epyc-7763.md) _(old fasthttp benchmark, pre-40150e0)_
+- [2026-10-22 · run 39833250644](2026-10-22-39833250644-epyc-7763.md)
+- [2026-10-22 · run 39835714756](2026-10-22-39835714756-epyc-7763.md)
 
 ## Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 
-- [2026-10-22 · run 39835718451](results/2026-10-22-39835718451-xeon-8370c.md)
+- [2026-10-22 · run 39835718451](2026-10-22-39835718451-xeon-8370c.md)
 
 ## INTEL(R) XEON(R) PLATINUM 8573C
 
-- [2026-10-22 · run 39831653386](results/2026-10-22-39831653386-xeon-8573c.md) _(old fasthttp benchmark, pre-40150e0)_
-- [2026-10-22 · run 39833287253](results/2026-10-22-39833287253-xeon-8573c.md)
+- [2026-10-22 · run 39831653386](2026-10-22-39831653386-xeon-8573c.md) _(old fasthttp benchmark, pre-40150e0)_
+- [2026-10-22 · run 39833287253](2026-10-22-39833287253-xeon-8573c.md)
 
 ---
 

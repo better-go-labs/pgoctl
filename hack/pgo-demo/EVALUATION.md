@@ -183,10 +183,10 @@ goldmark, gjson, go-json, and fasthttp all show measurable compiler opportunitie
 snappy's monomorphic hot path generated zero module devirt and minimal inlines. NONE verdict is accurate.
 
 ✅ **Exposed version criticality**  
-fasthttp's v1.57.0 → v1.74.0 shift dramatically changed results (91 devirt → 0 devirt), illustrating that pre-flight analysis must use the exact version profiled in production.
+fasthttp's shift from v1.57.0 to v1.74.0 changed results from 91 devirt to 0 devirt. Pre-flight analysis must use the exact version profiled in production.
 
 ✅ **Post-#55 metrics clarify module-vs-deps**  
-The new `pgo_extra_inlines_deps` and `pgo_devirts_deps` fields distinguish library-scoped from external opportunities. snappy shows the contrast: 0 module devirt but 3 from reflection machinery in deps.
+The new `pgo_extra_inlines_deps` and `pgo_devirts_deps` fields distinguish library-scoped from external opportunities. snappy shows the contrast: 0 module devirt, but 3 from reflection machinery in deps.
 
 ### What This Tells Us
 

@@ -11,13 +11,13 @@ benchmarks/
     YYYY-MM-DD-<run_id>-<cpu-slug>.md  ← generated: one file per run
 ```
 
-Files are generated from CI artifacts. A person commits them after review. Auto-pushing causes conflicts when multiple runs fly.
+Files are generated from CI artifacts. A person commits them after review. Auto-pushing causes conflicts when several runs are in progress at once.
 
 ---
 
 ## What the harness does
 
-Each run executes ten interleaved rounds. Each round runs baseline and PGO binaries back-to-back. This interleaving cancels machine warm-up drift.
+Each run executes ten interleaved rounds. Within each round it runs the baseline and PGO binaries back-to-back for every library, in this order: goldmark, gjson, go-json, snappy, fasthttp. This interleaving cancels slow machine-state drift: if the machine gradually warms up over the run, both arms warm together.
 
 Compilation is separate from measurement: all ten binaries (five libraries × two
 variants) are compiled before any timing starts. This keeps compiler overhead out of
@@ -40,7 +40,7 @@ Read them in this order:
    you how noisy the arm is. A high CV means the machine was not in a stable state for
    that arm; the change and p-value are less meaningful.
 
-2. **The floor.** The smallest meaningful change is roughly `3 × CV / sqrt(n)`. At n=10, the floor approaches CV: changes below it are noise.
+2. **The floor.** The smallest meaningful change is roughly `3 × CV / sqrt(n)`. This is a convention, not a theorem; the `3` is a multiplier chosen to give a rough significance threshold. At n=10, the floor approaches CV: changes below it are noise.
 
 3. **The change.** The signed percentage improvement reported by benchstat. A `~`
    means benchstat found no statistically significant difference at its threshold.
@@ -56,7 +56,7 @@ Read them in this order:
 
 ## CPU model stratification
 
-Results are grouped by CPU model in `index.md`. **Never average rows from different CPU models.** PGO gains are micro-architecture-specific. The same binary produces different gains on different chips.
+Results are grouped by CPU model in `index.md`. **Never average rows from different CPU models.** PGO gains are micro-architecture-specific: the inlining decisions interact with the branch predictor, cache geometry, and instruction decoder. The same binary produces different gains on a different chip family.
 
 ---
 
@@ -64,7 +64,7 @@ Results are grouped by CPU model in `index.md`. **Never average rows from differ
 
 ### `± ∞` in benchstat output
 
-Benchstat could not compute a confidence interval. This means one arm has zero variance (timeout or crash). The row is unreliable.
+Benchstat could not compute a confidence interval. This usually means one arm had zero variance across rounds (all measurements identical). This happens when the binary hit a timeout and produced no output for some rounds. The row is unreliable.
 
 ### Significant p-value in both directions across runs
 
@@ -72,7 +72,7 @@ If runs show opposite significant changes for the same library on the same CPU, 
 
 ### Lopsided CV pair (e.g., large baseline CV, small PGO CV)
 
-Something disturbed one arm during the run: scheduling, thermal throttling, or noise. Do not read stability into the high-CV arm.
+Something disturbed one arm during the run: scheduling interference, thermal throttling, or a noisy neighbour on the host. The low-CV arm's measurements are fine; the high-CV arm's are not. Do not read stability into the PGO side.
 
 ---
 
