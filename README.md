@@ -98,7 +98,7 @@ PGO signal for the compiler to act on. Run it via `run-leverage-probe`:
 
 ```yaml
 - id: pgo
-  uses: better-go-labs/pgoctl@v0.1.0
+  uses: better-go-labs/pgoctl@v0.1.4
   with:
     profile-file: cpu.pprof
     run-leverage-probe: 'true'
@@ -123,19 +123,15 @@ The probe emits `leverage-verdict` with one of four values:
 A `NONE` verdict emits a `::warning::` annotation and never fails the job by itself.
 To gate on it, add an explicit assertion as shown above.
 
-> **Note:** No release up to v0.1.3 ships `leverage-check` in its binary distribution.
-> The probe works only while the action builds `pgoctl` from source (i.e. no `pgoctl-version`
-> tag set in your workflow, or a version that is not yet released).
-
 ### GitHub Action (CI integration)
 
 > The Action is currently in this repo and used internally. Once the repo is public it will be
-> referenceable as `better-go-labs/pgoctl@v0.1.0`.
+> referenceable as `better-go-labs/pgoctl@v0.1.4`.
 
 From a pre-collected pprof file (skips collect):
 
 ```yaml
-- uses: better-go-labs/pgoctl@v0.1.0
+- uses: better-go-labs/pgoctl@v0.1.4
   with:
     profile-file: cpu.pprof      # pre-collected pprof; skips the collect step
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -144,7 +140,7 @@ From a pre-collected pprof file (skips collect):
 From a live pprof endpoint:
 
 ```yaml
-- uses: better-go-labs/pgoctl@v0.1.0
+- uses: better-go-labs/pgoctl@v0.1.4
   with:
     pprof-url: http://localhost:6060
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -153,7 +149,7 @@ From a live pprof endpoint:
 From a Parca server:
 
 ```yaml
-- uses: better-go-labs/pgoctl@v0.1.0
+- uses: better-go-labs/pgoctl@v0.1.4
   with:
     parca-url: http://parca:7070
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -310,7 +306,7 @@ Exit codes: **0** = promote or neutral, **1** = rollback, **2** = input error.
 `action.yml` at the repo root is a composite Action that runs the full pgoctl pipeline in CI: collect (or reuse an existing profile), validate, and compare against a baseline, then optionally uploads the artifact and posts a verdict comment on the PR.
 
 > Currently for use within this repo (`./`). Once published publicly,
-> the reference will be `better-go-labs/pgoctl@v0.1.0`.
+> the reference will be `better-go-labs/pgoctl@v0.1.4`.
 
 ### Inputs
 
@@ -426,7 +422,7 @@ demo.sh               -- interactive happy-path demo
 
 ## Status
 
-v0.1.0. See [Benchmarks and evaluation](#benchmarks-and-evaluation) for PGO benchmark results and the leverage-check evaluation.
+v0.1.4. See [Benchmarks and evaluation](#benchmarks-and-evaluation) for PGO benchmark results and the leverage-check evaluation.
 
 ## License
 
