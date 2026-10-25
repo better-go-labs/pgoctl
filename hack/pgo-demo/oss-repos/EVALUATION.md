@@ -31,7 +31,7 @@ methodology was replaced; they are not used as current performance evidence.
 
 Only gjson reached p<0.05, despite several apparent 2–7% deltas.
 
-These numbers came from the original evaluation preserved in [PR #53](https://github.com/better-go-labs/pgoctl/pull/53).
+These numbers came from [PR #53 — Original Evaluation Table](https://github.com/better-go-labs/pgoctl/pull/53#issue-5495181070).
 The five-round sample was too small for the effect sizes being evaluated, and
 the run did not preserve the exact physical CPU model needed for
 microarchitecture-specific comparisons. The CI-backed results below supersede it.
