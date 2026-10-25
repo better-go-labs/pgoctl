@@ -50,7 +50,7 @@ Read them in this order:
    measurement distributions differ; it does not say whether the magnitude is
    large enough to matter.
 
-6. **n.** Should always be 10 for complete runs. A lower value means some rounds were
+5. **n.** Should always be 10 for complete runs. A lower value means some rounds were
    dropped (timeout or binary crash); treat such rows with extra caution.
 
 ---
