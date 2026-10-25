@@ -42,14 +42,15 @@ Read them in this order:
 
 2. **The floor.** The smallest meaningful change is roughly `3 × CV / sqrt(n)`. This is a convention, not a theorem; the `3` is a multiplier chosen to give a rough significance threshold. At n=10, the floor approaches CV: changes below it are noise.
 
-3. **The change.** The signed percentage improvement reported by benchstat. A `~`
+3. **The change.** The signed percentage change reported by benchstat. A `~`
    means benchstat found no statistically significant difference at its threshold.
 
-4. **The p-value.** The Wilcoxon signed-rank p-value from benchstat. A low p-value
-   says the direction is consistent across the ten rounds; it does not say the
-   magnitude is large relative to the floor.
+4. **The p-value.** The Mann–Whitney U p-value reported by benchstat for the
+   baseline and PGO samples. A low p-value provides evidence that the two
+   measurement distributions differ; it does not say whether the magnitude is
+   large enough to matter.
 
-5. **n.** Should always be 10 for complete runs. A lower value means some rounds were
+6. **n.** Should always be 10 for complete runs. A lower value means some rounds were
    dropped (timeout or binary crash); treat such rows with extra caution.
 
 ---
