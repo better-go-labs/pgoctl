@@ -15,6 +15,28 @@
 
 ---
 
+### Historical first evaluation [retired]
+
+The initial evaluation used five baseline and five PGO benchmark rounds on a
+2-vCPU Skylake VM. These results are preserved to explain why the benchmark
+methodology was replaced; they are not used as current performance evidence.
+
+| Repository | Δ | p-value | Initial interpretation |
+|------------|---:|--------:|------------------------|
+| goldmark | -5.1% | 0.310 | not significant |
+| gjson | -6.3% | 0.024 | statistically significant |
+| go-json | +0.1% | 0.841 | not significant |
+| snappy | -1.8% | 0.481 | not significant |
+| fasthttp | -1.6% | 0.841 | not significant |
+
+Only gjson reached p<0.05, despite several apparent 2–7% deltas.
+
+These numbers came from [PR #53 — Original Evaluation Table](https://github.com/better-go-labs/pgoctl/pull/53#issue-5495181070).
+The five-round sample was too small for the effect sizes being evaluated, and
+the run did not preserve the exact physical CPU model needed for
+microarchitecture-specific comparisons. The CI-backed results below supersede it.
+
+
 ## Scope
 
 This document validates `pgoctl leverage-check` across five open-source Go repositories.
