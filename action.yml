@@ -234,7 +234,7 @@ runs:
     - name: Restore previous artifact
       id: restore-artifact
       if: inputs.restore-previous-artifact == 'true' && inputs.previous-profile == ''
-      uses: dawidd6/action-download-artifact@v6
+      uses: dawidd6/action-download-artifact@v27
       with:
         name: ${{ inputs.artifact-name }}
         path: previous
