@@ -360,7 +360,6 @@ func extraInlinesByOrigin(pgo, baseline map[string]bool, mods *modulePackages) (
 	return
 }
 
-
 const listFormat = "{{.ImportPath}}\t{{if .Module}}{{.Module.Main}}{{end}}"
 
 type modulePackages struct {

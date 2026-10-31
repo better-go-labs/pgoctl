@@ -172,4 +172,3 @@ func pgoVerdict(p *profile.Profile, _ int64, uniqueFunctions int) (Verdict, stri
 			samples, uniqueFunctions)
 	}
 }
-
