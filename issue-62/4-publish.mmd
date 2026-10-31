@@ -16,7 +16,7 @@ sequenceDiagram
     J->>P: pgoctl store publish --profile cpu.pprof
     P->>G: list the releases of the key
     P->>G: create the release of today as a draft (if absent)
-    P->>G: upload runs--<run-id>-<attempt>.pprof
+    P->>G: upload runs-<run-id>-<attempt>.pprof
     Note over P: select the run with the highest<br/>quality_score as daily.pprof
     P->>G: download daily.pprof of each day in the window
     Note over P: normalize each day, then<br/>weighted merge into default.pgo

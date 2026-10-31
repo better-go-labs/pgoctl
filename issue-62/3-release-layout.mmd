@@ -1,8 +1,8 @@
 flowchart LR
   subgraph REL["Release profile/2026-10-26 (prerelease, latest=false)"]
     direction LR
-    R1["runs--11873365122-1.pprof<br/>quality_score 0.91"] -- "highest score" --> DP["daily.pprof<br/>copy of the selected run"]
-    R2["runs--11873399001-1.pprof<br/>quality_score 0.80"] -. "kept, not selected" .-> DP
+    R1["runs-11873365122-1.pprof<br/>quality_score 0.91"] -- "highest score" --> DP["daily.pprof<br/>copy of the selected run"]
+    R2["runs-11873399001-1.pprof<br/>quality_score 0.80"] -. "kept, not selected" .-> DP
     DP --> DG["default.pgo<br/>window merge<br/>builds download this file"]
     DP ~~~ MF["manifest.json<br/>runs, daily_run, exclusions,<br/>window, sha256"]
   end
