@@ -1,0 +1,17 @@
+flowchart LR
+  subgraph Today["Today: recursive merge"]
+    direction TB
+    A1["cpu.pprof of the new run"] --> M1["pgoctl merge"]
+    P1["previous default.pgo<br/>workflow artifact, 30-day retention"] --> M1
+    M1 --> D1["default.pgo"]
+    D1 -. "uploaded, then restored<br/>by the next run" .-> P1
+  end
+  subgraph New["New: bounded window"]
+    direction TB
+    R20["profile/2026-10-20<br/>daily.pprof"] --> M2["normalize, then<br/>weighted merge"]
+    R22["profile/2026-10-22<br/>daily.pprof"] --> M2
+    R24["profile/2026-10-24<br/>daily.pprof"] --> M2
+    R26["profile/2026-10-26<br/>daily.pprof"] --> M2
+    M2 --> D2["default.pgo of<br/>profile/2026-10-26"]
+  end
+  Today ~~~ New

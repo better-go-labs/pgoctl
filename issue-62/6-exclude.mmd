@@ -1,0 +1,13 @@
+sequenceDiagram
+  autonumber
+  participant O as Operator
+  participant P as pgoctl
+  participant G as GitHub Releases
+  O->>P: pgoctl store exclude --date 2026-10-24 --run 11873365122-1
+  P->>G: read manifest.json of 2026-10-24
+  Note over P: mark the run excluded,<br/>select the next best run
+  P->>G: write daily.pprof, default.pgo, manifest.json of 2026-10-24
+  P->>G: find the snapshots whose window contains 2026-10-24
+  P->>G: rebuild default.pgo of 2026-10-26, record the exclusion
+  Note over P,G: 2026-10-20 and 2026-10-22 do not change
+  P-->>O: rebuilt 2026-10-24, 2026-10-26

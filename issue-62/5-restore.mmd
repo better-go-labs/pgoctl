@@ -1,0 +1,20 @@
+sequenceDiagram
+  autonumber
+  participant B as Build job
+  participant P as pgoctl
+  participant G as GitHub Releases
+  B->>P: pgoctl store restore --out default.pgo
+  P->>G: list the releases of the key (with pagination)
+  G-->>P: releases
+  Note over P: drop drafts, days without default.pgo,<br/>and unknown schema_version
+  loop newest day first
+    P->>G: download manifest.json and default.pgo
+    alt sha256 matches the manifest
+      P-->>B: default.pgo, exit 0
+    else asset missing or sha256 wrong
+      Note over P: try the next newest day
+    end
+  end
+  opt no usable day
+    P-->>B: exit 3, build without PGO, note in the job summary
+  end

@@ -1,0 +1,28 @@
+sequenceDiagram
+  autonumber
+  participant J as Publish job
+  participant P as pgoctl
+  participant G as GitHub Releases
+  J->>P: pgoctl store resolve
+  P->>G: GET /repos/{owner}/{repo}
+  G-->>P: visibility, default branch
+  P-->>J: store, publish
+  Note over J,G: A public repository without allow-public-profiles uses the Artifacts store
+  alt branch is not publish-branch
+    Note over J: collect and validate only,<br/>write a notice
+  else collection or quality gate fails
+    Note over J: publish nothing,<br/>builds keep the last snapshot
+  else publish
+    J->>P: pgoctl store publish --profile cpu.pprof
+    P->>G: list the releases of the key
+    P->>G: create the release of today as a draft (if absent)
+    P->>G: upload runs--<run-id>-<attempt>.pprof
+    Note over P: select the run with the highest<br/>quality_score as daily.pprof
+    P->>G: download daily.pprof of each day in the window
+    Note over P: normalize each day, then<br/>weighted merge into default.pgo
+    P->>G: check that manifest.json did not change (concurrency)
+    P->>G: replace daily.pprof, default.pgo and manifest.json
+    P->>G: publish the draft as a prerelease, latest=false
+    P->>G: delete releases older than the retention
+    P-->>J: default.pgo and the tag
+  end
