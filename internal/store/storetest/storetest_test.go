@@ -89,7 +89,7 @@ func TestMemory_FailRead_Transient(t *testing.T) {
 
 	rc, err := s.ReadAsset(ctx, days[0], store.AssetDaily)
 	require.NoError(t, err, "second read succeeds")
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	got, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("payload"), got)
