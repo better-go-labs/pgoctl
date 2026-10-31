@@ -3,16 +3,21 @@ sequenceDiagram
   participant J as Publish job
   participant P as pgoctl
   participant G as GitHub Releases
-  J->>P: pgoctl store resolve
+  J->>P: pgoctl store resolve (which store, publish or not)
   P->>G: GET /repos/{owner}/{repo}
   G-->>P: visibility, default branch
-  P-->>J: store, publish
+  P-->>J: store=github-release|artifact, publish=true|false
   Note over J,G: A public repository without allow-public-profiles uses the Artifacts store
-  alt branch is not publish-branch
-    Note over J: collect and validate only,<br/>write a notice
+  Note over J: collect and validate cpu.pprof
+  alt publish=false (branch is not publish-branch)
+    Note over J: publish nothing,<br/>resolve wrote a ::notice::
   else collection or quality gate fails
     Note over J: publish nothing,<br/>builds keep the last snapshot
-  else publish
+  else publish=true and the gate passes
+    opt exclude-runs is set
+      J->>P: pgoctl store exclude --pairs
+      Note over P: mark the runs, rebuild<br/>each affected snapshot
+    end
     J->>P: pgoctl store publish --profile cpu.pprof
     P->>G: list the releases of the key
     P->>G: create the release of today as a draft (if absent)

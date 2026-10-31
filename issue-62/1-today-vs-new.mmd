@@ -8,10 +8,10 @@ flowchart LR
   end
   subgraph New["New: bounded window"]
     direction TB
-    R20["profile/2026-10-20<br/>daily.pprof"] --> M2["normalize, then<br/>weighted merge"]
-    R22["profile/2026-10-22<br/>daily.pprof"] --> M2
-    R24["profile/2026-10-24<br/>daily.pprof"] --> M2
-    R26["profile/2026-10-26<br/>daily.pprof"] --> M2
-    M2 --> D2["default.pgo of<br/>profile/2026-10-26"]
+    R20["profile/2026-10-20.0<br/>daily.pprof"] --> M2["normalize, then<br/>weighted merge"]
+    R22["profile/2026-10-22.0<br/>daily.pprof"] --> M2
+    R24["profile/2026-10-24.0<br/>daily.pprof"] --> M2
+    R26["profile/2026-10-26.0<br/>daily.pprof"] --> M2
+    M2 --> D2["default.pgo of<br/>profile/2026-10-26.0"]
   end
   Today ~~~ New

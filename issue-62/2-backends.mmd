@@ -1,5 +1,5 @@
 flowchart TB
-  CLI["pgoctl store<br/>publish, restore, exclude, prune"] --> S["internal/store<br/>Store interface, window, exclude, prune"]
+  CLI["pgoctl store<br/>resolve, publish, restore, exclude, prune"] --> S["internal/store<br/>Store interface, window, exclude, prune"]
   S --> GH["internal/store/ghrelease<br/>GitHub Releases, the default"]
   CLI --> AR["internal/store/artifact<br/>Actions Artifacts, the fallback"]
   S -.-> S3["S3<br/>later, not built"]

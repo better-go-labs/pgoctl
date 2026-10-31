@@ -1,0 +1,8 @@
+flowchart LR
+  subgraph DAY["One date with immutable releases on"]
+    direction LR
+    S0["profile/2026-10-26.0<br/>run 1-1<br/>superseded"] -- "next publish:<br/>copy runs and manifest" --> S1["profile/2026-10-26.1<br/>runs 1-1, 2-1<br/>superseded"]
+    S1 -- "next publish:<br/>copy runs and manifest" --> S2["profile/2026-10-26.2<br/>runs 1-1, 2-1, 3-1<br/>builds read this one"]
+  end
+  PR["prune"] -. "deletes" .-> S0
+  PR -. "deletes" .-> S1
