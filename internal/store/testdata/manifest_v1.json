@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "key": {
+    "service": "api"
+  },
+  "branch": "main",
+  "date": "2026-10-26",
+  "tag": "profile/api/2026-10-26.0",
+  "sequence": 0,
+  "supersedes": [
+    "profile/api/2026-10-25.0"
+  ],
+  "daily_run": "11873365122-1",
+  "runs": [
+    {
+      "id": "11873365122-1",
+      "commit": "abc123def456",
+      "captured_at": "2026-10-26T10:00:00Z",
+      "samples": 48213,
+      "quality_score": 0.91,
+      "sha256": "11111111111111111111111111111111",
+      "excluded": false
+    },
+    {
+      "id": "11873365122-2",
+      "commit": "abc123def456",
+      "captured_at": "2026-10-26T14:00:00Z",
+      "samples": 12000,
+      "quality_score": 0.42,
+      "sha256": "22222222222222222222222222222222",
+      "excluded": true,
+      "excluded_at": "2026-10-26T15:00:00Z",
+      "excluded_by": "ci",
+      "reason": "low sample count"
+    }
+  ],
+  "window": {
+    "lookback_days": 14,
+    "max_profiles": 7,
+    "dates": [
+      "2026-10-26",
+      "2026-10-25"
+    ]
+  },
+  "exclusions": [
+    {
+      "date": "2026-10-26",
+      "run": "11873365122-2",
+      "reason": "low sample count",
+      "by": "ci",
+      "at": "2026-10-26T15:00:00Z"
+    }
+  ],
+  "merge": {
+    "strategy": "weighted",
+    "half_life": "24h",
+    "min_weight": 0.125,
+    "normalize": true
+  },
+  "go_version": "go1.26.10",
+  "pgoctl_version": "v0.2.0",
+  "assets": {
+    "daily.pprof": "aaaa",
+    "default.pgo": "bbbb",
+    "manifest.json": "cccc"
+  }
+}
