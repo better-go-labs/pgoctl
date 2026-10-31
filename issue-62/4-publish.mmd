@@ -28,6 +28,6 @@ sequenceDiagram
     P->>G: check that manifest.json did not change (concurrency)
     P->>G: replace daily.pprof, default.pgo and manifest.json
     P->>G: publish the draft as a prerelease, latest=false
-    P->>G: delete releases older than the retention
+    P->>G: prune: superseded sequences, and days beyond max-profiles when the window is full
     P-->>J: default.pgo and the tag
   end
