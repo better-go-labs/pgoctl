@@ -3,6 +3,7 @@ package storetest_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"testing"
 
@@ -93,4 +94,44 @@ func TestMemory_FailRead_Transient(t *testing.T) {
 	got, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("payload"), got)
+}
+
+// TestMemory_ContractImmutable runs the shared contract against a store that
+// locks published days, exercising the Immutable_RejectsWrite assertion branch.
+func TestMemory_ContractImmutable(t *testing.T) {
+	storetest.RunContract(t, func() store.Store { return storetest.NewMemory(storetest.Immutable()) })
+}
+
+// errReader fails every Read, modelling a body that cannot be read.
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) { return 0, errors.New("read failed") }
+
+// TestMemory_MethodErrors covers the in-memory store's not-found and read-error
+// branches that the flow tests do not reach directly.
+func TestMemory_MethodErrors(t *testing.T) {
+	ctx := context.Background()
+	s := storetest.NewMemory()
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	date, err := store.ParseDate("2026-10-31")
+	require.NoError(t, err)
+	missing := store.Day{Key: key, Date: date, Seq: 0}
+
+	_, err = s.ReadAsset(ctx, missing, "x")
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	err = s.PutAsset(ctx, missing, "x", bytes.NewReader([]byte("data")))
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	err = s.DeleteAsset(ctx, missing, "x")
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	err = s.Publish(ctx, missing)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// A real day whose asset body cannot be read surfaces the read error.
+	day, err := s.BeginDay(ctx, key, date, 0)
+	require.NoError(t, err)
+	err = s.PutAsset(ctx, day, "x", errReader{})
+	require.Error(t, err)
 }

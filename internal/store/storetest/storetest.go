@@ -5,6 +5,7 @@ package storetest
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -30,16 +31,58 @@ func Immutable() Option { return func(m *memory) { m.immutable = true } }
 // models a transient asset read failure for the publish "asset vanishes" path.
 func FailRead(name string) Option { return func(m *memory) { m.failReads[name]++ } }
 
+// FailReadErr makes the next read of name return a non-ErrNotFound error exactly
+// once, modelling a hard backend read failure that the flows must propagate
+// rather than skip.
+func FailReadErr(name string) Option { return func(m *memory) { m.failReadErrs[name]++ } }
+
+// FailWrite makes the next PutAsset of name return an error exactly once, so the
+// upload error path of a flow can be exercised.
+func FailWrite(name string) Option { return func(m *memory) { m.failWrites[name]++ } }
+
+// FailPublish makes the next Publish return an error exactly once.
+func FailPublish() Option { return func(m *memory) { m.failPublish++ } }
+
+// FailBeginDay makes the next BeginDay return an error exactly once.
+func FailBeginDay() Option { return func(m *memory) { m.failBeginDay++ } }
+
+// FailDeleteDay makes the next DeleteDay return an error exactly once.
+func FailDeleteDay() Option { return func(m *memory) { m.failDeleteDay++ } }
+
+// FailListDaysAt makes the call-th ListDays return an error, numbered from 1.
+func FailListDaysAt(call int) Option { return func(m *memory) { m.failListAt = call } }
+
+// FailListNext makes the next ListDays return an error exactly once, regardless
+// of the call count so far. It pairs with Arm to inject a failure after setup.
+func FailListNext() Option { return func(m *memory) { m.failListNext++ } }
+
 // BeforeList registers fn to run at the start of each ListDays call, numbered
 // from 1. It gives a test a seam to inject a competing publish between the
 // flow's ListDays calls, exercising the concurrent-update path.
 func BeforeList(fn func(call int)) Option { return func(m *memory) { m.beforeList = fn } }
 
+// Arm applies additional fail-injection options to an existing store from
+// NewMemory, so a test can inject a failure after a successful setup rather than
+// at construction.
+func Arm(s store.Store, opts ...Option) {
+	m, ok := s.(*memory)
+	if !ok {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, o := range opts {
+		o(m)
+	}
+}
+
 // NewMemory returns an in-memory Store for tests.
 func NewMemory(opts ...Option) store.Store {
 	m := &memory{
-		days:      make(map[string]*memDay),
-		failReads: make(map[string]int),
+		days:         make(map[string]*memDay),
+		failReads:    make(map[string]int),
+		failReadErrs: make(map[string]int),
+		failWrites:   make(map[string]int),
 	}
 	for _, o := range opts {
 		o(m)
@@ -67,14 +110,25 @@ type memDay struct {
 
 // memory implements store.Store entirely in process.
 type memory struct {
-	mu         sync.Mutex
-	days       map[string]*memDay
-	immutable  bool
-	failReads  map[string]int
-	beforeList func(call int)
-	listCalls  int
-	clock      int64
+	mu            sync.Mutex
+	days          map[string]*memDay
+	immutable     bool
+	failReads     map[string]int
+	failReadErrs  map[string]int
+	failWrites    map[string]int
+	failPublish   int
+	failBeginDay  int
+	failDeleteDay int
+	failListAt    int
+	failListNext  int
+	beforeList    func(call int)
+	listCalls     int
+	clock         int64
 }
+
+// errInjected is the generic error the fail-injection options return, distinct
+// from the sentinel errors so flows treat it as a hard failure.
+var errInjected = errors.New("injected failure")
 
 func keyOf(k store.Key) string {
 	return fmt.Sprintf("%s\x00%s\x00%s", k.Repo, k.Prefix, k.Service)
@@ -113,6 +167,13 @@ func (m *memory) ListDays(_ context.Context, key store.Key) ([]store.Day, error)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failListAt == call {
+		return nil, fmt.Errorf("listing days: %w", errInjected)
+	}
+	if m.failListNext > 0 {
+		m.failListNext--
+		return nil, fmt.Errorf("listing days: %w", errInjected)
+	}
 	prefix := keyOf(key)
 	var out []store.Day
 	for _, d := range m.days {
@@ -136,6 +197,10 @@ func (m *memory) ReadAsset(_ context.Context, day store.Day, name string) (io.Re
 		m.failReads[name] = n - 1
 		return nil, fmt.Errorf("transient read of %q: %w", name, store.ErrNotFound)
 	}
+	if n := m.failReadErrs[name]; n > 0 {
+		m.failReadErrs[name] = n - 1
+		return nil, fmt.Errorf("hard read of %q: %w", name, errInjected)
+	}
 	d, ok := m.days[identity(day.Key, day.Date, day.Seq)]
 	if !ok {
 		return nil, fmt.Errorf("day %s: %w", day.Date, store.ErrNotFound)
@@ -150,6 +215,10 @@ func (m *memory) ReadAsset(_ context.Context, day store.Day, name string) (io.Re
 func (m *memory) BeginDay(_ context.Context, key store.Key, date store.Date, seq int) (store.Day, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failBeginDay > 0 {
+		m.failBeginDay--
+		return store.Day{}, fmt.Errorf("beginning day: %w", errInjected)
+	}
 	id := identity(key, date, seq)
 	d, ok := m.days[id]
 	if !ok {
@@ -166,6 +235,10 @@ func (m *memory) PutAsset(_ context.Context, day store.Day, name string, r io.Re
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if n := m.failWrites[name]; n > 0 {
+		m.failWrites[name] = n - 1
+		return fmt.Errorf("writing %q: %w", name, errInjected)
+	}
 	d, ok := m.days[identity(day.Key, day.Date, day.Seq)]
 	if !ok {
 		return fmt.Errorf("day %s: %w", day.Date, store.ErrNotFound)
@@ -199,6 +272,10 @@ func (m *memory) DeleteAsset(_ context.Context, day store.Day, name string) erro
 func (m *memory) Publish(_ context.Context, day store.Day) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failPublish > 0 {
+		m.failPublish--
+		return fmt.Errorf("publishing day %s: %w", day.Date, errInjected)
+	}
 	d, ok := m.days[identity(day.Key, day.Date, day.Seq)]
 	if !ok {
 		return fmt.Errorf("day %s: %w", day.Date, store.ErrNotFound)
@@ -213,6 +290,10 @@ func (m *memory) Publish(_ context.Context, day store.Day) error {
 func (m *memory) DeleteDay(_ context.Context, day store.Day) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failDeleteDay > 0 {
+		m.failDeleteDay--
+		return fmt.Errorf("deleting day %s: %w", day.Date, errInjected)
+	}
 	delete(m.days, identity(day.Key, day.Date, day.Seq))
 	return nil
 }
