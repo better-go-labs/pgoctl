@@ -56,32 +56,12 @@ func ParsePackageShareGates(values []string) ([]PackageShareGate, error) {
 	return gates, nil
 }
 
-// cpuSampleIndex returns the index of the CPU sample value (cpu/nanoseconds,
-// falling back to samples/count) and whether one was found.
-func cpuSampleIndex(p *profile.Profile) (int, bool) {
-	preferred, fallback := -1, -1
-	for i, st := range p.SampleType {
-		switch {
-		case st.Type == "cpu" && st.Unit == "nanoseconds":
-			preferred = i
-		case st.Type == "samples" && st.Unit == "count":
-			fallback = i
-		}
-	}
-	if preferred >= 0 {
-		return preferred, true
-	}
-	if fallback >= 0 {
-		return fallback, true
-	}
-	return -1, false
-}
 
 // ComputePackageShares returns each package's flat CPU share (percent of
 // total CPU sample value), attributed to the leaf (innermost) function of
 // each sample. Returns an error when the profile has no CPU sample type.
 func computePackageShares(p *profile.Profile) (map[string]float64, error) {
-	idx, ok := cpuSampleIndex(p)
+	idx, ok := pprofutil.CPUSampleIndex(p)
 	if !ok {
 		return nil, fmt.Errorf("%w", errors.ErrNoCPUSampleType)
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 	"github.com/Better-Go-Labs/pgoctl/internal/validate"
 	"github.com/google/pprof/profile"
 )
@@ -163,12 +164,12 @@ func TestCPUSampleIndex(t *testing.T) {
 				t.Fatalf("failed to parse profile: %v", err)
 			}
 
-			idx, ok := cpuSampleIndex(p)
+			idx, ok := pprofutil.CPUSampleIndex(p)
 			if ok != tt.wantOk {
-				t.Errorf("cpuSampleIndex() ok = %v, want %v", ok, tt.wantOk)
+				t.Errorf("pprofutil.CPUSampleIndex() ok = %v, want %v", ok, tt.wantOk)
 			}
 			if ok && idx != tt.wantIdx {
-				t.Errorf("cpuSampleIndex() idx = %d, want %d", idx, tt.wantIdx)
+				t.Errorf("pprofutil.CPUSampleIndex() idx = %d, want %d", idx, tt.wantIdx)
 			}
 		})
 	}
@@ -219,7 +220,7 @@ func TestCpuSampleIndex_FallbackOnly(t *testing.T) {
 	p := &profile.Profile{
 		SampleType: []*profile.ValueType{{Type: "samples", Unit: "count"}},
 	}
-	idx, ok := cpuSampleIndex(p)
+	idx, ok := pprofutil.CPUSampleIndex(p)
 	if !ok {
 		t.Error("expected ok=true for samples/count type")
 	}
@@ -232,7 +233,7 @@ func TestCpuSampleIndex_NoMatch(t *testing.T) {
 	p := &profile.Profile{
 		SampleType: []*profile.ValueType{{Type: "alloc_space", Unit: "bytes"}},
 	}
-	_, ok := cpuSampleIndex(p)
+	_, ok := pprofutil.CPUSampleIndex(p)
 	if ok {
 		t.Error("expected ok=false for unknown sample type")
 	}

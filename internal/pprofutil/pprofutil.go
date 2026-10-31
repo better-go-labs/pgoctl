@@ -79,3 +79,25 @@ func SampleCount(p *profile.Profile) int64 {
 	}
 	return n
 }
+
+// CPUSampleIndex returns the index of the CPU sample value in p.SampleType.
+// It prefers cpu/nanoseconds and falls back to samples/count.
+// Returns -1, false when neither type is present.
+func CPUSampleIndex(p *profile.Profile) (int, bool) {
+	preferred, fallback := -1, -1
+	for i, st := range p.SampleType {
+		switch {
+		case st.Type == "cpu" && st.Unit == "nanoseconds":
+			preferred = i
+		case st.Type == "samples" && st.Unit == "count":
+			fallback = i
+		}
+	}
+	if preferred >= 0 {
+		return preferred, true
+	}
+	if fallback >= 0 {
+		return fallback, true
+	}
+	return -1, false
+}
