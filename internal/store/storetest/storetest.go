@@ -171,7 +171,18 @@ func (dr *memDraft) PutManifest(_ context.Context, m *store.Manifest) error {
 func (dr *memDraft) Commit(_ context.Context) error {
 	dr.state.mu.Lock()
 	defer dr.state.mu.Unlock()
-	dr.state.committed = dr.state.draft
+	if dr.state.committed == nil {
+		dr.state.committed = newSnapshot()
+	}
+	// Merge the draft into the committed state so that assets from earlier
+	// commits (e.g. run files from a prior Publish on the same day) are not
+	// lost when a second Publish commits only its own run file.
+	for name, data := range dr.state.draft.assets {
+		dr.state.committed.assets[name] = data
+	}
+	if dr.state.draft.manifest != nil {
+		dr.state.committed.manifest = dr.state.draft.manifest
+	}
 	dr.state.draft = nil
 	return nil
 }
