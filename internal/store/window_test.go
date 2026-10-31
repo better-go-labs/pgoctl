@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/Better-Go-Labs/pgoctl/internal/store"
@@ -93,7 +94,7 @@ func TestSelectWindow(t *testing.T) {
 			days: func() []store.Day {
 				out := make([]store.Day, 10)
 				for i := range out {
-					out[i] = store.Day{Date: "2026-10-" + pad(31 - i)}
+					out[i] = store.Day{Date: "2026-10-" + pad(31-i)}
 				}
 				return out
 			}(),
@@ -101,7 +102,7 @@ func TestSelectWindow(t *testing.T) {
 			want: func() []store.Day {
 				out := make([]store.Day, 7)
 				for i := range out {
-					out[i] = store.Day{Date: "2026-10-" + pad(31 - i)}
+					out[i] = store.Day{Date: "2026-10-" + pad(31-i)}
 				}
 				return out
 			}(),
@@ -118,7 +119,7 @@ func TestSelectWindow(t *testing.T) {
 
 func pad(n int) string {
 	if n < 10 {
-		return "0" + string(rune('0'+n))
+		return fmt.Sprintf("0%d", n)
 	}
-	return string([]byte{byte('0' + n/10), byte('0' + n%10)})
+	return fmt.Sprintf("%d", n)
 }

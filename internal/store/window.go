@@ -25,9 +25,9 @@ func SelectWindow(days []Day, opts WindowOpts) []Day {
 	if lookback == 0 {
 		lookback = defaultLookbackDays
 	}
-	max := opts.MaxProfiles
-	if max == 0 {
-		max = defaultMaxProfiles
+	maxDays := opts.MaxProfiles
+	if maxDays == 0 {
+		maxDays = defaultMaxProfiles
 	}
 
 	today, err := time.Parse("2006-01-02", opts.Today)
@@ -45,7 +45,7 @@ func SelectWindow(days []Day, opts WindowOpts) []Day {
 		// Window: strictly after earliest (not equal), not after today.
 		if t.After(earliest) && !t.After(today) {
 			out = append(out, d)
-			if len(out) == max {
+			if len(out) == maxDays {
 				break
 			}
 		}

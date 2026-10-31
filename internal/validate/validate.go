@@ -56,7 +56,6 @@ func ParsePackageShareGates(values []string) ([]PackageShareGate, error) {
 	return gates, nil
 }
 
-
 // ComputePackageShares returns each package's flat CPU share (percent of
 // total CPU sample value), attributed to the leaf (innermost) function of
 // each sample. Returns an error when the profile has no CPU sample type.

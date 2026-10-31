@@ -23,9 +23,9 @@ func RunAssetName(runID string) string {
 // PublishOpts configures a Publish call.
 type PublishOpts struct {
 	Key          string
-	Date         string  // "2026-10-31"
-	RunID        string  // e.g. "11873365122-1"
-	ProfileData  []byte  // raw cpu.pprof bytes
+	Date         string // "2026-10-31"
+	RunID        string // e.g. "11873365122-1"
+	ProfileData  []byte // raw cpu.pprof bytes
 	QualityScore float64
 	WindowOpts   WindowOpts
 	MergeOpts    merge.Options
@@ -182,6 +182,15 @@ func SelectDailyRun(runs []Asset) *Asset {
 	return best
 }
 
+// parsedInput holds a parsed pprof profile alongside the metadata from the
+// original merge.Input so the final output loop does not need to re-index
+// the inputs slice.
+type parsedInput struct {
+	p          *profile.Profile
+	total      int64
+	capturedAt time.Time
+}
+
 // normalizeProfiles scales each pprof input so all have the same CPU sample
 // total. This prevents a high-traffic day from dominating the merge.
 // Profiles are scaled down to the minimum total to avoid integer overflow.
@@ -190,12 +199,7 @@ func normalizeProfiles(inputs []merge.Input) ([]merge.Input, error) {
 		return nil, nil
 	}
 
-	type parsed struct {
-		p     *profile.Profile
-		total int64
-	}
-	parsed2 := make([]parsed, len(inputs))
-
+	parsed := make([]parsedInput, len(inputs))
 	for i, inp := range inputs {
 		p, err := profile.ParseData(inp.Data)
 		if err != nil {
@@ -211,15 +215,12 @@ func normalizeProfiles(inputs []merge.Input) ([]merge.Input, error) {
 				total += s.Value[idx]
 			}
 		}
-		parsed2[i] = struct {
-			p     *profile.Profile
-			total int64
-		}{p: p, total: total}
+		parsed[i] = parsedInput{p: p, total: total, capturedAt: inp.CapturedAt}
 	}
 
 	// Find the minimum non-zero total to scale down to.
 	var minTotal int64
-	for _, pr := range parsed2 {
+	for _, pr := range parsed {
 		if pr.total > 0 && (minTotal == 0 || pr.total < minTotal) {
 			minTotal = pr.total
 		}
@@ -230,7 +231,7 @@ func normalizeProfiles(inputs []merge.Input) ([]merge.Input, error) {
 	}
 
 	out := make([]merge.Input, len(inputs))
-	for i, pr := range parsed2 {
+	for i, pr := range parsed {
 		if pr.total > 0 {
 			pr.p.Scale(float64(minTotal) / float64(pr.total))
 		}
@@ -238,7 +239,7 @@ func normalizeProfiles(inputs []merge.Input) ([]merge.Input, error) {
 		if err := pr.p.Write(&buf); err != nil {
 			return nil, fmt.Errorf("writing normalized profile %d: %w", i, err)
 		}
-		out[i] = merge.Input{Data: buf.Bytes(), CapturedAt: inputs[i].CapturedAt}
+		out[i] = merge.Input{Data: buf.Bytes(), CapturedAt: pr.capturedAt}
 	}
 	return out, nil
 }

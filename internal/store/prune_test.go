@@ -11,7 +11,7 @@ import (
 )
 
 // publishDay is a test helper that publishes a single run for a given date.
-func publishDay(t *testing.T, ctx context.Context, s store.Store, key, date string) {
+func publishDay(ctx context.Context, t *testing.T, s store.Store, key, date string) {
 	t.Helper()
 	_, err := store.Publish(ctx, s, store.PublishOpts{
 		Key:          key,
@@ -33,7 +33,7 @@ func TestPrune_RemovesDaysOutsideFullWindow(t *testing.T) {
 		"2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26",
 		"2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31",
 	} {
-		publishDay(t, ctx, s, "pk", d)
+		publishDay(ctx, t, s, "pk", d)
 	}
 
 	opts := store.WindowOpts{Today: "2026-10-31", LookbackDays: 30, MaxProfiles: 7}
@@ -54,7 +54,7 @@ func TestPrune_KeepsDaysWhenWindowIsNotFull(t *testing.T) {
 
 	// Publish 3 days; window max is 7, so window is not full.
 	for _, d := range []string{"2026-10-29", "2026-10-30", "2026-10-31"} {
-		publishDay(t, ctx, s, "sparse", d)
+		publishDay(ctx, t, s, "sparse", d)
 	}
 
 	opts := store.WindowOpts{Today: "2026-10-31", LookbackDays: 30, MaxProfiles: 7}
@@ -75,7 +75,7 @@ func TestPrune_NeverDeletesRestoreDay(t *testing.T) {
 		"2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28",
 		"2026-10-29", "2026-10-30", "2026-10-31",
 	} {
-		publishDay(t, ctx, s, "protect", d)
+		publishDay(ctx, t, s, "protect", d)
 	}
 
 	opts := store.WindowOpts{Today: "2026-10-31", LookbackDays: 30, MaxProfiles: 7}

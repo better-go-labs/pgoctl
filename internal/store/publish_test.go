@@ -12,10 +12,10 @@ import (
 
 func TestSelectDailyRun(t *testing.T) {
 	tests := []struct {
-		name     string
-		runs     []store.Asset
-		wantID   string
-		wantNil  bool
+		name    string
+		runs    []store.Asset
+		wantID  string
+		wantNil bool
 	}{
 		{
 			name:    "nil runs returns nil",

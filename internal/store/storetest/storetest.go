@@ -20,9 +20,6 @@ func NewMemoryStore() store.Store {
 	return &memoryStore{days: make(map[string]map[string]*dayState)}
 }
 
-// dayKey builds a composite key from a store key and date.
-func dayKey(key, date string) string { return key + "\x00" + date }
-
 // dayState holds a committed snapshot plus any open draft.
 type dayState struct {
 	mu        sync.Mutex
