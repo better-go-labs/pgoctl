@@ -358,6 +358,9 @@ func (s *Store) PutAsset(_ context.Context, day store.Day, name string, r io.Rea
 		return fmt.Errorf("reading asset data: %w", err)
 	}
 	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("creating directory for %s: %w", name, err)
+	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing %s: %w", name, err)
 	}
