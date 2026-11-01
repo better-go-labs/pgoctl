@@ -126,14 +126,18 @@ inputs:
     description: 'Maximum profiles in the window (default: 7)'
     required: false
     default: '7'
+  on-gate-failure:
+    description: 'Job result when collection or quality gate fails: warn or fail (default: warn)'
+    required: false
+    default: 'warn'
 
 outputs:
   has-profile:
     description: 'Whether a profile was successfully collected or restored'
-    value: ${{ steps.store.outputs.has-profile }}
+    value: ${{ steps.merge.outputs.has-profile }}
   profile-tag:
     description: 'Release tag or artifact reference for the stored profile'
-    value: ${{ steps.store.outputs.profile-tag }}
+    value: ${{ steps.merge.outputs.profile-tag }}
   verdict:
     description: 'Gate verdict from pgoctl compare: promote | neutral | rollback (empty if no baseline)'
     value: ${{ steps.compare.outputs.verdict }}
@@ -245,6 +249,8 @@ runs:
     # ── collect or copy profile ───────────────────────────
     - name: Collect profile
       id: collect
+      if: inputs.profile-mode == 'collect'
+      continue-on-error: true
       shell: bash
       run: |
         if [[ -n "${{ inputs.profile-file }}" ]]; then
@@ -283,8 +289,14 @@ runs:
     # ── validate ──────────────────────────────────────────────
     - name: Validate profile
       id: validate
+      if: inputs.profile-mode == 'collect'
       shell: bash
       run: |
+        if [[ "${{ steps.collect.outcome }}" != "success" ]]; then
+          echo "gate=fail" >> "$GITHUB_OUTPUT"
+          echo "::warning::Profile collection failed; skipping validate. Treating as gate=fail."
+          exit 0
+        fi
         set +e
         out=$(pgoctl validate ${{ inputs.validate-flags }} --json cpu.pprof 2>&1)
         exit_code=$?
@@ -304,48 +316,129 @@ runs:
         elif [[ $exit_code -ne 0 ]]; then
           exit $exit_code
         fi
+        if [[ $exit_code -eq 0 ]]; then
+          echo "gate=pass" >> "$GITHUB_OUTPUT"
+        else
+          echo "gate=fail" >> "$GITHUB_OUTPUT"
+        fi
 
-    # ── restore previous artifact (for steady-state accumulation) ────
-    - name: Restore previous artifact
-      id: restore-artifact
-      if: inputs.restore-previous-artifact == 'true' && inputs.previous-profile == ''
-      uses: dawidd6/action-download-artifact@v6
-      with:
-        name: ${{ inputs.artifact-name }}
-        path: previous
-        workflow_conclusion: success
-        if_no_artifact_found: warn
-
-    - name: Resolve previous profile path
+    # ── restore previous profile (for steady-state accumulation) ────
+    - name: Restore previous profile
       id: restore
+      if: inputs.profile-mode == 'collect'
       shell: bash
       run: |
+        mkdir -p previous
         if [[ -n "${{ inputs.previous-profile }}" ]]; then
-          echo "has-previous=true" >> "$GITHUB_OUTPUT"
-          echo "prev-path=${{ inputs.previous-profile }}" >> "$GITHUB_OUTPUT"
-        elif [[ -f "previous/default.pgo" ]]; then
+          cp "${{ inputs.previous-profile }}" previous/default.pgo
           echo "has-previous=true" >> "$GITHUB_OUTPUT"
           echo "prev-path=previous/default.pgo" >> "$GITHUB_OUTPUT"
         else
-          echo "has-previous=false" >> "$GITHUB_OUTPUT"
-          echo "prev-path=" >> "$GITHUB_OUTPUT"
+          set +e
+          pgoctl store restore \
+            --store="${{ steps.store.outputs.store }}" \
+            --repo="${{ github.repository }}" \
+            --tag-prefix="${{ inputs.tag-prefix }}" \
+            --service="${{ inputs.service }}" \
+            --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
+            --legacy-artifact="${{ inputs.legacy-artifact }}" \
+            --out=previous/default.pgo
+          RESTORE_EXIT=$?
+          set -e
+          if [[ $RESTORE_EXIT -eq 0 ]]; then
+            echo "has-previous=true" >> "$GITHUB_OUTPUT"
+            echo "prev-path=previous/default.pgo" >> "$GITHUB_OUTPUT"
+          elif [[ $RESTORE_EXIT -eq 3 ]]; then
+            echo "has-previous=false" >> "$GITHUB_OUTPUT"
+            echo "prev-path=" >> "$GITHUB_OUTPUT"
+          else
+            exit $RESTORE_EXIT
+          fi
         fi
 
-    # ── merge → default.pgo ─────────────────────────────────────────
-    - name: Merge profiles
-      id: merge
+    # ── exclude runs from the profile window ────────────────────────
+    - name: Exclude runs
+      id: exclude
+      if: inputs.profile-mode == 'collect' && steps.store.outputs.publish == 'true' && steps.validate.outputs.gate == 'pass' && inputs.exclude-runs != ''
       shell: bash
+      env:
+        EXCLUDE_RUNS: ${{ inputs.exclude-runs }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
-        if [[ "${{ steps.restore.outputs.has-previous }}" == "true" ]]; then
-          pgoctl merge cpu.pprof "${{ steps.restore.outputs.prev-path }}" --out=default.pgo
+        pgoctl store exclude \
+          --store="${{ steps.store.outputs.store }}" \
+          --repo="${{ github.repository }}" \
+          --tag-prefix="${{ inputs.tag-prefix }}" \
+          --service="${{ inputs.service }}" \
+          --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
+          --pairs="$EXCLUDE_RUNS" \
+          --reason="exclude-runs input"
+
+    # ── build default.pgo (publish / merge / gate-fail fallback) ────
+    - name: Build default.pgo
+      id: merge
+      if: inputs.profile-mode == 'collect'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        SCORE: ${{ steps.validate.outputs.score }}
+        SAMPLES: ${{ steps.validate.outputs.samples }}
+      run: |
+        GATE="${{ steps.validate.outputs.gate }}"
+        PUBLISH="${{ steps.store.outputs.publish }}"
+
+        if [[ "$GATE" != "pass" ]]; then
+          if [[ -f cpu.pprof ]]; then
+            echo "::warning::Gate failed; using collected profile without publishing."
+            if [[ -f previous/default.pgo ]]; then
+              pgoctl merge cpu.pprof previous/default.pgo --out=default.pgo
+            else
+              pgoctl merge cpu.pprof --out=default.pgo
+            fi
+            echo "has-profile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Gate failed and no cpu.pprof collected. No PGO artifact."
+            echo "has-profile=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "artifact=default.pgo" >> "$GITHUB_OUTPUT"
+          echo "profile-tag=" >> "$GITHUB_OUTPUT"
+        elif [[ "$PUBLISH" == "true" ]]; then
+          PUBLISH_JSON=$(pgoctl store publish \
+            --store="${{ steps.store.outputs.store }}" \
+            --repo="${{ github.repository }}" \
+            --tag-prefix="${{ inputs.tag-prefix }}" \
+            --service="${{ inputs.service }}" \
+            --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
+            --profile=cpu.pprof \
+            --out=default.pgo \
+            --run-id="${{ github.run_id }}-${{ github.run_attempt }}" \
+            --commit="${{ github.sha }}" \
+            --branch="${{ github.ref_name }}" \
+            --quality-score="$SCORE" \
+            --samples="$SAMPLES" \
+            --go-version="$(go version | awk '{print $3}')" \
+            --lookback-days="${{ inputs.lookback-days }}" \
+            --max-profiles="${{ inputs.max-profiles }}" \
+            --json 2>&1)
+          PROFILE_TAG=$(echo "$PUBLISH_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tag',''))" 2>/dev/null || echo "")
+          echo "has-profile=true" >> "$GITHUB_OUTPUT"
+          echo "artifact=default.pgo" >> "$GITHUB_OUTPUT"
+          echo "profile-tag=$PROFILE_TAG" >> "$GITHUB_OUTPUT"
         else
-          pgoctl merge cpu.pprof --out=default.pgo
+          if [[ -f previous/default.pgo ]]; then
+            pgoctl merge cpu.pprof previous/default.pgo --out=default.pgo
+          else
+            pgoctl merge cpu.pprof --out=default.pgo
+          fi
+          echo "has-profile=true" >> "$GITHUB_OUTPUT"
+          echo "artifact=default.pgo" >> "$GITHUB_OUTPUT"
+          echo "profile-tag=" >> "$GITHUB_OUTPUT"
         fi
-        echo "artifact=default.pgo" >> "$GITHUB_OUTPUT"
 
     # ── resolve output paths ────────────────────────────────────
     - name: Set output paths
       id: paths
+      if: inputs.profile-mode == 'collect'
       shell: bash
       run: |
         echo "profile=$(pwd)/cpu.pprof" >> "$GITHUB_OUTPUT"
@@ -356,7 +449,7 @@ runs:
     # so it needs merge to have run first.
     - name: PGO leverage check
       id: leverage
-      if: steps.merge.outcome == 'success' && inputs.run-leverage-probe == 'true'
+      if: inputs.profile-mode == 'collect' && steps.merge.outcome == 'success' && inputs.run-leverage-probe == 'true' && steps.merge.outputs.has-profile == 'true'
       shell: bash
       env:
         LEVERAGE_TARGET: ${{ inputs.leverage-probe-target }}
@@ -415,7 +508,7 @@ runs:
     # ── compare against baseline (optional) ──────────────────────
     - name: Compare profiles
       id: compare
-      if: inputs.baseline-profile != '' || steps.restore.outputs.has-previous == 'true'
+      if: inputs.profile-mode == 'collect' && (inputs.baseline-profile != '' || steps.restore.outputs.has-previous == 'true')
       shell: bash
       run: |
         BASELINE="${{ inputs.baseline-profile }}"
@@ -453,6 +546,7 @@ runs:
     # ── explain profile ─────────────────────────────────────────
     - name: Explain profile
       id: explain
+      if: inputs.profile-mode == 'collect'
       shell: bash
       run: |
         set +e
@@ -477,7 +571,7 @@ runs:
 
     # ── upload artifact ───────────────────────────────────────
     - name: Upload PGO artifact
-      if: inputs.upload-artifact == 'true'
+      if: inputs.profile-mode == 'collect' && inputs.upload-artifact == 'true' && steps.validate.outputs.gate == 'pass'
       uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.artifact-name }}
@@ -488,7 +582,7 @@ runs:
 
     # ── comment on PR ────────────────────────────────────────────
     - name: Comment on PR
-      if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      if: inputs.profile-mode == 'collect' && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       uses: actions/github-script@v7
       with:
         github-token: ${{ inputs.github-token }}
@@ -507,6 +601,8 @@ runs:
           const packagesRaw   = `${{ steps.explain.outputs.packages }}`;
           const verdictReason = '${{ steps.explain.outputs.verdict-reason }}';
           const durationSec   = '${{ steps.explain.outputs.duration-sec }}';
+          const profileTag    = '${{ steps.merge.outputs.profile-tag }}';
+          const storeTagLine  = profileTag ? `\nProfile stored: \`${profileTag}\`` : '';
 
           // Verdict badge
           let verdictLine;
@@ -615,6 +711,7 @@ runs:
             + packagesSection
             + topDeltasSection
             + errSection
+            + storeTagLine
             + [
               '',
               '',
@@ -644,3 +741,11 @@ runs:
               body,
             });
           }
+
+    # ── gate result (fail the job when quality gate failed) ─────────
+    - name: Gate result
+      if: inputs.profile-mode == 'collect' && steps.validate.outputs.gate == 'fail' && inputs.on-gate-failure == 'fail'
+      shell: bash
+      run: |
+        echo "::error::PGO quality gate failed and on-gate-failure=fail"
+        exit 1
