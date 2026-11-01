@@ -312,12 +312,12 @@ func (f *fakeGH) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type apiReleaseOut struct {
-	ID        int64          `json:"id"`
-	TagName   string         `json:"tag_name"`
-	Draft     bool           `json:"draft"`
-	Immutable bool           `json:"immutable"`
-	UploadURL string         `json:"upload_url"`
-	Assets    []apiAssetOut  `json:"assets"`
+	ID        int64         `json:"id"`
+	TagName   string        `json:"tag_name"`
+	Draft     bool          `json:"draft"`
+	Immutable bool          `json:"immutable"`
+	UploadURL string        `json:"upload_url"`
+	Assets    []apiAssetOut `json:"assets"`
 }
 
 type apiAssetOut struct {
@@ -840,10 +840,10 @@ func TestListDays_HidesTmpAssets(t *testing.T) {
 		if strings.HasPrefix(r.URL.Path, "/repos/o/r/releases") && r.Method == http.MethodGet && !strings.Contains(r.URL.Path[len("/repos/o/r/releases"):], "/") {
 			now := time.Now()
 			writeJSON(w, []map[string]interface{}{{
-				"id":       1,
-				"tag_name": "profile/2026-01-15.0",
-				"draft":    false,
-				"immutable": false,
+				"id":         1,
+				"tag_name":   "profile/2026-01-15.0",
+				"draft":      false,
+				"immutable":  false,
 				"upload_url": "http://placeholder/repos/o/r/uploads{?name,label}",
 				"assets": []map[string]interface{}{
 					{"id": 10, "name": "manifest.json", "size": 2, "updated_at": now},

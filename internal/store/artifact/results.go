@@ -36,9 +36,9 @@ func upload(ctx context.Context, cfg Config, hc *http.Client, name, stagingDir s
 	createBody := map[string]interface{}{
 		"workflow_run_backend_id":     wfRunID,
 		"workflow_job_run_backend_id": wfJobID,
-		"name":      name,
-		"mime_type": "application/zip",
-		"version":   7,
+		"name":                        name,
+		"mime_type":                   "application/zip",
+		"version":                     7,
 	}
 	createResp, err := postJSON(ctx, hc, createURL, cfg.RuntimeToken, createBody)
 	if err != nil {
@@ -67,9 +67,9 @@ func upload(ctx context.Context, cfg Config, hc *http.Client, name, stagingDir s
 	finalizeBody := map[string]interface{}{
 		"workflow_run_backend_id":     wfRunID,
 		"workflow_job_run_backend_id": wfJobID,
-		"name": name,
-		"size": fmt.Sprintf("%d", len(zipData)),
-		"hash": hash,
+		"name":                        name,
+		"size":                        fmt.Sprintf("%d", len(zipData)),
+		"hash":                        hash,
 	}
 	if _, err := postJSON(ctx, hc, finalizeURL, cfg.RuntimeToken, finalizeBody); err != nil {
 		return fmt.Errorf("FinalizeArtifact: %w", err)
