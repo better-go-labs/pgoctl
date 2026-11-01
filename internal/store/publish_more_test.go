@@ -241,6 +241,20 @@ func TestPublish_WindowDropsMissingDailyPprof(t *testing.T) {
 		"a prior day without a daily.pprof is skipped")
 }
 
+func TestPublish_DropsUnreadableDailyBeforeWindowCap(t *testing.T) {
+	s := storetest.NewMemory()
+	// A prior published day with no daily.pprof sits between today and an older
+	// readable day. With maxProfiles 2, selecting the window before dropping the
+	// unreadable day wastes a slot on it, so the older readable day never enters
+	// the window.
+	putPublishedDay(t, s, testKey, "2026-10-29", 0, storetest.NewProfile(t, 1000), []byte("default-29"))
+	putPublishedDay(t, s, testKey, "2026-10-30", 0, nil, []byte("default-30"))
+	res := pub(t, s, "2026-10-31", "100-1", 0.9, 1000, 14, 2, mustDate(t, "2026-10-31").Time())
+
+	assert.Equal(t, []string{"2026-10-31", "2026-10-29"}, res.Manifest.Window.Dates,
+		"the unreadable day is dropped before the cap so the older readable day fills the slot")
+}
+
 func TestPublish_CapturedAtZeroFallsBackToNow(t *testing.T) {
 	s := storetest.NewMemory()
 	// The prior day's selected run has no capture time. Rather than treat it as
