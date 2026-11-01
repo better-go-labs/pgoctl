@@ -218,6 +218,39 @@ func TestPublish_CopiesRunsToNewSequence(t *testing.T) {
 	require.NoError(t, rc.Close())
 }
 
+func TestPublish_CopiesRunsIntoEmptyDraft(t *testing.T) {
+	ctx := context.Background()
+	// Artifact-like backend: not immutable, but its day listing hides run files,
+	// so opening a leftover empty draft must copy runs forward from the manifest,
+	// not the listing. TestPublish_CopiesRunsToNewSequence covers only the
+	// immutable next-sequence path.
+	s := storetest.NewMemory(storetest.HideRunAssets())
+	publishRun(t, s, "2026-10-31", "100-1", 0.9, 1000) // sequence 0
+
+	// A leftover empty draft at the next sequence, as if a prior publish began a
+	// sequence and never wrote its manifest.
+	day1, err := s.BeginDay(ctx, testKey, mustDate(t, "2026-10-31"), 1)
+	require.NoError(t, err)
+	require.True(t, day1.Draft)
+
+	// Publishing again opens that empty draft and must seed it from sequence 0.
+	res := publishRun(t, s, "2026-10-31", "100-2", 0.5, 1000)
+	require.Equal(t, 1, res.Manifest.Sequence)
+
+	ids := make([]string, 0, len(res.Manifest.Runs))
+	for _, r := range res.Manifest.Runs {
+		ids = append(ids, r.ID)
+	}
+	assert.ElementsMatch(t, []string{"100-1", "100-2"}, ids,
+		"the empty draft is seeded with the earlier sequence's run")
+
+	day := highestPublishedDay(t, s, "2026-10-31")
+	require.Equal(t, 1, day.Seq)
+	rc, err := s.ReadAsset(ctx, day, store.RunAsset("100-1"))
+	require.NoError(t, err, "the earlier run's profile is copied into the empty draft")
+	require.NoError(t, rc.Close())
+}
+
 func TestPublish_CopyRunsSkipsMissingFile(t *testing.T) {
 	s := storetest.NewMemory(storetest.Immutable())
 	publishRun(t, s, "2026-10-31", "100-1", 0.9, 1000) // sequence 0, now immutable
