@@ -1,0 +1,214 @@
+# End-to-end test for the pgoctl profile store, run against a scratch repository.
+#
+# This workflow lives in the pgoctl repository as a reference. To run it, copy
+# it into a scratch repository's .github/workflows/ (see hack/store-e2e/README.md),
+# then dispatch it with the pgoctl ref to test. It builds pgoctl at that ref and
+# drives `pgoctl store` directly so each backend is exercised against real GitHub
+# Releases and Actions Artifacts.
+#
+# Cleanup only removes releases and artifacts created by this run (keyed by the
+# run id). It never touches the profile/demo/* releases the scratch repo keeps as
+# a fixture.
+name: pgoctl store e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      pgoctl-ref:
+        description: 'pgoctl git ref to build and test'
+        required: true
+        default: 'main'
+
+permissions: {}
+
+jobs:
+  # ── Job 1: GitHub Releases backend round-trip ─────────────────────────────
+  github-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write   # create and delete profile releases
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      PREFIX: profile/e2e-ghr-${{ github.run_id }}
+      ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+    steps:
+      - name: Build pgoctl at the ref under test
+        uses: actions/checkout@v7
+        with:
+          repository: better-go-labs/pgoctl
+          ref: ${{ inputs.pgoctl-ref }}
+          path: pgoctl-src
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+      - name: Build and collect a profile
+        run: |
+          go build -C pgoctl-src -o /tmp/pgoctl ./cmd/pgoctl
+          "${{ github.workspace }}/pgoctl-src/hack/store-e2e/collect.sh" /tmp/pgoctl cpu.pprof
+
+      - name: Publish then restore
+        run: |
+          /tmp/pgoctl store publish \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --profile=cpu.pprof --out=default.pgo --json
+          /tmp/pgoctl store restore \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --out=restored.pgo
+          test -s restored.pgo || { echo "restored profile is empty"; exit 1; }
+          echo "github-release round-trip ok"
+
+      - name: Immutable release sequence (needs an org/repo admin token)
+        if: ${{ env.ADMIN_TOKEN != '' }}
+        run: |
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY" -f immutable_releases=true --silent || true
+          GH_TOKEN="$ADMIN_TOKEN" /tmp/pgoctl store publish \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --profile=cpu.pprof --out=default.pgo --today=2020-01-01 --run-id=100-1 --json
+          GH_TOKEN="$ADMIN_TOKEN" /tmp/pgoctl store publish \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --profile=cpu.pprof --out=default.pgo --today=2020-01-01 --run-id=200-1 --json
+          gh release view "$PREFIX/2020-01-01.1" --repo "$GITHUB_REPOSITORY" >/dev/null \
+            || { echo "expected the second same-day publish to create sequence .1"; exit 1; }
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY" -f immutable_releases=false --silent || true
+
+      - name: Clean up this run's releases
+        if: always()
+        run: "${{ github.workspace }}/pgoctl-src/hack/store-e2e/cleanup-releases.sh \"$PREFIX\""
+
+  # ── Job 2: Actions Artifacts backend round-trip ───────────────────────────
+  artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write    # upload and delete profile artifacts
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      PREFIX: profile/e2e-art-${{ github.run_id }}
+    steps:
+      - name: Build pgoctl at the ref under test
+        uses: actions/checkout@v7
+        with:
+          repository: better-go-labs/pgoctl
+          ref: ${{ inputs.pgoctl-ref }}
+          path: pgoctl-src
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+      - name: Build and collect a profile
+        run: |
+          go build -C pgoctl-src -o /tmp/pgoctl ./cmd/pgoctl
+          "${{ github.workspace }}/pgoctl-src/hack/store-e2e/collect.sh" /tmp/pgoctl cpu.pprof
+
+      - name: Expose the runtime token for the results service
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        with:
+          script: |
+            const runtimeToken = process.env.ACTIONS_RUNTIME_TOKEN;
+            const resultsURL = process.env.ACTIONS_RESULTS_URL || 'https://results.github.com';
+            if (!runtimeToken) {
+              core.setFailed('ACTIONS_RUNTIME_TOKEN is not available in this job.');
+              return;
+            }
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', runtimeToken);
+            core.exportVariable('ACTIONS_RESULTS_URL', resultsURL);
+
+      - name: Publish then restore
+        run: |
+          /tmp/pgoctl store publish \
+            --store=artifact --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --profile=cpu.pprof --out=default.pgo --json
+          /tmp/pgoctl store restore \
+            --store=artifact --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --out=restored.pgo
+          test -s restored.pgo || { echo "restored profile is empty"; exit 1; }
+          echo "artifact round-trip ok"
+
+      - name: Clean up this run's artifacts
+        if: always()
+        run: "${{ github.workspace }}/pgoctl-src/hack/store-e2e/cleanup-artifacts.sh \"$PREFIX\""
+
+  # ── Job 3: restore with nothing stored returns exit 3 ─────────────────────
+  restore-empty:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Build pgoctl at the ref under test
+        uses: actions/checkout@v7
+        with:
+          repository: better-go-labs/pgoctl
+          ref: ${{ inputs.pgoctl-ref }}
+          path: pgoctl-src
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+      - name: Restore an unused key
+        run: |
+          go build -C pgoctl-src -o /tmp/pgoctl ./cmd/pgoctl
+          set +e
+          /tmp/pgoctl store restore \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="profile/e2e-empty-${{ github.run_id }}" --out=none.pgo
+          code=$?
+          set -e
+          [ "$code" -eq 3 ] || { echo "expected exit 3 for an empty store, got $code"; exit 1; }
+          echo "empty restore returned exit 3 as expected"
+
+  # ── Job 4: window exclude and prune over two days ─────────────────────────
+  exclude-prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      PREFIX: profile/e2e-prune-${{ github.run_id }}
+    steps:
+      - name: Build pgoctl at the ref under test
+        uses: actions/checkout@v7
+        with:
+          repository: better-go-labs/pgoctl
+          ref: ${{ inputs.pgoctl-ref }}
+          path: pgoctl-src
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+      - name: Build and collect a profile
+        run: |
+          go build -C pgoctl-src -o /tmp/pgoctl ./cmd/pgoctl
+          "${{ github.workspace }}/pgoctl-src/hack/store-e2e/collect.sh" /tmp/pgoctl cpu.pprof
+
+      - name: Publish two days, then prune to one
+        run: |
+          /tmp/pgoctl store publish \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --profile=cpu.pprof --out=default.pgo \
+            --today=2020-02-01 --run-id=100-1 --json
+          /tmp/pgoctl store publish \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --profile=cpu.pprof --out=default.pgo \
+            --today=2020-02-02 --run-id=200-1 --json
+          /tmp/pgoctl store prune \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --today=2020-02-02 --lookback-days=14 --max-profiles=1
+          if gh release view "$PREFIX/2020-02-01.0" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "prune should have removed the older day"; exit 1
+          fi
+          gh release view "$PREFIX/2020-02-02.0" --repo "$GITHUB_REPOSITORY" >/dev/null \
+            || { echo "prune removed the day restore selects"; exit 1; }
+          echo "exclude/prune window management ok"
+
+      - name: Clean up this run's releases
+        if: always()
+        run: "${{ github.workspace }}/pgoctl-src/hack/store-e2e/cleanup-releases.sh \"$PREFIX\""
