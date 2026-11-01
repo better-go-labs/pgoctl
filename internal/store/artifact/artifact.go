@@ -197,27 +197,29 @@ func (s *Store) ListDays(ctx context.Context, key store.Key) ([]store.Day, error
 func (s *Store) listArtifacts(ctx context.Context, key store.Key) ([]apiArtifact, error) {
 	owner, repo, _ := strings.Cut(key.Repo, "/")
 	var all []apiArtifact
-	path := fmt.Sprintf("/repos/%s/%s/actions/artifacts?per_page=100", owner, repo)
-	for path != "" {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.APIURL+path, nil)
+	// The first URL is relative to APIURL; the Link header's "next" is absolute,
+	// so once set it is used as-is rather than re-prefixed with APIURL.
+	url := fmt.Sprintf("%s/repos/%s/%s/actions/artifacts?per_page=100", s.cfg.APIURL, owner, repo)
+	for url != "" {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			return nil, fmt.Errorf("building request: %w", err)
 		}
 		s.setHeaders(req)
 		resp, err := s.http.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("GET %s: %w", path, err)
+			return nil, fmt.Errorf("GET %s: %w", url, err)
 		}
 		if err := func() error {
 			defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 			if resp.StatusCode == 403 {
-				return fmt.Errorf("GET %s returned 403: %w", path, store.ErrPermission)
+				return fmt.Errorf("GET %s returned 403: %w", url, store.ErrPermission)
 			}
 			if resp.StatusCode == 404 {
-				return fmt.Errorf("GET %s returned 404: %w", path, store.ErrNotFound)
+				return fmt.Errorf("GET %s returned 404: %w", url, store.ErrNotFound)
 			}
 			if resp.StatusCode != 200 {
-				return fmt.Errorf("GET %s returned %d", path, resp.StatusCode)
+				return fmt.Errorf("GET %s returned %d", url, resp.StatusCode)
 			}
 			var page struct {
 				Artifacts []apiArtifact `json:"artifacts"`
@@ -230,7 +232,7 @@ func (s *Store) listArtifacts(ctx context.Context, key store.Key) ([]apiArtifact
 					all = append(all, a)
 				}
 			}
-			path = nextLink(resp.Header.Get("Link"))
+			url = nextLink(resp.Header.Get("Link"))
 			return nil
 		}(); err != nil {
 			return nil, err
