@@ -104,11 +104,15 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 		} else {
 			own, err = readAll(ctx, s, day, AssetDaily)
 			if err != nil {
-				// An all-excluded day has no daily; skip it as buildDefault does.
+				// An all-excluded day has no daily. Treat its own contribution as
+				// nil so the default is rebuilt from the remaining window: this drops
+				// the excluded run from the day's default.pgo and, on an immutable
+				// store, publishes the new sequence instead of orphaning its draft.
 				if errors.Is(err, ErrNotFound) {
-					continue
+					own = nil
+				} else {
+					return nil, fmt.Errorf("reading daily of %s: %w", req.Key.Tag(d, day.Seq), err)
 				}
-				return nil, fmt.Errorf("reading daily of %s: %w", req.Key.Tag(d, day.Seq), err)
 			}
 		}
 		// Every rebuilt day had req.Date in its window, so each records the
