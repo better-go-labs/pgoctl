@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -925,6 +926,85 @@ func TestListDays_UncompressedSizeOverflow(t *testing.T) {
 		assert.GreaterOrEqual(t, a.Size, int64(0),
 			"asset size from an overflowed uint64 must not be negative")
 	}
+}
+
+// TestListDays_LinkHeaderPagination verifies that artifact pagination uses the
+// absolute URL from the Link header's "next" relation without prepending APIURL.
+// Regression test for the doubled-host bug that broke restore on repos with >100 artifacts.
+func TestListDays_LinkHeaderPagination(t *testing.T) {
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	var requestedURLs []string
+	var requestMu sync.Mutex
+
+	var srvURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestMu.Lock()
+		requestedURLs = append(requestedURLs, r.URL.String())
+		count := len(requestedURLs)
+		requestMu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		switch count {
+		case 1:
+			w.Header().Set("Link", fmt.Sprintf(`<http://%s/repos/o/r/actions/artifacts?per_page=100&page=2>; rel="next"`, r.Host))
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"total_count": 2,
+				"artifacts": []map[string]interface{}{
+					{
+						"id":                   1,
+						"name":                 "profile_2026-01-01.0",
+						"expired":              false,
+						"created_at":           time.Now().Format(time.RFC3339),
+						"archive_download_url": "http://placeholder/1/zip",
+					},
+				},
+			})
+		case 2:
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"total_count": 2,
+				"artifacts": []map[string]interface{}{
+					{
+						"id":                   2,
+						"name":                 "profile_2026-01-02.0",
+						"expired":              false,
+						"created_at":           time.Now().Format(time.RFC3339),
+						"archive_download_url": "http://placeholder/2/zip",
+					},
+				},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"total_count": 2,
+				"artifacts":   []map[string]interface{}{},
+			})
+		}
+	}))
+	srvURL = srv.URL
+	t.Cleanup(srv.Close)
+
+	s := artifact.NewWithHTTPClient(artifact.Config{Key: key, APIURL: srvURL}, srv.Client())
+	days, err := s.ListDays(context.Background(), key)
+	require.NoError(t, err)
+	assert.Len(t, days, 2)
+
+	requestMu.Lock()
+	defer requestMu.Unlock()
+
+	var listRequests []string
+	for _, u := range requestedURLs {
+		if !strings.Contains(u, "/zip") {
+			listRequests = append(listRequests, u)
+		}
+	}
+	require.Len(t, listRequests, 2, "must make exactly 2 paginated list requests")
+
+	page1URL := listRequests[0]
+	page2URL := listRequests[1]
+	assert.NotContains(t, page1URL, "page=2", "page 1 must not request page 2")
+	assert.Contains(t, page2URL, "page=2", "page 2 must contain page=2 param")
+	doubledHost := srvURL + srvURL
+	assert.NotContains(t, page2URL, doubledHost, "page 2 URL must not have doubled host")
 }
 
 // TestPublish_RunsSubdirInZip verifies that published artifacts include files from
