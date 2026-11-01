@@ -20,6 +20,11 @@ import (
 	"github.com/Better-Go-Labs/pgoctl/internal/store"
 )
 
+// maxZipEntrySize is the maximum number of bytes read from a single zip entry
+// during decompression. It is a variable (not a constant) so tests can lower
+// it without allocating huge buffers. Exported via export_test.go.
+var maxZipEntrySize int64 = 512 * 1024 * 1024 // 512 MiB
+
 // Config holds the configuration for an artifact Store.
 type Config struct {
 	// Key is the profile key.

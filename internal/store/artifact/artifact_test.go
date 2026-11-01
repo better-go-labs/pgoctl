@@ -6,11 +6,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -82,7 +84,10 @@ func (f *fakeArtifactAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(path, "/")
 		idStr := parts[len(parts)-1]
 		var id int64
-		fmt.Sscanf(idStr, "%d", &id) //nolint:errcheck
+		if _, scanErr := fmt.Sscanf(idStr, "%d", &id); scanErr != nil {
+			http.Error(w, "bad artifact id", http.StatusBadRequest)
+			return
+		}
 		for i, a := range f.artifacts {
 			if a.id == id {
 				f.artifacts = append(f.artifacts[:i], f.artifacts[i+1:]...)
@@ -97,7 +102,10 @@ func (f *fakeArtifactAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.TrimSuffix(path, "/zip"), "/")
 		idStr := parts[len(parts)-1]
 		var id int64
-		fmt.Sscanf(idStr, "%d", &id) //nolint:errcheck
+		if _, scanErr := fmt.Sscanf(idStr, "%d", &id); scanErr != nil {
+			http.Error(w, "bad artifact id", http.StatusBadRequest)
+			return
+		}
 		data, ok := f.zips[id]
 		if !ok {
 			w.WriteHeader(404)
@@ -757,4 +765,161 @@ func TestDeleteDay_404_IsErrNotFound(t *testing.T) {
 	err := s.DeleteDay(context.Background(), day)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, store.ErrNotFound), "404 on delete must wrap ErrNotFound, got: %v", err)
+}
+
+// TestRestoreLegacy_DecompressionLimitExceeded verifies that RestoreLegacy
+// rejects a zip entry whose uncompressed size exceeds the per-entry limit
+// (G110: decompression bomb guard).
+func TestRestoreLegacy_DecompressionLimitExceeded(t *testing.T) {
+	// Lower the limit so the test does not allocate 512 MiB.
+	orig := *artifact.MaxZipEntrySize
+	*artifact.MaxZipEntrySize = 4096
+	t.Cleanup(func() { *artifact.MaxZipEntrySize = orig })
+
+	// Build a zip where default.pgo is twice the test limit.
+	oversized := bytes.Repeat([]byte("X"), 8192)
+	zipData := makeZip(map[string][]byte{store.AssetDefault: oversized})
+
+	fakeAPI := newFakeArtifactAPI()
+	id := fakeAPI.alloc()
+	fakeAPI.artifacts = append(fakeAPI.artifacts,
+		&fakeArtifact{id: id, name: "old-profiles", createdAt: time.Now()},
+	)
+	fakeAPI.zips[id] = zipData
+
+	apiSrv := httptest.NewServer(fakeAPI)
+	t.Cleanup(apiSrv.Close)
+	cfg := artifact.Config{
+		Key:        store.Key{Repo: "o/r", Prefix: "profile"},
+		APIURL:     apiSrv.URL,
+		LegacyName: "old-profiles",
+	}
+	s := artifact.NewWithHTTPClient(cfg, apiSrv.Client())
+
+	var buf bytes.Buffer
+	err := s.RestoreLegacy(context.Background(), &buf)
+	require.Error(t, err, "oversized entry must be rejected as a possible decompression bomb")
+	assert.ErrorContains(t, err, "decompression limit")
+}
+
+// makeZip64WithHugeSize builds a minimal ZIP64 archive containing one file
+// named name with a declared (but not actual) uncompressed size of hugeSize.
+// The actual file data is empty; only the central-directory metadata is
+// populated with the large value. This is used to test G115 overflow handling
+// without allocating huge buffers.
+func makeZip64WithHugeSize(name string, hugeSize uint64) ([]byte, error) {
+	fname := []byte(name)
+	fnlen := uint16(len(fname))
+
+	makeLocalExtra := func(uncomp, comp uint64) []byte {
+		b := make([]byte, 20)
+		binary.LittleEndian.PutUint16(b[0:], 0x0001)
+		binary.LittleEndian.PutUint16(b[2:], 16)
+		binary.LittleEndian.PutUint64(b[4:], uncomp)
+		binary.LittleEndian.PutUint64(b[12:], comp)
+		return b
+	}
+	makeCDExtra := func(uncomp, comp, offset uint64) []byte {
+		b := make([]byte, 28)
+		binary.LittleEndian.PutUint16(b[0:], 0x0001)
+		binary.LittleEndian.PutUint16(b[2:], 24)
+		binary.LittleEndian.PutUint64(b[4:], uncomp)
+		binary.LittleEndian.PutUint64(b[12:], comp)
+		binary.LittleEndian.PutUint64(b[20:], offset)
+		return b
+	}
+
+	var buf bytes.Buffer
+
+	localExtra := makeLocalExtra(hugeSize, 0)
+	var lfh [30]byte
+	binary.LittleEndian.PutUint32(lfh[0:], 0x04034b50) // local file header sig
+	binary.LittleEndian.PutUint16(lfh[4:], 45)          // version needed: 4.5 (ZIP64)
+	binary.LittleEndian.PutUint32(lfh[18:], 0xFFFFFFFF) // compressed size: ZIP64 marker
+	binary.LittleEndian.PutUint32(lfh[22:], 0xFFFFFFFF) // uncompressed size: ZIP64 marker
+	binary.LittleEndian.PutUint16(lfh[26:], fnlen)
+	binary.LittleEndian.PutUint16(lfh[28:], uint16(len(localExtra)))
+	buf.Write(lfh[:])
+	buf.Write(fname)
+	buf.Write(localExtra)
+
+	cdStart := uint64(buf.Len())
+
+	cdExtra := makeCDExtra(hugeSize, 0, 0)
+	var cdh [46]byte
+	binary.LittleEndian.PutUint32(cdh[0:], 0x02014b50) // central directory header sig
+	binary.LittleEndian.PutUint16(cdh[4:], 45)
+	binary.LittleEndian.PutUint16(cdh[6:], 45)
+	binary.LittleEndian.PutUint32(cdh[20:], 0xFFFFFFFF) // compressed size: ZIP64 marker
+	binary.LittleEndian.PutUint32(cdh[24:], 0xFFFFFFFF) // uncompressed size: ZIP64 marker
+	binary.LittleEndian.PutUint16(cdh[28:], fnlen)
+	binary.LittleEndian.PutUint16(cdh[30:], uint16(len(cdExtra)))
+	binary.LittleEndian.PutUint16(cdh[34:], 0xFFFF)     // disk number start: ZIP64 marker
+	binary.LittleEndian.PutUint32(cdh[42:], 0xFFFFFFFF) // local header offset: ZIP64 marker
+	buf.Write(cdh[:])
+	buf.Write(fname)
+	buf.Write(cdExtra)
+
+	cdEnd := uint64(buf.Len())
+	cdSize := cdEnd - cdStart
+	eocd64Offset := uint64(buf.Len())
+
+	var eocd64 [56]byte
+	binary.LittleEndian.PutUint32(eocd64[0:], 0x06064b50)
+	binary.LittleEndian.PutUint64(eocd64[4:], 44) // size of remaining record
+	binary.LittleEndian.PutUint16(eocd64[12:], 45)
+	binary.LittleEndian.PutUint16(eocd64[14:], 45)
+	binary.LittleEndian.PutUint64(eocd64[24:], 1)
+	binary.LittleEndian.PutUint64(eocd64[32:], 1)
+	binary.LittleEndian.PutUint64(eocd64[40:], cdSize)
+	binary.LittleEndian.PutUint64(eocd64[48:], cdStart)
+	buf.Write(eocd64[:])
+
+	var locator [20]byte
+	binary.LittleEndian.PutUint32(locator[0:], 0x07064b50)
+	binary.LittleEndian.PutUint64(locator[8:], eocd64Offset)
+	binary.LittleEndian.PutUint32(locator[16:], 1)
+	buf.Write(locator[:])
+
+	var eocd [22]byte
+	binary.LittleEndian.PutUint32(eocd[0:], 0x06054b50)
+	binary.LittleEndian.PutUint16(eocd[4:], 0xFFFF)
+	binary.LittleEndian.PutUint16(eocd[6:], 0xFFFF)
+	binary.LittleEndian.PutUint16(eocd[8:], 0xFFFF)
+	binary.LittleEndian.PutUint16(eocd[10:], 0xFFFF)
+	binary.LittleEndian.PutUint32(eocd[12:], 0xFFFFFFFF)
+	binary.LittleEndian.PutUint32(eocd[16:], 0xFFFFFFFF)
+	buf.Write(eocd[:])
+
+	return buf.Bytes(), nil
+}
+
+// TestListDays_UncompressedSizeOverflow verifies that a zip entry whose
+// declared uncompressed size overflows int64 does not produce a negative
+// asset size (G115: integer overflow guard).
+func TestListDays_UncompressedSizeOverflow(t *testing.T) {
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+
+	overflowSize := uint64(math.MaxInt64) + 1
+	zipData, err := makeZip64WithHugeSize("daily.pprof", overflowSize)
+	require.NoError(t, err, "test helper must build valid ZIP64 archive")
+
+	fakeAPI := newFakeArtifactAPI()
+	id := fakeAPI.alloc()
+	fakeAPI.artifacts = append(fakeAPI.artifacts,
+		&fakeArtifact{id: id, name: "profile_2026-01-01.0", createdAt: time.Now()},
+	)
+	fakeAPI.zips[id] = zipData
+
+	apiSrv := httptest.NewServer(fakeAPI)
+	t.Cleanup(apiSrv.Close)
+
+	s := artifact.NewWithHTTPClient(artifact.Config{Key: key, APIURL: apiSrv.URL}, apiSrv.Client())
+	days, listErr := s.ListDays(context.Background(), key)
+	require.NoError(t, listErr)
+	require.Len(t, days, 1)
+	for _, a := range days[0].Assets {
+		assert.GreaterOrEqual(t, a.Size, int64(0),
+			"asset size from an overflowed uint64 must not be negative")
+	}
 }
