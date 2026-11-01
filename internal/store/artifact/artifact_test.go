@@ -127,10 +127,10 @@ func artifactsToJSON(arts []*fakeArtifact) []map[string]interface{} {
 	out := make([]map[string]interface{}, len(arts))
 	for i, a := range arts {
 		out[i] = map[string]interface{}{
-			"id":          a.id,
-			"name":        a.name,
-			"expired":     a.expired,
-			"created_at":  a.createdAt.Format(time.RFC3339),
+			"id":                   a.id,
+			"name":                 a.name,
+			"expired":              a.expired,
+			"created_at":           a.createdAt.Format(time.RFC3339),
 			"archive_download_url": fmt.Sprintf("http://placeholder/%d/zip", a.id),
 		}
 	}
@@ -212,12 +212,12 @@ func TestContract(t *testing.T) {
 		// Build a transport that routes /upload calls and API calls to the right fake.
 		hc := &http.Client{
 			Transport: &multiTransport{
-				apiHost:    strings.TrimPrefix(apiSrv.URL, "http://"),
+				apiHost:     strings.TrimPrefix(apiSrv.URL, "http://"),
 				resultsHost: strings.TrimPrefix(resultsSrv.URL, "http://"),
-				uploadHost: strings.TrimPrefix(fakeRS.uploadSrv.URL, "http://"),
-				fakeAPI:    fakeAPI,
-				fakeRS:     fakeRS,
-				fakeUpload: fakeRS.uploadSrv,
+				uploadHost:  strings.TrimPrefix(fakeRS.uploadSrv.URL, "http://"),
+				fakeAPI:     fakeAPI,
+				fakeRS:      fakeRS,
+				fakeUpload:  fakeRS.uploadSrv,
 			},
 		}
 		s := artifact.NewWithHTTPClient(cfg, hc)

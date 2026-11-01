@@ -38,8 +38,8 @@ type Config struct {
 
 // Store implements store.Store using GitHub Actions Artifacts.
 type Store struct {
-	cfg    Config
-	mu     sync.Mutex
+	cfg Config
+	mu  sync.Mutex
 	// drafts maps a day identity (key.Tag(date,seq)) to its staging directory.
 	drafts map[string]string
 	http   *http.Client
@@ -101,11 +101,11 @@ func tagFromName(key store.Key, name string) (date store.Date, seq int, ok bool)
 
 // apiArtifact is a subset of the GitHub Actions artifacts API response.
 type apiArtifact struct {
-	ID          int64      `json:"id"`
-	Name        string     `json:"name"`
-	Expired     bool       `json:"expired"`
-	CreatedAt   time.Time  `json:"created_at"`
-	ArchiveDownloadURL string `json:"archive_download_url"`
+	ID                 int64     `json:"id"`
+	Name               string    `json:"name"`
+	Expired            bool      `json:"expired"`
+	CreatedAt          time.Time `json:"created_at"`
+	ArchiveDownloadURL string    `json:"archive_download_url"`
 }
 
 // ListDays returns all days for key, including any in-process drafts.

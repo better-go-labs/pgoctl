@@ -17,24 +17,24 @@ import (
 
 // apiRelease is the subset of the GitHub Releases API response used here.
 type apiRelease struct {
-	ID          int64        `json:"id"`
-	TagName     string       `json:"tag_name"`
-	Name        string       `json:"name"`
-	Draft       bool         `json:"draft"`
-	Prerelease  bool         `json:"prerelease"`
-	Immutable   bool         `json:"immutable"`
-	UploadURL   string       `json:"upload_url"`
-	Assets      []apiAsset   `json:"assets"`
-	PublishedAt *time.Time   `json:"published_at"`
+	ID          int64      `json:"id"`
+	TagName     string     `json:"tag_name"`
+	Name        string     `json:"name"`
+	Draft       bool       `json:"draft"`
+	Prerelease  bool       `json:"prerelease"`
+	Immutable   bool       `json:"immutable"`
+	UploadURL   string     `json:"upload_url"`
+	Assets      []apiAsset `json:"assets"`
+	PublishedAt *time.Time `json:"published_at"`
 }
 
 // apiAsset is an entry in the GitHub release assets list.
 type apiAsset struct {
-	ID          int64      `json:"id"`
-	Name        string     `json:"name"`
-	Size        int64      `json:"size"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	ContentType string     `json:"content_type"`
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Size        int64     `json:"size"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	ContentType string    `json:"content_type"`
 }
 
 // apiRepoResponse is the subset of GET /repos/{o}/{r} used here.
