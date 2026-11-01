@@ -72,7 +72,7 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 	}
 	sort.Slice(order, func(i, j int) bool { return order[i].Before(order[j]) })
 
-	lookback, maxProfiles := windowDefaults(tm.Window.LookbackDays, tm.Window.MaxProfiles)
+	lookback, maxProfiles := tm.Window.LookbackDays, tm.Window.MaxProfiles
 	res := &ExcludeResult{}
 	for _, d := range order {
 		cur, err := s.ListDays(ctx, req.Key)
@@ -114,7 +114,7 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 			Date: req.Date.String(), Run: req.RunID, Reason: req.Reason, By: req.Actor, At: req.Now,
 		})
 
-		lb, mp := windowDefaults(m.Window.LookbackDays, m.Window.MaxProfiles)
+		lb, mp := m.Window.LookbackDays, m.Window.MaxProfiles
 		def, wd, err := buildDefault(ctx, s, req.Key, cur, d, own, runCapturedAt(m, d), lb, mp)
 		if err != nil {
 			return nil, err

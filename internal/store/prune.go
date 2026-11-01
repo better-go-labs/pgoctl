@@ -13,8 +13,6 @@ import (
 // protected date, which is never deleted. A prune for one key never touches
 // another key.
 func Prune(ctx context.Context, s Store, key Key, today Date, lookbackDays, maxProfiles int) ([]Date, error) {
-	lookbackDays, maxProfiles = windowDefaults(lookbackDays, maxProfiles)
-
 	// 1. Restore names the one protected day.
 	var protected Day
 	haveProtected := false
@@ -100,18 +98,6 @@ func Prune(ctx context.Context, s Store, key Key, today Date, lookbackDays, maxP
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].After(out[j]) })
 	return out, nil
-}
-
-// windowDefaults applies the issue #62 defaults of 14 lookback days and 7
-// profiles when a caller passes a non-positive value.
-func windowDefaults(lookbackDays, maxProfiles int) (int, int) {
-	if lookbackDays <= 0 {
-		lookbackDays = 14
-	}
-	if maxProfiles <= 0 {
-		maxProfiles = 7
-	}
-	return lookbackDays, maxProfiles
 }
 
 // identityOf keys a day by date and sequence within one key's listing.
