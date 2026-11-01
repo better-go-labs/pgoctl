@@ -93,8 +93,11 @@ func (k Key) ParseTag(tag string) (d Date, seq int, ok bool) {
 	if err != nil {
 		return Date{}, 0, false
 	}
-	n, err := strconv.Atoi(rest[dot+1:])
-	if err != nil || n < 0 {
+	seqStr := rest[dot+1:]
+	n, err := strconv.Atoi(seqStr)
+	// strconv.Atoi accepts a sign and leading zeros; the tag form is a canonical
+	// non-negative decimal, so reject anything Itoa would not reproduce.
+	if err != nil || n < 0 || strconv.Itoa(n) != seqStr {
 		return Date{}, 0, false
 	}
 	return parsed, n, true
