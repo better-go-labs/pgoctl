@@ -10,7 +10,6 @@ import "sort"
 // deduplicated and sorted newest first before filtering, so callers need not
 // pre-sort. The result is nil when no day qualifies.
 func SelectWindow(days []Date, today Date, lookbackDays, maxProfiles int) []Date {
-	// Deduplicate; Date values for the same calendar day compare equal with ==.
 	seen := make(map[Date]struct{}, len(days))
 	uniq := make([]Date, 0, len(days))
 	for _, d := range days {
@@ -21,7 +20,6 @@ func SelectWindow(days []Date, today Date, lookbackDays, maxProfiles int) []Date
 		uniq = append(uniq, d)
 	}
 
-	// Sort newest first.
 	sort.Slice(uniq, func(i, j int) bool { return uniq[i].After(uniq[j]) })
 
 	earliest := today.AddDays(-lookbackDays) // exclusive lower bound

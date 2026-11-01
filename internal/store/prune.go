@@ -44,7 +44,6 @@ func Prune(ctx context.Context, s Store, key Key, today Date, lookbackDays, maxP
 	}
 	sort.Slice(inWindow, func(i, j int) bool { return inWindow[i].After(inWindow[j]) })
 
-	// Highest published sequence per date, for superseded detection.
 	highest := make(map[Date]int)
 	for _, day := range days {
 		if day.Draft {
@@ -100,7 +99,6 @@ func Prune(ctx context.Context, s Store, key Key, today Date, lookbackDays, maxP
 	return out, nil
 }
 
-// identityOf keys a day by date and sequence within one key's listing.
 func identityOf(day Day) string {
 	return fmt.Sprintf("%s\x00%d", day.Date.String(), day.Seq)
 }

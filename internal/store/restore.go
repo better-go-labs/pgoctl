@@ -58,8 +58,6 @@ func Restore(ctx context.Context, s Store, key Key, w io.Writer) (*Manifest, err
 	return nil, ErrNoSnapshot
 }
 
-// usable reports whether day is a published snapshot carrying both a default.pgo
-// and a manifest.
 func usable(d Day) bool {
 	return !d.Draft && d.Has(AssetDefault) && d.Has(AssetManifest)
 }

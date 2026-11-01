@@ -139,7 +139,6 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 	return res, nil
 }
 
-// containsString reports whether ss contains want.
 func containsString(ss []string, want string) bool {
 	for _, s := range ss {
 		if s == want {

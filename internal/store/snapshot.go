@@ -19,7 +19,6 @@ import (
 // store call order of each is fixed by the issue #62 design so the GitHub
 // Releases and Actions Artifacts backends behave the same.
 
-// sha256Hex returns the lowercase hex sha256 of data.
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
@@ -54,7 +53,6 @@ func newManifest(key Key, d Date, seq int) *Manifest {
 	}
 }
 
-// datesToStrings renders dates as "2006-01-02" strings, preserving order.
 func datesToStrings(ds []Date) []string {
 	if len(ds) == 0 {
 		return nil
@@ -66,7 +64,6 @@ func datesToStrings(ds []Date) []string {
 	return out
 }
 
-// findRun returns the index of the run with id in m.Runs, or -1.
 func findRun(m *Manifest, id string) int {
 	for i := range m.Runs {
 		if m.Runs[i].ID == id {
@@ -131,7 +128,6 @@ func highestPublishedForDate(days []Day, d Date) (Day, bool) {
 	return best, found
 }
 
-// highestPublishedPerDate maps each date to its highest published sequence day.
 func highestPublishedPerDate(days []Day) map[Date]Day {
 	out := make(map[Date]Day)
 	for _, day := range days {
@@ -159,7 +155,6 @@ func manifestAssetForDate(days []Day, d Date) *Asset {
 	return nil
 }
 
-// readManifest reads and decodes the manifest asset of day.
 func readManifest(ctx context.Context, s Store, day Day) (*Manifest, error) {
 	rc, err := s.ReadAsset(ctx, day, AssetManifest)
 	if err != nil {
@@ -169,7 +164,6 @@ func readManifest(ctx context.Context, s Store, day Day) (*Manifest, error) {
 	return DecodeManifest(rc)
 }
 
-// readAll reads the named asset of day fully, closing the reader.
 func readAll(ctx context.Context, s Store, day Day, name string) ([]byte, error) {
 	rc, err := s.ReadAsset(ctx, day, name)
 	if err != nil {
