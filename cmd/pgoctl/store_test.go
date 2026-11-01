@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -545,6 +547,37 @@ func writeTempFile(t *testing.T, data []byte) string {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 	return f.Name()
+}
+
+// permErrPublishStore wraps a Store and returns ErrPermission on every Publish.
+type permErrPublishStore struct{ store.Store }
+
+func (s *permErrPublishStore) Publish(_ context.Context, _ store.Day) error {
+	return fmt.Errorf("uploading artifact: %w", store.ErrPermission)
+}
+
+// TestStorePublish_PermissionHint checks that the CLI appends the
+// "permissions: contents: write" hint when publish fails with ErrPermission.
+func TestStorePublish_PermissionHint(t *testing.T) {
+	withStore(t, &permErrPublishStore{storetest.NewMemory()})
+
+	profile := storetest.NewProfile(t, 100)
+	profileFile := writeTempFile(t, profile)
+
+	root := newRootCmd()
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
+	root.SetArgs([]string{
+		"store", "publish",
+		"--repo", "o/r",
+		"--profile", profileFile,
+		"--run-id", "123-1",
+		"--out", t.TempDir() + "/out.pgo",
+	})
+	err := root.Execute()
+	require.Error(t, err)
+	assert.Contains(t, stderr.String(), `permissions: contents: write`,
+		"stderr must include the permissions hint when publish returns ErrPermission")
 }
 
 // Ensure unused imports are consumed.
