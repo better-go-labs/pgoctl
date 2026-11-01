@@ -134,10 +134,10 @@ inputs:
 outputs:
   has-profile:
     description: 'Whether a profile was successfully collected or restored'
-    value: ${{ steps.merge.outputs.has-profile || steps.restore-profile.outputs.has-profile }}
+    value: ${{ steps.merge.outputs.has-profile || steps.restoremode.outputs.has-profile }}
   profile-tag:
     description: 'Release tag or artifact reference for the stored profile'
-    value: ${{ steps.merge.outputs.profile-tag || steps.restore-profile.outputs.profile-tag }}
+    value: ${{ steps.merge.outputs.profile-tag || steps.restoremode.outputs.profile-tag }}
   verdict:
     description: 'Gate verdict from pgoctl compare: promote | neutral | rollback (empty if no baseline)'
     value: ${{ steps.compare.outputs.verdict }}
@@ -252,18 +252,20 @@ runs:
 
     # ── restore mode: fetch the latest stored default.pgo ─
     - name: Restore profile
-      id: restore-profile
+      id: restoremode
       if: inputs.profile-mode == 'restore'
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
+        SERVICE_NAME: ${{ inputs.service-name }}
       run: |
         set +e
         RESTORE_JSON=$(pgoctl store restore \
           --store="${{ steps.store.outputs.store }}" \
           --repo="${{ github.repository }}" \
-          --tag-prefix="${{ inputs.profile-tag-prefix }}" \
-          --service="${{ inputs.service-name }}" \
+          --tag-prefix="$TAG_PREFIX" \
+          --service="$SERVICE_NAME" \
           --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
           --legacy-artifact="${{ inputs.legacy-artifact }}" \
           --out=default.pgo \
@@ -271,15 +273,15 @@ runs:
         RESTORE_EXIT=$?
         set -e
         if [[ $RESTORE_EXIT -eq 0 ]]; then
-          PROFILE_TAG=$(echo "$RESTORE_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag',''))" 2>/dev/null || echo "")
+          PROFILE_TAG=$(echo "$RESTORE_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tag',''))" 2>/dev/null || echo "")
           echo "has-profile=true" >> "$GITHUB_OUTPUT"
           echo "profile-tag=$PROFILE_TAG" >> "$GITHUB_OUTPUT"
-          echo "artifact=$(pwd)/default.pgo" >> "$GITHUB_OUTPUT"
         elif [[ $RESTORE_EXIT -eq 3 ]]; then
           echo "has-profile=false" >> "$GITHUB_OUTPUT"
           echo "profile-tag=" >> "$GITHUB_OUTPUT"
           echo "No usable PGO profile. This build runs without PGO." >> "$GITHUB_STEP_SUMMARY"
         else
+          echo "$RESTORE_JSON"
           exit $RESTORE_EXIT
         fi
 
