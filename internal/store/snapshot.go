@@ -179,14 +179,17 @@ func readAll(ctx context.Context, s Store, day Day, name string) ([]byte, error)
 	return io.ReadAll(rc)
 }
 
-// copyRuns copies every run profile asset from one day to another.
-func copyRuns(ctx context.Context, s Store, from, to Day) error {
-	for name := range from.Assets {
-		if _, ok := RunIDFromAsset(name); !ok {
-			continue
-		}
+// copyRuns copies each run profile named in m from one day to another. The
+// manifest is the source of truth: the Actions Artifacts backend does not
+// enumerate run files in Day.Assets, so copying by listing would lose them.
+func copyRuns(ctx context.Context, s Store, from, to Day, m *Manifest) error {
+	for i := range m.Runs {
+		name := RunAsset(m.Runs[i].ID)
 		data, err := readAll(ctx, s, from, name)
 		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
 			return fmt.Errorf("reading %s: %w", name, err)
 		}
 		if err := s.PutAsset(ctx, to, name, bytes.NewReader(data)); err != nil {
@@ -220,7 +223,7 @@ func openForWrite(ctx context.Context, s Store, key Key, days []Day, d Date) (Da
 		if err != nil {
 			return Day{}, nil, fmt.Errorf("reading manifest of %s: %w", key.Tag(d, cur.Seq), err)
 		}
-		if err := copyRuns(ctx, s, cur, day); err != nil {
+		if err := copyRuns(ctx, s, cur, day, m); err != nil {
 			return Day{}, nil, err
 		}
 		m.Sequence = seq
@@ -242,7 +245,7 @@ func openForWrite(ctx context.Context, s Store, key Key, days []Day, d Date) (Da
 	m := newManifest(key, d, cur.Seq)
 	if prev, ok := highestPublishedForDate(days, d); ok && prev.Seq < cur.Seq {
 		if pm, err := readManifest(ctx, s, prev); err == nil {
-			if err := copyRuns(ctx, s, prev, cur); err != nil {
+			if err := copyRuns(ctx, s, prev, cur, pm); err != nil {
 				return Day{}, nil, err
 			}
 			pm.Sequence = cur.Seq
