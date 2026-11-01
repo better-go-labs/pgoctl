@@ -204,6 +204,12 @@ func (s *Store) listArtifacts(ctx context.Context, key store.Key) ([]apiArtifact
 		}
 		if err := func() error {
 			defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
+			if resp.StatusCode == 403 {
+				return fmt.Errorf("GET %s returned 403: %w", path, store.ErrPermission)
+			}
+			if resp.StatusCode == 404 {
+				return fmt.Errorf("GET %s returned 404: %w", path, store.ErrNotFound)
+			}
 			if resp.StatusCode != 200 {
 				return fmt.Errorf("GET %s returned %d", path, resp.StatusCode)
 			}
@@ -297,6 +303,9 @@ func (s *Store) downloadArtifact(ctx context.Context, day store.Day) ([]byte, er
 	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 	if resp.StatusCode == 403 {
 		return nil, fmt.Errorf("GET artifact %s returned 403: %w", day.ID, store.ErrPermission)
+	}
+	if resp.StatusCode == 404 {
+		return nil, fmt.Errorf("GET artifact %s returned 404: %w", day.ID, store.ErrNotFound)
 	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("GET artifact %s returned %d", day.ID, resp.StatusCode)
@@ -503,7 +512,7 @@ func (s *Store) deleteArtifactPath(ctx context.Context, path string) error {
 		return fmt.Errorf("DELETE %s returned 403: grant the publish job \"permissions: actions: write\": %w", path, store.ErrPermission)
 	}
 	if resp.StatusCode == 404 {
-		return nil // idempotent
+		return fmt.Errorf("DELETE %s returned 404: %w", path, store.ErrNotFound)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("DELETE %s returned %d", path, resp.StatusCode)
