@@ -346,24 +346,19 @@ func buildDefault(ctx context.Context, s Store, key Key, days []Day, at Date, ow
 		return nil, nil, nil
 	}
 	byDate := highestPublishedPerDate(days)
-	candidates := []Date{at}
-	for d := range byDate {
-		candidates = append(candidates, d)
-	}
-	window := SelectWindow(candidates, at, lookbackDays, maxProfiles)
 
-	var (
-		inputs []merge.Input
-		used   []Date
-	)
-	for _, d := range window {
-		if d == at {
-			inputs = append(inputs, merge.Input{Data: own, CapturedAt: ownCapturedAt})
-			used = append(used, d)
-			continue
-		}
-		day, ok := byDate[d]
-		if !ok {
+	// Read each in-lookback date's daily first and drop the ones that cannot be
+	// read, so a date with no readable daily never consumes a window slot ahead
+	// of an older readable date.
+	type windowInput struct {
+		data       []byte
+		capturedAt time.Time
+	}
+	cache := map[Date]windowInput{at: {data: own, capturedAt: ownCapturedAt}}
+	candidates := []Date{at}
+	earliest := at.AddDays(-lookbackDays)
+	for d, day := range byDate {
+		if d == at || !earliest.Before(d) || d.After(at) {
 			continue
 		}
 		data, err := readAll(ctx, s, day, AssetDaily)
@@ -373,7 +368,19 @@ func buildDefault(ctx context.Context, s Store, key Key, days []Day, at Date, ow
 			}
 			return nil, nil, fmt.Errorf("reading daily of %s: %w", d, err)
 		}
-		inputs = append(inputs, merge.Input{Data: data, CapturedAt: capturedAt(ctx, s, day, d)})
+		cache[d] = windowInput{data: data, capturedAt: capturedAt(ctx, s, day, d)}
+		candidates = append(candidates, d)
+	}
+
+	window := SelectWindow(candidates, at, lookbackDays, maxProfiles)
+
+	var (
+		inputs []merge.Input
+		used   []Date
+	)
+	for _, d := range window {
+		in := cache[d]
+		inputs = append(inputs, merge.Input{Data: in.data, CapturedAt: in.capturedAt})
 		used = append(used, d)
 	}
 
