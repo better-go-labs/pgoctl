@@ -951,3 +951,28 @@ func TestWrite422Immutable_IsErrImmutable(t *testing.T) {
 		assert.True(t, errors.Is(err, store.ErrImmutable), "422 immutable on DELETE must map to ErrImmutable, got %v", err)
 	})
 }
+
+// TestReadAsset_ReleaseFetch403 covers a ReadAsset on a name missing from day.Assets
+// while the fake server returns 403 for GET release. The error must be
+// ErrPermission, not ErrNotFound.
+func TestReadAsset_ReleaseFetch403(t *testing.T) {
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	fake := newFakeGH(key.Repo)
+	fake.forbidPaths["/repos/o/r/releases/1"] = true
+	srv := httptest.NewServer(fake)
+	t.Cleanup(srv.Close)
+	s := newFakeGHStore(t, key, fake, srv)
+
+	ctx := context.Background()
+	d, err := store.ParseDate("2026-09-15")
+	require.NoError(t, err)
+
+	day, err := s.BeginDay(ctx, key, d, 0)
+	require.NoError(t, err)
+
+	// Try to read an asset that is missing from day.Assets, triggering the
+	// fallback getRelease call, which returns 403.
+	_, err = s.ReadAsset(ctx, day, "nonexistent.pprof")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, store.ErrPermission), "403 on GET release during asset refetch must map to ErrPermission, got %v", err)
+}
