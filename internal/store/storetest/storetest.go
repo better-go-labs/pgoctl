@@ -186,12 +186,18 @@ func (m *memory) ListDays(_ context.Context, key store.Key) ([]store.Day, error)
 		m.failListNext--
 		return nil, fmt.Errorf("listing days: %w", errInjected)
 	}
-	prefix := keyOf(key)
 	var out []store.Day
 	for _, d := range m.days {
-		if keyOf(d.key) == prefix {
-			out = append(out, m.toDay(d))
+		// Mirror a tag-based backend: a day belongs to key when the repos match
+		// and key can parse the day's tag. This exercises Key.ParseTag, including
+		// its prefix and service boundary, the way the Releases backend does.
+		if d.key.Repo != key.Repo {
+			continue
 		}
+		if _, _, ok := key.ParseTag(d.key.Tag(d.date, d.seq)); !ok {
+			continue
+		}
+		out = append(out, m.toDay(d))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Date != out[j].Date {

@@ -102,6 +102,34 @@ func TestMemory_ContractImmutable(t *testing.T) {
 	storetest.RunContract(t, func() store.Store { return storetest.NewMemory(storetest.Immutable()) })
 }
 
+// TestMemory_ListDaysTagBoundary checks the store filters its listing through
+// Key.ParseTag, so a plain key, a service key, and another repo never see one
+// another's days.
+func TestMemory_ListDaysTagBoundary(t *testing.T) {
+	ctx := context.Background()
+	s := storetest.NewMemory()
+	plain := store.Key{Repo: "o/r", Prefix: "profile"}
+	svc := store.Key{Repo: "o/r", Prefix: "profile", Service: "api"}
+	other := store.Key{Repo: "x/y", Prefix: "profile"}
+	date, err := store.ParseDate("2026-10-31")
+	require.NoError(t, err)
+	for _, k := range []store.Key{plain, svc, other} {
+		d, err := s.BeginDay(ctx, k, date, 0)
+		require.NoError(t, err)
+		require.NoError(t, s.Publish(ctx, d))
+	}
+
+	days, err := s.ListDays(ctx, plain)
+	require.NoError(t, err)
+	require.Len(t, days, 1, "a plain key sees neither the service key nor another repo")
+	assert.Empty(t, days[0].Key.Service)
+
+	days, err = s.ListDays(ctx, svc)
+	require.NoError(t, err)
+	require.Len(t, days, 1, "a service key sees only its own tag")
+	assert.Equal(t, "api", days[0].Key.Service)
+}
+
 // errReader fails every Read, modelling a body that cannot be read.
 type errReader struct{}
 
