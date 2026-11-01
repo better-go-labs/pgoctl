@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -100,6 +101,10 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 		} else {
 			own, err = readAll(ctx, s, day, AssetDaily)
 			if err != nil {
+				// An all-excluded day has no daily; skip it as buildDefault does.
+				if errors.Is(err, ErrNotFound) {
+					continue
+				}
 				return nil, fmt.Errorf("reading daily of %s: %w", req.Key.Tag(d, day.Seq), err)
 			}
 		}
