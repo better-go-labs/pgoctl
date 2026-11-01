@@ -16,7 +16,7 @@ func Prune(ctx context.Context, s Store, key Key, today Date, lookbackDays, maxP
 	if lookbackDays < 1 || maxProfiles < 1 {
 		return nil, fmt.Errorf("window needs lookbackDays >= 1 and maxProfiles >= 1, got %d and %d: %w", lookbackDays, maxProfiles, ErrInvalidInput)
 	}
-	// 1. Restore names the one protected day.
+	// Restore names the one protected day.
 	var protected Day
 	haveProtected := false
 	if m, err := Restore(ctx, s, key, io.Discard); err == nil {
