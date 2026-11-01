@@ -21,6 +21,9 @@ var (
 	ErrUnknownSchema = errors.New("unknown manifest schema")
 	// ErrNoSnapshot is returned when no usable snapshot exists to restore.
 	ErrNoSnapshot = errors.New("no usable snapshot")
+	// ErrInvalidInput is returned when a caller passes a window that cannot
+	// select anything, so the flow rejects it instead of defaulting or panicking.
+	ErrInvalidInput = errors.New("invalid input")
 )
 
 // Asset describes one stored file in a day.
