@@ -93,9 +93,6 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 				m.Runs[i].ExcludedBy = req.Actor
 				m.Runs[i].Reason = req.Reason
 			}
-			m.Exclusions = append(m.Exclusions, Exclusion{
-				Date: d.String(), Run: req.RunID, Reason: req.Reason, By: req.Actor, At: req.Now,
-			})
 			own, m.DailyRun, err = selectDaily(ctx, s, day, m)
 			if err != nil {
 				return nil, err
@@ -106,6 +103,11 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 				return nil, fmt.Errorf("reading daily of %s: %w", req.Key.Tag(d, day.Seq), err)
 			}
 		}
+		// Every rebuilt day had req.Date in its window, so each records the
+		// exclusion, naming the excluded run and the date it ran on.
+		m.Exclusions = append(m.Exclusions, Exclusion{
+			Date: req.Date.String(), Run: req.RunID, Reason: req.Reason, By: req.Actor, At: req.Now,
+		})
 
 		lb, mp := windowDefaults(m.Window.LookbackDays, m.Window.MaxProfiles)
 		def, wd, err := buildDefault(ctx, s, req.Key, cur, d, own, lb, mp)
