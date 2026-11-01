@@ -926,3 +926,72 @@ func TestListDays_UncompressedSizeOverflow(t *testing.T) {
 			"asset size from an overflowed uint64 must not be negative")
 	}
 }
+
+// TestPublish_RunsSubdirInZip verifies that published artifacts include files from
+// subdirectories like runs/. Before the fix, zipDir only included files directly in
+// the staging directory and skipped subdirectories.
+func TestPublish_RunsSubdirInZip(t *testing.T) {
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	payload := []byte("pprof-data-in-subdir")
+	payloadSum := sha256HexStr(payload)
+
+	fakeRS, resultsSrv := newFakeResults(t)
+	fakeAPI := newFakeArtifactAPI()
+	apiSrv := httptest.NewServer(fakeAPI)
+	t.Cleanup(apiSrv.Close)
+	token := makeToken("wf-1", "job-1")
+	cfg := artifact.Config{
+		Key:          key,
+		RuntimeToken: token,
+		ResultsURL:   resultsSrv.URL + "/results",
+		APIURL:       apiSrv.URL,
+		Token:        "gh-token",
+	}
+	hc := &http.Client{
+		Transport: &multiTransport{
+			apiHost:     strings.TrimPrefix(apiSrv.URL, "http://"),
+			resultsHost: strings.TrimPrefix(resultsSrv.URL, "http://"),
+			uploadHost:  strings.TrimPrefix(fakeRS.uploadSrv.URL, "http://"),
+			fakeAPI:     fakeAPI,
+			fakeRS:      fakeRS,
+			fakeUpload:  fakeRS.uploadSrv,
+		},
+	}
+	s := artifact.NewWithHTTPClient(cfg, hc)
+	ctx := context.Background()
+	d, _ := store.ParseDate("2026-08-01")
+
+	day, err := s.BeginDay(ctx, key, d, 0)
+	require.NoError(t, err)
+	require.NoError(t, s.PutAsset(ctx, day, "runs/1-1.pprof", strings.NewReader("pprof-data-in-subdir")))
+	mf := store.Manifest{
+		SchemaVersion: store.SchemaVersion,
+		Date:          "2026-08-01",
+		Tag:           "profile/2026-08-01.0",
+		Assets:        map[string]string{"runs/1-1.pprof": payloadSum},
+	}
+	manifestData, _ := json.Marshal(mf)
+	require.NoError(t, s.PutAsset(ctx, day, store.AssetManifest, strings.NewReader(string(manifestData))))
+	require.NoError(t, s.Publish(ctx, day))
+
+	// After publish, register the uploaded zip in fakeAPI for download.
+	zipData := fakeRS.artifacts["last"]
+	require.NotNil(t, zipData, "artifact must have been published")
+	id := fakeAPI.alloc()
+	fakeAPI.artifacts = append(fakeAPI.artifacts, &fakeArtifact{
+		id: id, name: "profile_2026-08-01.0", createdAt: time.Now(),
+	})
+	fakeAPI.zips[id] = zipData
+
+	days, err := s.ListDays(ctx, key)
+	require.NoError(t, err)
+	require.Len(t, days, 1)
+
+	published := days[0]
+	rc, err := s.ReadAsset(ctx, published, "runs/1-1.pprof")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rc.Close()) }()
+
+	data, _ := io.ReadAll(rc)
+	assert.Equal(t, payload, data, "reads runs subdir file from published artifact")
+}
