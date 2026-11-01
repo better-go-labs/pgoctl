@@ -111,15 +111,17 @@ func TestExclude_RebuildOrderOldestFirst(t *testing.T) {
 		"dependent days rebuild oldest first so each reads the updated earlier dailies")
 }
 
-func TestExclude_SkipsDependentDayWithoutDaily(t *testing.T) {
+func TestExclude_RebuildsDependentDayWithoutDaily(t *testing.T) {
 	ctx := context.Background()
 	s := storetest.NewMemory()
 	// The excluded date has a single run and a daily.
 	publishRun(t, s, "2026-10-30", "100-1", 0.9, 1000)
 
 	// A later day whose window used 2026-10-30 but which carries no daily.pprof,
-	// as if its own runs were all excluded earlier. The rebuild must skip it the
-	// way buildDefault drops a date with no readable daily, not error out.
+	// as if its own runs were all excluded earlier. Its default.pgo was built with
+	// the run now being excluded, so the rebuild must treat the missing daily as
+	// own = nil: record the exclusion, rebuild default from the remaining window
+	// and publish, rather than skip and leave the stale default behind.
 	d31 := mustDate(t, "2026-10-31")
 	day, err := s.BeginDay(ctx, testKey, d31, 0)
 	require.NoError(t, err)
@@ -139,9 +141,19 @@ func TestExclude_SkipsDependentDayWithoutDaily(t *testing.T) {
 	res, err := store.Exclude(ctx, s, store.ExcludeRequest{
 		Key: testKey, Date: mustDate(t, "2026-10-30"), RunID: "100-1", Now: d31.Time(),
 	})
-	require.NoError(t, err, "a dependent day with no daily is skipped, not an error")
-	assert.Equal(t, []string{"2026-10-30"}, strs(res.Rebuilt),
-		"only the excluded date rebuilds; the empty dependent day is skipped")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"2026-10-30", "2026-10-31"}, strs(res.Rebuilt),
+		"the dependent day with no daily is rebuilt, not skipped")
+
+	// The window now has no usable daily, so the stale default.pgo that held the
+	// excluded run is gone from the dependent day.
+	d31Day := highestPublishedDay(t, s, "2026-10-31")
+	assert.False(t, d31Day.Has(store.AssetDefault),
+		"the dependent day's default.pgo no longer contains the excluded run")
+	m31 := dayManifest(t, s, "2026-10-31")
+	require.Len(t, m31.Exclusions, 1, "the dependent day records the exclusion")
+	assert.Equal(t, "2026-10-30", m31.Exclusions[0].Date)
+	assert.Equal(t, "100-1", m31.Exclusions[0].Run)
 }
 
 func TestExclude_SliceHasOneEntry(t *testing.T) {
