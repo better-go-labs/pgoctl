@@ -71,13 +71,23 @@ func TestPublish_TieNewerRunWins(t *testing.T) {
 func TestPublish_NormalizesDays(t *testing.T) {
 	s := storetest.NewMemory()
 	// The two days carry very different CPU totals; the window normalizes them to
-	// one total before merging, so the low-sample day still contributes.
-	publishRun(t, s, "2026-10-30", "100-1", 0.9, 100)
-	res := publishRun(t, s, "2026-10-31", "101-1", 0.9, 1000)
+	// one total before merging, so the low-sample day still contributes. Each day
+	// uses a distinct function so its share of the merged default.pgo is readable.
+	// Captures are at noon, 24h apart, so the older day decays to half weight and
+	// lands a one-third share, but only when the newer (own) day is weighted by
+	// its run's capture time rather than the date's midnight.
+	noon30 := mustDate(t, "2026-10-30").Time().Add(12 * time.Hour)
+	noon31 := mustDate(t, "2026-10-31").Time().Add(12 * time.Hour)
+	publishProfile(t, s, "2026-10-30", "100-1", cpuProfileFn(t, "main.g", 100), noon30)
+	res := publishProfile(t, s, "2026-10-31", "101-1", cpuProfileFn(t, "main.h", 1000), noon31)
 
 	assert.Equal(t, []string{"2026-10-31", "2026-10-30"}, res.Manifest.Window.Dates)
 	assert.True(t, res.Manifest.Merge.Normalize, "the store normalizes every window input")
-	assert.NotEmpty(t, res.Default)
+	require.NotEmpty(t, res.Default)
+
+	shares := functionCPUShares(t, res.Default)
+	assert.InDelta(t, 1.0/3.0, shares["main.g"], 0.01,
+		"the older day, normalized and decayed to half weight, holds a third of the merge")
 }
 
 func TestPublish_SameRunTwice(t *testing.T) {
