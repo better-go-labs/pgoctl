@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `pgoctl store` command family for steady-state PGO profile accumulation: `resolve`, `publish`, `restore`, `exclude`, and `prune`, over a GitHub Releases backend or a private GitHub Actions Artifacts backend with a rolling window (#62)
+- Action: `profile-store` (`github-release` default, or `artifact`) and `profile-mode` (`collect` default, or `restore`) inputs, plus `profile-tag-prefix`, `service-name`, `publish-branch`, `allow-public-profiles`, `lookback-days`, `max-profiles`, `exclude-runs`, and `legacy-artifact` to configure the store; public repositories default to the private artifact backend unless `allow-public-profiles` is set (#62)
+- Action: `restore` mode fetches the latest stored `default.pgo` and exposes the `has-profile` and `profile-tag` outputs; a build with no stored profile reports `has-profile: false` and runs without PGO (#62)
+- `hack/store-e2e/`: an end-to-end workflow that exercises both store backends against a scratch repository (#62)
+
+### Changed
+
+- Action: `restore-previous-artifact` is deprecated in favour of `profile-store: artifact` with `profile-mode: collect`, which accumulates profiles with the same cross-run behaviour and more control over the window (#62)
+
+### Fixed
+
+- `store` artifact backend: paginating the artifact list re-prefixed the GitHub `Link` header's absolute next URL with the API base, producing a doubled host and breaking restore on repositories with more than 100 artifacts (#62)
+
 ## [0.1.4] - 2026-10-25
 
 ### Added
