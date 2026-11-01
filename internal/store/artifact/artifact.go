@@ -629,25 +629,31 @@ func nextLink(header string) string {
 func zipDir(dir string) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("reading staging dir: %w", err)
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", e.Name(), err)
+			return err
 		}
-		f, err := zw.Create(e.Name())
+		if info.IsDir() {
+			return nil
+		}
+		relPath, err := filepath.Rel(dir, path)
 		if err != nil {
-			return nil, fmt.Errorf("creating zip entry %s: %w", e.Name(), err)
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", relPath, err)
+		}
+		f, err := zw.Create(relPath)
+		if err != nil {
+			return fmt.Errorf("creating zip entry %s: %w", relPath, err)
 		}
 		if _, err := f.Write(data); err != nil {
-			return nil, fmt.Errorf("writing zip entry %s: %w", e.Name(), err)
+			return fmt.Errorf("writing zip entry %s: %w", relPath, err)
 		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("walking staging dir: %w", err)
 	}
 	if err := zw.Close(); err != nil {
 		return nil, fmt.Errorf("closing zip: %w", err)
