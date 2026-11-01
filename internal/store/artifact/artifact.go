@@ -136,7 +136,10 @@ func (s *Store) ListDays(ctx context.Context, key store.Key) ([]store.Day, error
 			Draft:     false,
 			Immutable: true,
 			ID:        strconv.FormatInt(a.ID, 10),
-			Assets:    map[string]store.Asset{}, // artifact zips enumerate on read
+			Assets:    map[string]store.Asset{},
+		}
+		if assets, err := s.enumerateArtifactAssets(ctx, day); err == nil {
+			day.Assets = assets
 		}
 		out = append(out, day)
 	}
@@ -299,6 +302,30 @@ func (s *Store) downloadArtifact(ctx context.Context, day store.Day) ([]byte, er
 		return nil, fmt.Errorf("GET artifact %s returned %d", day.ID, resp.StatusCode)
 	}
 	return io.ReadAll(resp.Body)
+}
+
+// enumerateArtifactAssets downloads the artifact zip for day and returns a map
+// of logical asset name to Asset populated from the zip's central directory.
+// Callers treat a non-nil error as "metadata unavailable" and keep the empty map.
+func (s *Store) enumerateArtifactAssets(ctx context.Context, day store.Day) (map[string]store.Asset, error) {
+	zipData, err := s.downloadArtifact(ctx, day)
+	if err != nil {
+		return nil, err
+	}
+	r, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return nil, fmt.Errorf("opening artifact zip: %w", err)
+	}
+	assets := make(map[string]store.Asset, len(r.File))
+	for _, f := range r.File {
+		assets[f.Name] = store.Asset{
+			ID:        day.ID + "/" + f.Name,
+			Name:      f.Name,
+			Size:      int64(f.UncompressedSize64),
+			UpdatedAt: f.Modified,
+		}
+	}
+	return assets, nil
 }
 
 // BeginDay returns the day for key/date/seq. For artifacts, drafts are in-process
