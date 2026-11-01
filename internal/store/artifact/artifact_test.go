@@ -1088,7 +1088,7 @@ func TestListDays_FollowsAbsoluteNextLink(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.RawQuery, "page=2") {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"total_count": 1,
 				"artifacts": []map[string]interface{}{
 					{
@@ -1102,7 +1102,7 @@ func TestListDays_FollowsAbsoluteNextLink(t *testing.T) {
 			})
 		} else {
 			w.Header().Set("Link", fmt.Sprintf("<%s/repos/o/r/actions/artifacts?per_page=100&page=2>; rel=\"next\"", serverURL))
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"total_count": 1,
 				"artifacts": []map[string]interface{}{
 					{
