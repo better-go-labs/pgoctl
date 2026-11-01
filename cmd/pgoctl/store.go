@@ -65,7 +65,7 @@ func (f *storeFlags) makeStore() (store.Store, error) {
 	}
 	switch f.storeBackend {
 	case "github-release", "ghrelease":
-		return ghrelease.New(key, f.token(), f.apiURL), nil
+		return ghrelease.New(ghrelease.Config{Key: key, Token: f.token(), BaseURL: f.apiURL})
 	case "artifact":
 		cfg := artifact.Config{
 			Key:          key,
@@ -135,8 +135,11 @@ func newStoreResolveCmd(sf *storeFlags) *cobra.Command {
 			}
 
 			// GitHub Releases backend: check repo visibility.
-			s := ghrelease.New(key, sf.token(), sf.apiURL)
-			info, err := s.GetRepoInfo(ctx)
+			s, err := ghrelease.New(ghrelease.Config{Key: key, Token: sf.token(), BaseURL: sf.apiURL})
+			if err != nil {
+				return &exitError{2, err}
+			}
+			info, err := s.Repo(ctx)
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{1, err}
