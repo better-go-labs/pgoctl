@@ -362,6 +362,11 @@ func buildDefault(ctx context.Context, s Store, days []Day, at Date, own []byte,
 		}
 		capAt, err := capturedAt(ctx, s, day, d)
 		if err != nil {
+			// A window day whose manifest cannot be read is dropped, as Restore and
+			// Prune do, rather than failing the build. Other errors still fail.
+			if errors.Is(err, ErrNotFound) || errors.Is(err, ErrUnknownSchema) {
+				continue
+			}
 			return nil, nil, err
 		}
 		cache[d] = windowInput{data: data, capturedAt: capAt}
