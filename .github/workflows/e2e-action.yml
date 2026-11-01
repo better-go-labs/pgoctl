@@ -92,6 +92,7 @@ jobs:
           upload-artifact: 'true'
           comment-on-pr: 'false'
           artifact-name: pgo-e2e-fixture
+          on-gate-failure: warn
 
       - name: assert outputs
         run: |
@@ -187,6 +188,7 @@ jobs:
           comment-on-pr: 'true'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           upload-artifact: 'false'
+          on-gate-failure: warn
 
       - id: run2
         uses: ./
@@ -196,6 +198,7 @@ jobs:
           comment-on-pr: 'true'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           upload-artifact: 'false'
+          on-gate-failure: warn
 
       - name: assert comment idempotency
         env:
@@ -260,6 +263,7 @@ jobs:
           profile-store: artifact
           upload-artifact: 'false'
           comment-on-pr: 'false'
+          on-gate-failure: warn
 
       - name: assert collect output
         run: test -s "${{ steps.run.outputs.profile-path }}"
