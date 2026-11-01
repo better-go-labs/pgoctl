@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -332,6 +333,9 @@ func (s *Store) enumerateArtifactAssets(ctx context.Context, day store.Day) (map
 	}
 	assets := make(map[string]store.Asset, len(r.File))
 	for _, f := range r.File {
+		if f.UncompressedSize64 > math.MaxInt64 {
+			return nil, fmt.Errorf("zip entry %q: UncompressedSize64 %d overflows int64", f.Name, f.UncompressedSize64)
+		}
 		assets[f.Name] = store.Asset{
 			ID:        day.ID + "/" + f.Name,
 			Name:      f.Name,
@@ -344,7 +348,7 @@ func (s *Store) enumerateArtifactAssets(ctx context.Context, day store.Day) (map
 
 // BeginDay returns the day for key/date/seq. For artifacts, drafts are in-process
 // staging directories; published days are immutable.
-func (s *Store) BeginDay(ctx context.Context, key store.Key, date store.Date, seq int) (store.Day, error) {
+func (s *Store) BeginDay(_ context.Context, key store.Key, date store.Date, seq int) (store.Day, error) {
 	tag := key.Tag(date, seq)
 
 	s.mu.Lock()
@@ -579,8 +583,13 @@ func (s *Store) RestoreLegacy(ctx context.Context, w io.Writer) error {
 				return fmt.Errorf("opening default.pgo in zip: %w", err)
 			}
 			defer rc.Close() //nolint:errcheck
-			if _, err := io.Copy(w, rc); err != nil {
-				return fmt.Errorf("copying default.pgo: %w", err)
+			limit := maxZipEntrySize
+			n, copyErr := io.Copy(w, io.LimitReader(rc, limit+1))
+			if copyErr != nil {
+				return fmt.Errorf("copying default.pgo: %w", copyErr)
+			}
+			if n > limit {
+				return fmt.Errorf("default.pgo entry exceeds %d-byte decompression limit", limit)
 			}
 			return nil
 		}

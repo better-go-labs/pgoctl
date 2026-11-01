@@ -1,8 +1,6 @@
 package main
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -52,7 +50,10 @@ func (f *artFakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.TrimSuffix(path, "/zip"), "/")
 		idStr := parts[len(parts)-1]
 		var id int64
-		fmt.Sscanf(idStr, "%d", &id) //nolint:errcheck
+		if _, scanErr := fmt.Sscanf(idStr, "%d", &id); scanErr != nil {
+			http.Error(w, "bad artifact id", http.StatusBadRequest)
+			return
+		}
 		data, ok := f.zips[id]
 		if !ok {
 			w.WriteHeader(404)
@@ -243,16 +244,4 @@ func newArtifactFakeStore(t *testing.T, wired bool) store.Store {
 		return &artContractAdapter{s: s, fakeAPI: fakeAPI, fakeRS: fakeRS}
 	}
 	return s
-}
-
-// makeArtZip creates a minimal zip archive with the given files.
-func makeArtZip(files map[string][]byte) []byte {
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	for name, data := range files {
-		f, _ := zw.Create(name)
-		_, _ = f.Write(data)
-	}
-	_ = zw.Close()
-	return buf.Bytes()
 }

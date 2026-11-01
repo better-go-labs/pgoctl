@@ -809,7 +809,10 @@ func TestRestoreLegacy_DecompressionLimitExceeded(t *testing.T) {
 // without allocating huge buffers.
 func makeZip64WithHugeSize(name string, hugeSize uint64) ([]byte, error) {
 	fname := []byte(name)
-	fnlen := uint16(len(fname))
+	if len(fname) > math.MaxUint16 {
+		return nil, fmt.Errorf("name length %d exceeds ZIP uint16 limit", len(fname))
+	}
+	fnlen := uint16(len(fname)) //nolint:gosec // G115: checked above
 
 	makeLocalExtra := func(uncomp, comp uint64) []byte {
 		b := make([]byte, 20)
@@ -833,17 +836,17 @@ func makeZip64WithHugeSize(name string, hugeSize uint64) ([]byte, error) {
 
 	localExtra := makeLocalExtra(hugeSize, 0)
 	var lfh [30]byte
-	binary.LittleEndian.PutUint32(lfh[0:], 0x04034b50) // local file header sig
+	binary.LittleEndian.PutUint32(lfh[0:], 0x04034b50)  // local file header sig
 	binary.LittleEndian.PutUint16(lfh[4:], 45)          // version needed: 4.5 (ZIP64)
 	binary.LittleEndian.PutUint32(lfh[18:], 0xFFFFFFFF) // compressed size: ZIP64 marker
 	binary.LittleEndian.PutUint32(lfh[22:], 0xFFFFFFFF) // uncompressed size: ZIP64 marker
 	binary.LittleEndian.PutUint16(lfh[26:], fnlen)
-	binary.LittleEndian.PutUint16(lfh[28:], uint16(len(localExtra)))
+	binary.LittleEndian.PutUint16(lfh[28:], uint16(len(localExtra))) //nolint:gosec // G115: fixed-size struct, len always fits uint16
 	buf.Write(lfh[:])
 	buf.Write(fname)
 	buf.Write(localExtra)
 
-	cdStart := uint64(buf.Len())
+	cdStart := uint64(buf.Len()) //nolint:gosec // G115: buf.Len() is non-negative; test zip is tiny
 
 	cdExtra := makeCDExtra(hugeSize, 0, 0)
 	var cdh [46]byte
@@ -853,16 +856,16 @@ func makeZip64WithHugeSize(name string, hugeSize uint64) ([]byte, error) {
 	binary.LittleEndian.PutUint32(cdh[20:], 0xFFFFFFFF) // compressed size: ZIP64 marker
 	binary.LittleEndian.PutUint32(cdh[24:], 0xFFFFFFFF) // uncompressed size: ZIP64 marker
 	binary.LittleEndian.PutUint16(cdh[28:], fnlen)
-	binary.LittleEndian.PutUint16(cdh[30:], uint16(len(cdExtra)))
-	binary.LittleEndian.PutUint16(cdh[34:], 0xFFFF)     // disk number start: ZIP64 marker
-	binary.LittleEndian.PutUint32(cdh[42:], 0xFFFFFFFF) // local header offset: ZIP64 marker
+	binary.LittleEndian.PutUint16(cdh[30:], uint16(len(cdExtra))) //nolint:gosec // G115: fixed-size struct, len always fits uint16
+	binary.LittleEndian.PutUint16(cdh[34:], 0xFFFF)               // disk number start: ZIP64 marker
+	binary.LittleEndian.PutUint32(cdh[42:], 0xFFFFFFFF)           // local header offset: ZIP64 marker
 	buf.Write(cdh[:])
 	buf.Write(fname)
 	buf.Write(cdExtra)
 
-	cdEnd := uint64(buf.Len())
+	cdEnd := uint64(buf.Len()) //nolint:gosec // G115: buf.Len() is non-negative; test zip is tiny
 	cdSize := cdEnd - cdStart
-	eocd64Offset := uint64(buf.Len())
+	eocd64Offset := uint64(buf.Len()) //nolint:gosec // G115: buf.Len() is non-negative; test zip is tiny
 
 	var eocd64 [56]byte
 	binary.LittleEndian.PutUint32(eocd64[0:], 0x06064b50)

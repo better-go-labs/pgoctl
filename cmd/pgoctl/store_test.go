@@ -30,7 +30,7 @@ func withStore(t *testing.T, s store.Store) {
 // TestStoreResolve_OtherBranch checks that a non-publish branch outputs publish=false.
 func TestStoreResolve_OtherBranch(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "tok")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"default_branch":"main","visibility":"private"}`))
 	}))
 	t.Cleanup(srv.Close)
@@ -51,7 +51,7 @@ func TestStoreResolve_OtherBranch(t *testing.T) {
 // TestStoreResolve_DefaultBranch checks that the publish branch outputs publish=true.
 func TestStoreResolve_DefaultBranch(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "tok")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"default_branch":"main","visibility":"private"}`))
 	}))
 	t.Cleanup(srv.Close)
@@ -72,7 +72,7 @@ func TestStoreResolve_DefaultBranch(t *testing.T) {
 // unless --allow-public-profiles is set.
 func TestStoreResolve_PublicRepo(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "tok")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"default_branch":"main","visibility":"public"}`))
 	}))
 	t.Cleanup(srv.Close)
@@ -94,7 +94,7 @@ func TestStoreResolve_PublicRepo(t *testing.T) {
 // never calls the repo API.
 func TestStoreResolve_ArtifactStoreSkipsVisibility(t *testing.T) {
 	var called bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
 		w.WriteHeader(500)
 	}))
@@ -329,7 +329,7 @@ func TestStorePublish_Permission(t *testing.T) {
 	// A token is required to build the store; the 403 we exercise here is the
 	// permission error, which must exit 1.
 	t.Setenv("GITHUB_TOKEN", "tok")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(403)
 		_, _ = w.Write([]byte(`{"message":"Resource not accessible"}`))
 	}))
@@ -356,7 +356,7 @@ func TestStorePublish_RuntimeErrorIsOne(t *testing.T) {
 	// A token is required to build the store; the runtime error we exercise
 	// here is the server 500, which must exit 1.
 	t.Setenv("GITHUB_TOKEN", "tok")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(500)
 		_, _ = w.Write([]byte(`{"message":"Internal Server Error"}`))
 	}))
