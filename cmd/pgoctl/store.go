@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 	"github.com/Better-Go-Labs/pgoctl/internal/store"
 	"github.com/Better-Go-Labs/pgoctl/internal/store/artifact"
 	"github.com/Better-Go-Labs/pgoctl/internal/store/ghrelease"
+	"github.com/google/pprof/profile"
 	"github.com/spf13/cobra"
 )
 
@@ -228,6 +231,21 @@ func newStorePublishCmd(sf *storeFlags) *cobra.Command {
 			if profilePath == "" {
 				return &exitError{2, fmt.Errorf("--profile is required")}
 			}
+			// Default the run identity from the GITHUB_* env the Action exports,
+			// so callers inside a workflow need not pass them. Core never fills
+			// these; they are the CLI's job (plan Task 9).
+			if runID == "" {
+				runID = defaultRunID()
+			}
+			if commit == "" {
+				commit = os.Getenv("GITHUB_SHA")
+			}
+			if branch == "" {
+				branch = os.Getenv("GITHUB_REF_NAME")
+			}
+			if goVersion == "" {
+				goVersion = runtime.Version()
+			}
 			if !store.ValidRunID(runID) {
 				return &exitError{2, fmt.Errorf("invalid --run-id %q", runID)}
 			}
@@ -251,6 +269,16 @@ func newStorePublishCmd(sf *storeFlags) *cobra.Command {
 				return &exitError{2, fmt.Errorf("reading profile: %w", err)}
 			}
 
+			// Derive CapturedAt from the profile's TimeNanos and compute the
+			// sample count when --samples is 0; core takes these values as given.
+			capturedAt, sampleCount, perr := profileMeta(profileData)
+			if perr != nil {
+				return &exitError{2, fmt.Errorf("reading profile metadata: %w", perr)}
+			}
+			if samples == 0 {
+				samples = sampleCount
+			}
+
 			s, err := sf.makeStore()
 			if err != nil {
 				return &exitError{2, err}
@@ -263,6 +291,7 @@ func newStorePublishCmd(sf *storeFlags) *cobra.Command {
 				Run: store.RunInfo{
 					ID:           runID,
 					Commit:       commit,
+					CapturedAt:   capturedAt,
 					Samples:      samples,
 					QualityScore: qualityScore,
 				},
@@ -390,6 +419,10 @@ func newStoreExcludeCmd(sf *storeFlags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if pairs != "" && dateStr != "" {
 				return &exitError{2, fmt.Errorf("--pairs is exclusive with --date")}
+			}
+			// Default the actor from the GITHUB_* env the Action exports.
+			if actor == "" {
+				actor = os.Getenv("GITHUB_ACTOR")
 			}
 			key, err := sf.key()
 			if err != nil {
@@ -532,6 +565,34 @@ func newStorePruneCmd(sf *storeFlags) *cobra.Command {
 	cmd.Flags().IntVar(&lookbackDays, "lookback-days", 14, "window lookback in days")
 	cmd.Flags().IntVar(&maxProfiles, "max-profiles", 7, "maximum profiles in window")
 	return cmd
+}
+
+// defaultRunID builds "<run>-<attempt>" from the GITHUB_* env the Action sets,
+// or "" when GITHUB_RUN_ID is absent. The attempt defaults to 1.
+func defaultRunID() string {
+	run := os.Getenv("GITHUB_RUN_ID")
+	if run == "" {
+		return ""
+	}
+	attempt := os.Getenv("GITHUB_RUN_ATTEMPT")
+	if attempt == "" {
+		attempt = "1"
+	}
+	return run + "-" + attempt
+}
+
+// profileMeta parses a pprof profile and returns its capture time (from
+// TimeNanos, zero when unset) and CPU sample count.
+func profileMeta(data []byte) (time.Time, int64, error) {
+	p, err := profile.ParseData(data)
+	if err != nil {
+		return time.Time{}, 0, err
+	}
+	var capturedAt time.Time
+	if p.TimeNanos != 0 {
+		capturedAt = time.Unix(0, p.TimeNanos).UTC()
+	}
+	return capturedAt, pprofutil.SampleCount(p), nil
 }
 
 // splitPairs splits a string of date:run-id pairs separated by commas or whitespace.
