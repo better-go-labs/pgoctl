@@ -65,9 +65,10 @@ func Prune(ctx context.Context, s Store, key Key, today Date, lookbackDays, maxP
 		del[identityOf(day)] = day
 	}
 
-	// Always delete superseded releases.
+	// Always delete superseded days: any day, draft or published, below the
+	// highest published sequence of its date.
 	for _, day := range days {
-		if !day.Draft && day.Seq < highest[day.Date] {
+		if day.Seq < highest[day.Date] {
 			mark(day)
 		}
 	}
