@@ -118,8 +118,13 @@ func TestExclude_SliceHasOneEntry(t *testing.T) {
 
 	excludeRun(t, s, "2026-10-29", "100-1")
 
-	assert.Len(t, dayManifest(t, s, "2026-10-29").Exclusions, 1,
-		"the exclusion is recorded once on the excluded date")
-	assert.Empty(t, dayManifest(t, s, "2026-10-31").Exclusions,
-		"a dependent day rebuilt by the exclude records no exclusion of its own")
+	// The spec: a snapshot's exclusions list each excluded run that was in its
+	// window. 2026-10-29 was in the window of every rebuilt day, so each of them
+	// records that exclusion exactly once, naming the excluded run's date.
+	for _, date := range []string{"2026-10-29", "2026-10-30", "2026-10-31"} {
+		ex := dayManifest(t, s, date).Exclusions
+		require.Len(t, ex, 1, "every rebuilt day records the excluded run once")
+		assert.Equal(t, "2026-10-29", ex[0].Date, "the exclusion names the excluded run's date")
+		assert.Equal(t, "100-1", ex[0].Run)
+	}
 }
