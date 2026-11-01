@@ -35,7 +35,8 @@ type Key struct {
 	Service string
 }
 
-// Validate reports whether k is well formed.
+// Validate returns an input error for a malformed Key so a flow rejects it
+// before any backend call.
 func (k Key) Validate() error {
 	if !strings.Contains(k.Repo, "/") {
 		return fmt.Errorf("key repo %q must be owner/name", k.Repo)
@@ -118,5 +119,6 @@ func RunIDFromAsset(name string) (string, bool) {
 	return id, true
 }
 
-// ValidRunID reports whether id matches "<digits>-<digits>".
+// ValidRunID guards a run ID before it becomes a "runs/<id>.pprof" asset name,
+// keeping that name parseable back to the ID.
 func ValidRunID(id string) bool { return runIDPattern.MatchString(id) }

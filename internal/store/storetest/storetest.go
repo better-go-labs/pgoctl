@@ -46,16 +46,20 @@ func FailReadErr(name string) Option { return func(m *memory) { m.failReadErrs[n
 // upload error path of a flow can be exercised.
 func FailWrite(name string) Option { return func(m *memory) { m.failWrites[name]++ } }
 
-// FailPublish makes the next Publish return an error exactly once.
+// FailPublish makes the next Publish return an error exactly once, so a flow's
+// publish-failure path can be exercised.
 func FailPublish() Option { return func(m *memory) { m.failPublish++ } }
 
-// FailBeginDay makes the next BeginDay return an error exactly once.
+// FailBeginDay makes the next BeginDay return an error exactly once, so a flow's
+// day-open failure path can be exercised.
 func FailBeginDay() Option { return func(m *memory) { m.failBeginDay++ } }
 
-// FailDeleteDay makes the next DeleteDay return an error exactly once.
+// FailDeleteDay makes the next DeleteDay return an error exactly once, so a
+// flow's cleanup-failure path can be exercised.
 func FailDeleteDay() Option { return func(m *memory) { m.failDeleteDay++ } }
 
-// FailListDaysAt makes the call-th ListDays return an error, numbered from 1.
+// FailListDaysAt makes the call-th ListDays return an error, numbered from 1, so
+// a flow that lists more than once can be failed on a chosen call.
 func FailListDaysAt(call int) Option { return func(m *memory) { m.failListAt = call } }
 
 // FailListNext makes the next ListDays return an error exactly once, regardless

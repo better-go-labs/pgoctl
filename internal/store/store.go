@@ -45,7 +45,7 @@ type Day struct {
 	Assets    map[string]Asset // keyed by logical name, e.g. "runs/1-1.pprof"
 }
 
-// Has reports whether the day carries an asset with the given logical name.
+// Has lets a flow test for an asset before it reads, copies, or rebuilds one.
 func (d Day) Has(name string) bool {
 	_, ok := d.Assets[name]
 	return ok
