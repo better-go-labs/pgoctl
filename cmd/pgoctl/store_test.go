@@ -109,6 +109,30 @@ func TestStoreResolve_ArtifactStoreSkipsVisibility(t *testing.T) {
 	assert.Contains(t, stdout, "store=artifact")
 }
 
+// TestStoreResolve_ArtifactPublishBranchFromDefault checks that --store artifact
+// with an empty --publish-branch resolves the repo default branch, the same way
+// Releases does, so publish is decided correctly.
+func TestStoreResolve_ArtifactPublishBranchFromDefault(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "tok")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"default_branch":"main","visibility":"public"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	stdout, _, err := executeCmd(t,
+		"store", "resolve",
+		"--store", "artifact",
+		"--repo", "o/r",
+		"--api-url", srv.URL,
+		"--mode", "collect",
+		"--branch", "main",
+		// no --publish-branch: must resolve to the repo default (main).
+	)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "store=artifact")
+	assert.Contains(t, stdout, "publish=true")
+}
+
 // TestStorePublishRestore_RoundTrip exercises publish then restore through the CLI.
 func TestStorePublishRestore_RoundTrip(t *testing.T) {
 	mem := storetest.NewMemory()

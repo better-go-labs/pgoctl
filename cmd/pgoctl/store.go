@@ -129,9 +129,24 @@ func newStoreResolveCmd(sf *storeFlags) *cobra.Command {
 				return &exitError{2, err}
 			}
 
-			// With --store artifact, skip the visibility check entirely.
+			// With --store artifact, skip the visibility check, but still decide
+			// publish the same way as Releases: resolve the repo default branch
+			// when --publish-branch is empty.
 			if sf.storeBackend == "artifact" {
-				return resolveOutput(cmd, "artifact", resolvePublish(mode, branch, publishBranch, ""))
+				defaultBranch := publishBranch
+				if defaultBranch == "" {
+					s, err := ghrelease.New(ghrelease.Config{Key: key, Token: sf.token(), BaseURL: sf.apiURL})
+					if err != nil {
+						return &exitError{2, err}
+					}
+					info, err := s.Repo(ctx)
+					if err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
+						return &exitError{1, err}
+					}
+					defaultBranch = info.DefaultBranch
+				}
+				return resolveOutput(cmd, "artifact", resolvePublish(mode, branch, publishBranch, defaultBranch))
 			}
 
 			// GitHub Releases backend: check repo visibility.
