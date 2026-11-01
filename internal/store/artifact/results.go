@@ -15,7 +15,8 @@ import (
 
 // upload publishes name from stagingDir using the actions/toolkit results service.
 // The protocol is a snake_case Twirp JSON protocol; the source commit for the
-// toolkit is: actions/toolkit@main (results-service protocol, as of 2026-10).
+// toolkit is: actions/toolkit@0c3a9c332b678ff1e776f93d728a4ad279803abe
+// (results-service protocol, as of 2026-11).
 func upload(ctx context.Context, cfg Config, hc *http.Client, name, stagingDir string) error {
 	if cfg.RuntimeToken == "" || cfg.ResultsURL == "" {
 		return fmt.Errorf("the artifact store needs ACTIONS_RUNTIME_TOKEN and ACTIONS_RESULTS_URL; the Action exports them before the publish")
