@@ -306,6 +306,9 @@ func newStorePublishCmd(sf *storeFlags) *cobra.Command {
 			result, err := store.Publish(ctx, s, req)
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
+				if errors.Is(err, store.ErrPermission) {
+					fmt.Fprintf(cmd.ErrOrStderr(), "hint: grant the publish job \"permissions: contents: write\" in your workflow file.\n")
+				}
 				return &exitError{1, err}
 			}
 			if result.PruneErr != nil {
