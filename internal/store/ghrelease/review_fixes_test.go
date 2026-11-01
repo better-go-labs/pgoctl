@@ -64,3 +64,37 @@ func TestBeginDay_404OnWrite_IsPermission(t *testing.T) {
 	assert.True(t, errors.Is(err, store.ErrPermission), "404 on POST must map to ErrPermission, got %v", err)
 	assert.False(t, errors.Is(err, store.ErrNotFound), "404 on write must not map to ErrNotFound")
 }
+
+// TestWrite422Immutable_IsErrImmutable covers 422 "immutable" responses on PATCH
+// and DELETE. The body must reach checkResp so the text maps to ErrImmutable.
+func TestWrite422Immutable_IsErrImmutable(t *testing.T) {
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	immutable := func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"Release is immutable"}`))
+			return
+		}
+		writeJSON(w, map[string]interface{}{"id": 1})
+	}
+	srv := httptest.NewServer(http.HandlerFunc(immutable))
+	t.Cleanup(srv.Close)
+	s := ghrelease.NewWithHTTPClient(key, "tok", srv.URL, srv.Client())
+	ctx := context.Background()
+	d, _ := store.ParseDate("2026-01-15")
+
+	t.Run("publish PATCH", func(t *testing.T) {
+		day := store.Day{Key: key, Date: d, Seq: 0, ID: "1", Draft: false}
+		err := s.Publish(ctx, day)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, store.ErrImmutable), "422 immutable on PATCH must map to ErrImmutable, got %v", err)
+	})
+
+	t.Run("delete asset DELETE", func(t *testing.T) {
+		day := store.Day{Key: key, Date: d, Seq: 0, ID: "1", Draft: false,
+			Assets: map[string]store.Asset{"manifest.json": {ID: "9", Name: "manifest.json"}}}
+		err := s.DeleteAsset(ctx, day, "manifest.json")
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, store.ErrImmutable), "422 immutable on DELETE must map to ErrImmutable, got %v", err)
+	})
+}
