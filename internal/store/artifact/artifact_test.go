@@ -614,3 +614,22 @@ func TestUpload_PutIsOneRequest(t *testing.T) {
 
 	assert.Equal(t, int64(1), atomic.LoadInt64(&fakeRS.putCount), "blob PUT must happen exactly once")
 }
+
+// TestPutAsset_RunsSubdirCreated verifies that PutAsset succeeds for asset
+// names that include a subdirectory such as "runs/<id>.pprof", even though
+// the freshly-created staging directory contains no pre-existing subdirs.
+func TestPutAsset_RunsSubdirCreated(t *testing.T) {
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	fakeAPI := newFakeArtifactAPI()
+	apiSrv := httptest.NewServer(fakeAPI)
+	t.Cleanup(apiSrv.Close)
+	cfg := artifact.Config{Key: key, APIURL: apiSrv.URL}
+	s := artifact.NewWithHTTPClient(cfg, apiSrv.Client())
+
+	d, _ := store.ParseDate("2026-10-01")
+	day, err := s.BeginDay(context.Background(), key, d, 0)
+	require.NoError(t, err)
+
+	err = s.PutAsset(context.Background(), day, "runs/abc123.pprof", strings.NewReader("pprof-data"))
+	require.NoError(t, err, "PutAsset must create the runs/ subdir before writing")
+}
