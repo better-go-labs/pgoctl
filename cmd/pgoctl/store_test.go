@@ -7,10 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/Better-Go-Labs/pgoctl/internal/store"
 	"github.com/Better-Go-Labs/pgoctl/internal/store/storetest"
+	pprofprofile "github.com/google/pprof/profile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -131,6 +134,116 @@ func TestStoreResolve_ArtifactPublishBranchFromDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "store=artifact")
 	assert.Contains(t, stdout, "publish=true")
+}
+
+// TestStorePublish_Defaults checks that publish fills CapturedAt from the
+// profile, computes --samples when 0, defaults --go-version to runtime.Version(),
+// and defaults --run-id/--commit/--branch from the GITHUB_* env.
+func TestStorePublish_Defaults(t *testing.T) {
+	mem := storetest.NewMemory()
+	withStore(t, mem)
+
+	t.Setenv("GITHUB_RUN_ID", "9900")
+	t.Setenv("GITHUB_RUN_ATTEMPT", "2")
+	t.Setenv("GITHUB_SHA", "deadbeefcafe")
+	t.Setenv("GITHUB_REF_NAME", "main")
+
+	captured := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	profileFile := writeTempFile(t, newProfileWithCount(t, 777, captured))
+
+	// No --run-id, --commit, --branch, --samples, or --go-version.
+	stdout, _, err := executeCmd(t,
+		"--json",
+		"store", "publish",
+		"--repo", "o/r",
+		"--profile", profileFile,
+		"--today", "2026-05-01",
+		"--out", t.TempDir()+"/default.pgo",
+	)
+	require.NoError(t, err)
+
+	var m map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &m), "stdout: %q", stdout)
+
+	assert.Equal(t, "9900-2", m["daily_run"], "run id must default from GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT")
+	assert.Equal(t, "main", m["branch"], "branch must default from GITHUB_REF_NAME")
+	assert.Equal(t, runtime.Version(), m["go_version"], "go_version must default to runtime.Version()")
+
+	runs, ok := m["runs"].([]interface{})
+	require.True(t, ok && len(runs) == 1, "expected one run, got %v", m["runs"])
+	run := runs[0].(map[string]interface{})
+	assert.Equal(t, "9900-2", run["id"])
+	assert.Equal(t, "deadbeefcafe", run["commit"], "commit must default from GITHUB_SHA")
+	assert.EqualValues(t, 777, run["samples"], "samples must be computed from the profile when 0")
+	assert.Equal(t, "2026-05-01T12:00:00Z", run["captured_at"], "captured_at must come from the profile TimeNanos")
+}
+
+// newProfileWithCount builds a pprof profile whose samples/count total is count
+// and whose TimeNanos is at, so publish-default derivation can be asserted.
+func newProfileWithCount(t *testing.T, count int64, at time.Time) []byte {
+	t.Helper()
+	fn := &pprofprofile.Function{ID: 1, Name: "test.work", Filename: "work.go"}
+	loc := &pprofprofile.Location{ID: 1, Line: []pprofprofile.Line{{Function: fn, Line: 1}}}
+	p := &pprofprofile.Profile{
+		TimeNanos: at.UnixNano(),
+		SampleType: []*pprofprofile.ValueType{
+			{Type: "samples", Unit: "count"},
+			{Type: "cpu", Unit: "nanoseconds"},
+		},
+		Sample: []*pprofprofile.Sample{
+			{Value: []int64{count, count * 1000}, Location: []*pprofprofile.Location{loc}},
+		},
+		Function: []*pprofprofile.Function{fn},
+		Location: []*pprofprofile.Location{loc},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, p.Write(&buf))
+	return buf.Bytes()
+}
+
+// TestStoreExclude_ActorFromEnv checks that --actor defaults from GITHUB_ACTOR.
+func TestStoreExclude_ActorFromEnv(t *testing.T) {
+	mem := storetest.NewMemory()
+	withStore(t, mem)
+	t.Setenv("GITHUB_ACTOR", "octocat")
+
+	profileFile := writeTempFile(t, storetest.NewProfile(t, 100))
+	// Two runs on one day so a default survives after excluding one.
+	for _, id := range []string{"100-1", "200-1"} {
+		_, _, err := executeCmd(t,
+			"store", "publish",
+			"--repo", "o/r",
+			"--profile", profileFile,
+			"--run-id", id,
+			"--today", "2026-05-01",
+			"--out", t.TempDir()+"/default.pgo",
+		)
+		require.NoError(t, err)
+	}
+
+	// Exclude without --actor; it must default from GITHUB_ACTOR.
+	_, _, err := executeCmd(t,
+		"store", "exclude",
+		"--repo", "o/r",
+		"--date", "2026-05-01",
+		"--run", "100-1",
+		"--reason", "noisy",
+	)
+	require.NoError(t, err)
+
+	stdout, _, err := executeCmd(t,
+		"--json",
+		"store", "restore",
+		"--repo", "o/r",
+		"--out", t.TempDir()+"/restored.pgo",
+	)
+	require.NoError(t, err)
+
+	var m map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &m), "stdout: %q", stdout)
+	excls, ok := m["exclusions"].([]interface{})
+	require.True(t, ok && len(excls) >= 1, "expected an exclusion, got %v", m["exclusions"])
+	assert.Equal(t, "octocat", excls[0].(map[string]interface{})["by"], "exclusion actor must default from GITHUB_ACTOR")
 }
 
 // TestStorePublishRestore_RoundTrip exercises publish then restore through the CLI.
