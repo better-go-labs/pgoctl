@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
@@ -148,6 +152,7 @@ jobs:
           duration: '120'
           validate-flags: '--min-samples 1 --min-score 0.0 --min-duration 0'
           run-leverage-probe: 'false'
+          profile-store: artifact
           upload-artifact: 'false'
           comment-on-pr: 'false'
 

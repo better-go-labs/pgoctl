@@ -16,7 +16,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  actions: read
+  actions: write
 
 jobs:
   # ── Job 1: fixture-pipeline ───────────────────────────────────────────────────────
@@ -88,6 +88,7 @@ jobs:
           profile-file: testdata/fixtures/cpu.pprof
           baseline-profile: testdata/fixtures/baseline.pgo
           previous-profile: testdata/fixtures/cpu-prev.pprof
+          profile-store: artifact
           upload-artifact: 'true'
           comment-on-pr: 'false'
           artifact-name: pgo-e2e-fixture
@@ -130,6 +131,7 @@ jobs:
     permissions:
       contents: read        # required for checkout
       pull-requests: write  # required for PR comments
+      actions: write        # required for the artifact profile store
     steps:
       - uses: actions/checkout@v7
         with:
@@ -181,6 +183,7 @@ jobs:
         uses: ./
         with:
           profile-file: testdata/fixtures/cpu.pprof
+          profile-store: artifact
           comment-on-pr: 'true'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           upload-artifact: 'false'
@@ -189,6 +192,7 @@ jobs:
         uses: ./
         with:
           profile-file: testdata/fixtures/cpu.pprof
+          profile-store: artifact
           comment-on-pr: 'true'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           upload-artifact: 'false'
@@ -253,6 +257,7 @@ jobs:
         with:
           pprof-url: http://localhost:6060
           duration: '10'
+          profile-store: artifact
           upload-artifact: 'false'
           comment-on-pr: 'false'
 
@@ -288,6 +293,7 @@ jobs:
           profile-file: testdata/pgoctl_cpu.pprof
           run-leverage-probe: 'true'
           leverage-probe-target: ./cmd/pgoctl
+          profile-store: artifact
           upload-artifact: 'false'
           comment-on-pr: 'false'
 
