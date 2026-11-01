@@ -110,9 +110,6 @@ func mapError(resp *http.Response, method, path string, body []byte) error {
 	code := resp.StatusCode
 
 	switch {
-	case code == 404:
-		return fmt.Errorf("%s %s returned 404: %w", method, path, store.ErrNotFound)
-
 	case isRateLimit(resp, body):
 		reset := resp.Header.Get("Retry-After")
 		if reset == "" {
@@ -127,9 +124,14 @@ func mapError(resp *http.Response, method, path string, body []byte) error {
 		}
 		return fmt.Errorf("GitHub API rate limit exceeded")
 
+	// A 404 on a write is what a token without contents:write gets, so map it
+	// to ErrPermission. This must come before the plain 404 case below.
 	case code == 403 || (code == 404 && (method == http.MethodPost || method == http.MethodPatch || method == http.MethodDelete)):
 		return fmt.Errorf("%s %s returned %d: the job token cannot write releases. Grant the publish job \"permissions: contents: write\": %w",
 			method, path, code, store.ErrPermission)
+
+	case code == 404:
+		return fmt.Errorf("%s %s returned 404: %w", method, path, store.ErrNotFound)
 
 	case code == 422 && strings.Contains(strings.ToLower(string(body)), "immutable"):
 		return fmt.Errorf("%s %s returned 422: %w", method, path, store.ErrImmutable)
