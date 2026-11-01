@@ -106,14 +106,18 @@ inputs:
     description: 'Comma-separated date:run-id pairs to exclude from the profile window'
     required: false
     default: ''
-  tag-prefix:
+  profile-tag-prefix:
     description: 'Release tag prefix for profile storage (default: profile)'
     required: false
     default: 'profile'
-  service:
+  service-name:
     description: 'Profile key service label (optional, default: empty)'
     required: false
     default: ''
+  on-gate-failure:
+    description: 'Behavior when the quality gate fails: warn (continue) or fail (exit 1) (default: fail)'
+    required: false
+    default: 'fail'
   legacy-artifact:
     description: 'Legacy artifact name for restore fallback (v0.1.x, optional)'
     required: false
@@ -126,10 +130,6 @@ inputs:
     description: 'Maximum profiles in the window (default: 7)'
     required: false
     default: '7'
-  on-gate-failure:
-    description: 'Job result when collection or quality gate fails: warn or fail (default: warn)'
-    required: false
-    default: 'warn'
 
 outputs:
   has-profile:
@@ -226,8 +226,8 @@ runs:
           --mode="${{ inputs.profile-mode }}" \
           --store="${{ inputs.profile-store }}" \
           --repo="${{ github.repository }}" \
-          --tag-prefix="${{ inputs.tag-prefix }}" \
-          --service="${{ inputs.service }}" \
+          --tag-prefix="${{ inputs.profile-tag-prefix }}" \
+          --service="${{ inputs.service-name }}" \
           --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
           --legacy-artifact="${{ inputs.legacy-artifact }}" \
           --branch="${{ github.ref_name }}" \
@@ -338,8 +338,8 @@ runs:
           pgoctl store restore \
             --store="${{ steps.store.outputs.store }}" \
             --repo="${{ github.repository }}" \
-            --tag-prefix="${{ inputs.tag-prefix }}" \
-            --service="${{ inputs.service }}" \
+            --tag-prefix="${{ inputs.profile-tag-prefix }}" \
+            --service="${{ inputs.service-name }}" \
             --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
             --legacy-artifact="${{ inputs.legacy-artifact }}" \
             --out=previous/default.pgo
@@ -368,8 +368,8 @@ runs:
         pgoctl store exclude \
           --store="${{ steps.store.outputs.store }}" \
           --repo="${{ github.repository }}" \
-          --tag-prefix="${{ inputs.tag-prefix }}" \
-          --service="${{ inputs.service }}" \
+          --tag-prefix="${{ inputs.profile-tag-prefix }}" \
+          --service="${{ inputs.service-name }}" \
           --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
           --pairs="$EXCLUDE_RUNS" \
           --reason="exclude-runs input"
@@ -406,8 +406,8 @@ runs:
           PUBLISH_JSON=$(pgoctl store publish \
             --store="${{ steps.store.outputs.store }}" \
             --repo="${{ github.repository }}" \
-            --tag-prefix="${{ inputs.tag-prefix }}" \
-            --service="${{ inputs.service }}" \
+            --tag-prefix="${{ inputs.profile-tag-prefix }}" \
+            --service="${{ inputs.service-name }}" \
             --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
             --profile=cpu.pprof \
             --out=default.pgo \
