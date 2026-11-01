@@ -65,6 +65,35 @@ func TestBeginDay_404OnWrite_IsPermission(t *testing.T) {
 	assert.False(t, errors.Is(err, store.ErrNotFound), "404 on write must not map to ErrNotFound")
 }
 
+// TestNew_Config_Validation covers the plan's New(cfg Config) (*Store, error),
+// which errors on an empty Token or Repo.
+func TestNew_Config_Validation(t *testing.T) {
+	_, err := ghrelease.New(ghrelease.Config{Key: store.Key{Repo: "o/r"}, Token: ""})
+	require.Error(t, err, "empty token must error")
+
+	_, err = ghrelease.New(ghrelease.Config{Key: store.Key{Repo: ""}, Token: "tok"})
+	require.Error(t, err, "empty repo must error")
+
+	s, err := ghrelease.New(ghrelease.Config{Key: store.Key{Repo: "o/r"}, Token: "tok"})
+	require.NoError(t, err)
+	require.NotNil(t, s)
+}
+
+// TestRepo_ReturnsRepoInfo covers the plan's Repo(ctx) accessor.
+func TestRepo_ReturnsRepoInfo(t *testing.T) {
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, map[string]interface{}{"default_branch": "main", "visibility": "private"})
+	}))
+	t.Cleanup(srv.Close)
+	s, err := ghrelease.New(ghrelease.Config{Key: key, Token: "tok", BaseURL: srv.URL, HTTPClient: srv.Client()})
+	require.NoError(t, err)
+	info, err := s.Repo(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "main", info.DefaultBranch)
+	assert.Equal(t, "private", info.Visibility)
+}
+
 // TestWrite422Immutable_IsErrImmutable covers 422 "immutable" responses on PATCH
 // and DELETE. The body must reach checkResp so the text maps to ErrImmutable.
 func TestWrite422Immutable_IsErrImmutable(t *testing.T) {

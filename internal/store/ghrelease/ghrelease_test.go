@@ -733,7 +733,7 @@ func TestRepo(t *testing.T) {
 	t.Cleanup(srv.Close)
 	s := newFakeGHStore(t, key, fake, srv)
 
-	info, err := s.GetRepoInfo(context.Background())
+	info, err := s.Repo(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "main", info.DefaultBranch)
 	assert.Equal(t, "public", info.Visibility)
