@@ -245,10 +245,17 @@ runs:
       uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
       with:
         script: |
-          const token = core.getInput('github-token');
-          core.setSecret(token);
-          core.exportVariable('ACTIONS_RUNTIME_TOKEN', token);
-          core.exportVariable('ACTIONS_RESULTS_URL', process.env.GITHUB_ACTIONS_RESULTS_URL || 'https://results.github.com');
+          // The artifact results service needs the runner's own runtime JWT
+          // (its scp claim carries the backend run and job ids), not the
+          // github token. github-script can read it from the environment.
+          const runtimeToken = process.env.ACTIONS_RUNTIME_TOKEN;
+          const resultsURL = process.env.ACTIONS_RESULTS_URL || process.env.GITHUB_ACTIONS_RESULTS_URL || 'https://results.github.com';
+          if (!runtimeToken) {
+            core.setFailed('ACTIONS_RUNTIME_TOKEN is not available; the artifact profile store cannot upload.');
+            return;
+          }
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', runtimeToken);
+          core.exportVariable('ACTIONS_RESULTS_URL', resultsURL);
 
     # ── restore mode: fetch the latest stored default.pgo ─
     - name: Restore profile
