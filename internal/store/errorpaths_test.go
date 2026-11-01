@@ -100,6 +100,26 @@ func TestPublish_ErrorPaths(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("window daily read fails hard", func(t *testing.T) {
+		s := storetest.NewMemory()
+		publishRun(t, s, "2026-10-30", "100-1", 0.9, 1000)
+		storetest.Arm(s, storetest.FailReadErr(store.AssetDaily))
+		_, err := store.Publish(ctx, s, baseRequest(t))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reading daily")
+	})
+
+	t.Run("window day manifest read fails", func(t *testing.T) {
+		s := storetest.NewMemory()
+		// A prior window day whose manifest cannot be read must fail the build
+		// rather than be silently weighted to the date's midnight.
+		publishRun(t, s, "2026-10-30", "100-1", 0.9, 1000)
+		storetest.Arm(s, storetest.FailReadErr(store.AssetManifest))
+		_, err := store.Publish(ctx, s, baseRequest(t))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reading manifest")
+	})
+
 	t.Run("window profile unparseable", func(t *testing.T) {
 		s := storetest.NewMemory()
 		// A prior published day carries an unparseable daily.pprof; building the

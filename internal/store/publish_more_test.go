@@ -218,6 +218,18 @@ func TestPublish_CopiesRunsToNewSequence(t *testing.T) {
 	require.NoError(t, rc.Close())
 }
 
+func TestPublish_CopyRunsSkipsMissingFile(t *testing.T) {
+	s := storetest.NewMemory(storetest.Immutable())
+	publishRun(t, s, "2026-10-31", "100-1", 0.9, 1000) // sequence 0, now immutable
+	// The earlier run's file has vanished when the next sequence opens; copyRuns
+	// skips it rather than failing the publish.
+	storetest.Arm(s, storetest.FailRead(store.RunAsset("100-1")))
+	res := publishRun(t, s, "2026-10-31", "100-2", 0.5, 1000)
+
+	assert.Equal(t, 1, res.Manifest.Sequence)
+	assert.Equal(t, "100-2", res.Manifest.DailyRun, "the surviving run becomes the daily run")
+}
+
 func TestPublish_WindowUsesHighestSequence(t *testing.T) {
 	s := storetest.NewMemory()
 	// Date 2026-10-30 has two published sequences. Only the highest sequence (1)
