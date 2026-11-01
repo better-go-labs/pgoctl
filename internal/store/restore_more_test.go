@@ -30,6 +30,34 @@ func TestRestore_HighestSequence(t *testing.T) {
 		"a corrupt highest sequence falls back to the previous date, never to the lower sequence of the same date")
 }
 
+func TestRestore_SkipsManifestMissingDefaultSha(t *testing.T) {
+	ctx := context.Background()
+	s := storetest.NewMemory()
+	putPublishedDay(t, s, testKey, "2026-10-30", 0, storetest.NewProfile(t, 1000), []byte("default-prev"))
+
+	// The newest date has a default.pgo but a manifest that records no sha for it,
+	// so its integrity cannot be verified and it must be skipped.
+	d := mustDate(t, "2026-10-31")
+	day, err := s.BeginDay(ctx, testKey, d, 0)
+	require.NoError(t, err)
+	require.NoError(t, s.PutAsset(ctx, day, store.AssetDefault, bytes.NewReader([]byte("default-newest"))))
+	m := &store.Manifest{
+		SchemaVersion: store.SchemaVersion,
+		Date:          "2026-10-31",
+		Tag:           testKey.Tag(d, 0),
+		Assets:        map[string]string{}, // no sha for default.pgo
+	}
+	var mbuf bytes.Buffer
+	require.NoError(t, m.Encode(&mbuf))
+	require.NoError(t, s.PutAsset(ctx, day, store.AssetManifest, bytes.NewReader(mbuf.Bytes())))
+	require.NoError(t, s.Publish(ctx, day))
+
+	var buf bytes.Buffer
+	got, err := store.Restore(ctx, s, testKey, &buf)
+	require.NoError(t, err)
+	assert.Equal(t, "2026-10-30", got.Date, "a manifest with no default sha is unusable and skipped")
+}
+
 func TestRestore_AssetVanishes(t *testing.T) {
 	ctx := context.Background()
 	// The newest date's default.pgo read fails once, modelling an asset that
