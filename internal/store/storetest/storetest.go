@@ -440,6 +440,22 @@ func RunContract(t *testing.T, newStore func() store.Store) {
 		err = s.PutAsset(ctx, days[0], "x", bytes.NewReader([]byte("y")))
 		require.ErrorIs(t, err, store.ErrImmutable)
 	})
+
+	t.Run("PutThenReadSameDayValue", func(t *testing.T) {
+		s := newStore()
+		date := mustDate("2026-08-01")
+		day, err := s.BeginDay(ctx, key, date, 0)
+		require.NoError(t, err)
+		payload := []byte("test-asset-payload")
+		require.NoError(t, s.PutAsset(ctx, day, "runs/1-1.pprof", bytes.NewReader(payload)))
+
+		rc, err := s.ReadAsset(ctx, day, "runs/1-1.pprof")
+		require.NoError(t, err)
+		defer func() { _ = rc.Close() }()
+		got, err := io.ReadAll(rc)
+		require.NoError(t, err)
+		assert.Equal(t, payload, got)
+	})
 }
 
 // NewProfile builds a minimal synthetic CPU pprof whose cpu/nanoseconds total is
