@@ -406,29 +406,53 @@ func TestStoreExclude_Pairs(t *testing.T) {
 	assert.Contains(t, stdout, "123-1")
 }
 
-// TestStoreArtifact_PublishRestore exercises the artifact store through the CLI.
+// TestStoreArtifact_PublishRestore exercises the artifact store through the CLI
+// against a real fake-HTTP artifact backend. It publishes two runs on the same
+// day (.0 then .1), restores and checks content byte-for-byte, and exercises
+// the exclude path.
 func TestStoreArtifact_PublishRestore(t *testing.T) {
-	// Use a memory store configured like an artifact store (immutable + hide run assets).
-	mem := storetest.NewMemory(storetest.HideRunAssets(), storetest.Immutable())
-	withStore(t, mem)
+	// RED: without the wired adapter, published artifacts are not visible in
+	// ListDays, so the second publish cannot see .0 as immutable and restore
+	// returns ErrNoSnapshot.
+	s := newArtifactFakeStore(t, false /* not wired */)
+	withStore(t, s)
 
-	profile := storetest.NewProfile(t, 100)
-	profileFile := writeTempFile(t, profile)
+	profile0 := storetest.NewProfile(t, 100)
+	profile1 := storetest.NewProfile(t, 200)
+	profileFile0 := writeTempFile(t, profile0)
+	profileFile1 := writeTempFile(t, profile1)
 	outFile := t.TempDir() + "/default.pgo"
 
-	// Publish via the CLI.
+	// First publish on 2026-10-01 — creates sequence .0.
 	_, _, err := executeCmd(t,
 		"store", "publish",
 		"--store", "artifact",
 		"--repo", "o/r",
-		"--profile", profileFile,
-		"--run-id", "456-1",
-		"--branch", "main",
+		"--today", "2026-10-01",
+		"--profile", profileFile0,
+		"--run-id", "111-1",
 		"--out", outFile,
 	)
+	require.NoError(t, err, "first publish must succeed")
+
+	// Second publish on the same date — with a wired adapter .0 is immutable
+	// so this opens .1; without adapter both publishes land as .0.
+	_, _, err = executeCmd(t,
+		"store", "publish",
+		"--store", "artifact",
+		"--repo", "o/r",
+		"--today", "2026-10-01",
+		"--profile", profileFile1,
+		"--run-id", "111-2",
+		"--out", outFile,
+	)
+	require.NoError(t, err, "second publish must succeed")
+
+	// Capture what was written to the default.pgo output; restore must match it.
+	wantDefault, err := os.ReadFile(outFile)
 	require.NoError(t, err)
 
-	// Restore via the CLI.
+	// Restore — must succeed and match the published default.pgo byte-for-byte.
 	restoreOut := t.TempDir() + "/restored.pgo"
 	_, _, err = executeCmd(t,
 		"store", "restore",
@@ -436,7 +460,21 @@ func TestStoreArtifact_PublishRestore(t *testing.T) {
 		"--repo", "o/r",
 		"--out", restoreOut,
 	)
+	require.NoError(t, err, "restore must succeed after two publishes")
+
+	got, err := os.ReadFile(restoreOut)
 	require.NoError(t, err)
+	assert.Equal(t, wantDefault, got, "restored bytes must match the published default.pgo")
+
+	// Exclude exercises the exclude CLI path against the artifact backend.
+	_, _, err = executeCmd(t,
+		"store", "exclude",
+		"--store", "artifact",
+		"--repo", "o/r",
+		"--date", "2026-10-01",
+		"--run", "999-1",
+	)
+	require.NoError(t, err, "exclude must succeed")
 }
 
 // TestStorePublish_JSON checks that --json writes valid JSON with tag and schema_version.
