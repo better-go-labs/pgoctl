@@ -425,8 +425,9 @@ func (c *client) putAsset(ctx context.Context, owner, repo string, day store.Day
 	if err != nil {
 		return fmt.Errorf("PATCH %s: %w", path, err)
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
+	// Defer the drain so checkResp can read the body (a 422 "immutable" text
+	// maps to ErrImmutable); draining first would blank it.
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 	return c.checkResp(resp, http.MethodPatch, path)
 }
 
@@ -481,8 +482,9 @@ func (c *client) deleteAsset(ctx context.Context, owner, repo, id string) error 
 	if err != nil {
 		return fmt.Errorf("DELETE %s: %w", path, err)
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
+	// Defer the drain so checkResp can read the body (a 422 "immutable" text
+	// maps to ErrImmutable); draining first would blank it.
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 	return c.checkResp(resp, http.MethodDelete, path)
 }
 
@@ -498,8 +500,9 @@ func (c *client) publishDay(ctx context.Context, owner, repo string, day store.D
 	if err != nil {
 		return fmt.Errorf("PATCH %s: %w", path, err)
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
+	// Defer the drain so checkResp can read the body (a 422 "immutable" text
+	// maps to ErrImmutable); draining first would blank it.
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 	return c.checkResp(resp, http.MethodPatch, path)
 }
 
@@ -510,10 +513,13 @@ func (c *client) deleteDay(ctx context.Context, owner, repo string, day store.Da
 	if err != nil {
 		return fmt.Errorf("DELETE %s: %w", path, err)
 	}
+	// checkResp reads the body (so a 422 "immutable" text maps to ErrImmutable);
+	// drain afterwards to release the 2xx body.
+	cerr := c.checkResp(resp, http.MethodDelete, path)
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
-	if err := c.checkResp(resp, http.MethodDelete, path); err != nil {
-		return err
+	if cerr != nil {
+		return cerr
 	}
 
 	// Skip tag deletion for drafts; they have no tag ref.
