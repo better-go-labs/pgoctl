@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -108,6 +109,39 @@ func TestExclude_RebuildOrderOldestFirst(t *testing.T) {
 	res := excludeRun(t, s, "2026-10-29", "100-1")
 	assert.Equal(t, []string{"2026-10-29", "2026-10-30", "2026-10-31"}, strs(res.Rebuilt),
 		"dependent days rebuild oldest first so each reads the updated earlier dailies")
+}
+
+func TestExclude_SkipsDependentDayWithoutDaily(t *testing.T) {
+	ctx := context.Background()
+	s := storetest.NewMemory()
+	// The excluded date has a single run and a daily.
+	publishRun(t, s, "2026-10-30", "100-1", 0.9, 1000)
+
+	// A later day whose window used 2026-10-30 but which carries no daily.pprof,
+	// as if its own runs were all excluded earlier. The rebuild must skip it the
+	// way buildDefault drops a date with no readable daily, not error out.
+	d31 := mustDate(t, "2026-10-31")
+	day, err := s.BeginDay(ctx, testKey, d31, 0)
+	require.NoError(t, err)
+	require.NoError(t, s.PutAsset(ctx, day, store.AssetDefault, bytes.NewReader([]byte("default-31"))))
+	m := &store.Manifest{
+		SchemaVersion: store.SchemaVersion,
+		Date:          "2026-10-31",
+		Tag:           testKey.Tag(d31, 0),
+		Window:        store.Window{LookbackDays: 14, MaxProfiles: 7, Dates: []string{"2026-10-31", "2026-10-30"}},
+		Assets:        map[string]string{store.AssetDefault: sha256hex([]byte("default-31"))},
+	}
+	var mbuf bytes.Buffer
+	require.NoError(t, m.Encode(&mbuf))
+	require.NoError(t, s.PutAsset(ctx, day, store.AssetManifest, bytes.NewReader(mbuf.Bytes())))
+	require.NoError(t, s.Publish(ctx, day))
+
+	res, err := store.Exclude(ctx, s, store.ExcludeRequest{
+		Key: testKey, Date: mustDate(t, "2026-10-30"), RunID: "100-1", Now: d31.Time(),
+	})
+	require.NoError(t, err, "a dependent day with no daily is skipped, not an error")
+	assert.Equal(t, []string{"2026-10-30"}, strs(res.Rebuilt),
+		"only the excluded date rebuilds; the empty dependent day is skipped")
 }
 
 func TestExclude_SliceHasOneEntry(t *testing.T) {
