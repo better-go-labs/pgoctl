@@ -3,6 +3,7 @@ package ghrelease
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -53,20 +54,40 @@ type Store struct {
 	client *client
 }
 
-// New returns a Store for key, authenticating with token against baseURL.
-// baseURL defaults to "https://api.github.com" when empty.
-func New(key store.Key, token, baseURL string) *Store {
-	if baseURL == "" {
-		baseURL = "https://api.github.com"
+// Config holds the configuration for a GitHub Releases Store.
+type Config struct {
+	// Key is the profile key; Key.Repo must be "owner/name".
+	Key store.Key
+	// Token is the GitHub token used for all requests.
+	Token string
+	// BaseURL is the GitHub API base URL (defaults to https://api.github.com).
+	BaseURL string
+	// HTTPClient is the client used for requests (defaults to http.DefaultClient).
+	HTTPClient *http.Client
+}
+
+// New returns a Store from cfg. It errors on an empty Token or Repo.
+func New(cfg Config) (*Store, error) {
+	if cfg.Token == "" {
+		return nil, fmt.Errorf("the GitHub Releases store needs a token")
 	}
-	hc := &http.Client{Timeout: 0}
-	parts := splitRepo(key.Repo)
+	if cfg.Key.Repo == "" {
+		return nil, fmt.Errorf("the GitHub Releases store needs a repo (owner/name)")
+	}
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = "https://api.github.com"
+	}
+	hc := cfg.HTTPClient
+	if hc == nil {
+		hc = &http.Client{}
+	}
+	parts := splitRepo(cfg.Key.Repo)
 	return &Store{
-		key:    key,
+		key:    cfg.Key,
 		owner:  parts[0],
 		repo:   parts[1],
-		client: newClient(baseURL, token, hc),
-	}
+		client: newClient(cfg.BaseURL, cfg.Token, hc),
+	}, nil
 }
 
 // NewWithHTTPClient returns a Store using the given http.Client. Used in tests.
@@ -93,8 +114,8 @@ type RepoInfo struct {
 	Visibility    string // "public" or "private"
 }
 
-// GetRepoInfo returns repository metadata for the configured repo.
-func (s *Store) GetRepoInfo(ctx context.Context) (*RepoInfo, error) {
+// Repo returns repository metadata for the configured repo.
+func (s *Store) Repo(ctx context.Context) (*RepoInfo, error) {
 	return s.client.getRepoInfo(ctx, s.owner, s.repo)
 }
 
