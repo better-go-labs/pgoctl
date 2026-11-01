@@ -48,6 +48,10 @@ linters:
       - linters: [gosec]
         path: "hack/loadgen/"
         text: "G404:"
+      # artifact staging directory is created and managed internally; walk is not a security risk
+      - linters: [gosec]
+        path: "internal/store/artifact/"
+        text: "G122:"
 
 formatters:
   enable:
