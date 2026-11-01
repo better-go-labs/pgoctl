@@ -221,6 +221,8 @@ runs:
     - name: Resolve profile store
       id: store
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         pgoctl store resolve \
           --mode="${{ inputs.profile-mode }}" \
@@ -327,6 +329,8 @@ runs:
       id: restore
       if: inputs.profile-mode == 'collect'
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         mkdir -p previous
         if [[ -n "${{ inputs.previous-profile }}" ]]; then
