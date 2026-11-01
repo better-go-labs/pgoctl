@@ -13,6 +13,9 @@ import (
 // protected date, which is never deleted. A prune for one key never touches
 // another key.
 func Prune(ctx context.Context, s Store, key Key, today Date, lookbackDays, maxProfiles int) ([]Date, error) {
+	if lookbackDays < 1 || maxProfiles < 1 {
+		return nil, fmt.Errorf("window needs lookbackDays >= 1 and maxProfiles >= 1, got %d and %d: %w", lookbackDays, maxProfiles, ErrInvalidInput)
+	}
 	// 1. Restore names the one protected day.
 	var protected Day
 	haveProtected := false

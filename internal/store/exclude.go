@@ -47,6 +47,9 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 	if err != nil {
 		return nil, fmt.Errorf("reading manifest of %s: %w", req.Key.Tag(req.Date, target.Seq), err)
 	}
+	if tm.Window.LookbackDays < 1 || tm.Window.MaxProfiles < 1 {
+		return nil, fmt.Errorf("window of %s needs lookbackDays >= 1 and maxProfiles >= 1, got %d and %d: %w", req.Key.Tag(req.Date, target.Seq), tm.Window.LookbackDays, tm.Window.MaxProfiles, ErrInvalidInput)
+	}
 	ri := findRun(tm, req.RunID)
 	if ri < 0 {
 		return nil, fmt.Errorf("run %s not in %s: %w", req.RunID, req.Key.Tag(req.Date, target.Seq), ErrNotFound)

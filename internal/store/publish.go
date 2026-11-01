@@ -51,6 +51,9 @@ func Publish(ctx context.Context, s Store, req PublishRequest) (*PublishResult, 
 	if !ValidRunID(req.Run.ID) {
 		return nil, fmt.Errorf("invalid run id %q", req.Run.ID)
 	}
+	if req.LookbackDays < 1 || req.MaxProfiles < 1 {
+		return nil, fmt.Errorf("window needs lookbackDays >= 1 and maxProfiles >= 1, got %d and %d: %w", req.LookbackDays, req.MaxProfiles, ErrInvalidInput)
+	}
 
 	p, err := profile.ParseData(req.Profile)
 	if err != nil {
