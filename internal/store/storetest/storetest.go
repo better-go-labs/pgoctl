@@ -444,6 +444,13 @@ func RunContract(t *testing.T, newStore func() store.Store) {
 // caller-provided capture time.
 func NewProfile(t *testing.T, cpuSamples int64) []byte {
 	t.Helper()
+	return NewProfileAt(t, cpuSamples, time.Time{})
+}
+
+// NewProfileAt is like NewProfile but stamps the profile's TimeNanos from at
+// when at is non-zero, so tests can exercise CapturedAt derivation.
+func NewProfileAt(t *testing.T, cpuSamples int64, at time.Time) []byte {
+	t.Helper()
 	fn := &profile.Function{ID: 1, Name: "test.work", Filename: "work.go"}
 	loc := &profile.Location{ID: 1, Line: []profile.Line{{Function: fn, Line: 1}}}
 	p := &profile.Profile{
@@ -456,6 +463,9 @@ func NewProfile(t *testing.T, cpuSamples int64) []byte {
 		},
 		Function: []*profile.Function{fn},
 		Location: []*profile.Location{loc},
+	}
+	if !at.IsZero() {
+		p.TimeNanos = at.UnixNano()
 	}
 	var buf bytes.Buffer
 	require.NoError(t, p.Write(&buf))
