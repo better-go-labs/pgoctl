@@ -288,3 +288,37 @@ func TestPublish_Prunes(t *testing.T) {
 	require.NoError(t, res.PruneErr)
 	assert.Equal(t, []string{"2026-10-29"}, strs(res.Pruned), "publishing prunes the day pushed out of the window")
 }
+
+func TestPublish_SkipsWindowDayWithUnreadableManifest(t *testing.T) {
+	// A window day whose manifest cannot be read must be dropped from the window,
+	// not fail the whole publish. Restore and Prune already skip these; the window
+	// build must too, or one bad manifest blocks every later publish.
+	cases := []struct {
+		name     string
+		manifest []byte // nil means write no manifest at all (ErrNotFound)
+	}{
+		{name: "missing manifest", manifest: nil},
+		{name: "unknown schema", manifest: []byte(`{"schema_version":99}`)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			s := storetest.NewMemory()
+
+			// An earlier published day that has a readable daily but whose manifest
+			// cannot be decoded.
+			d30 := mustDate(t, "2026-10-30")
+			day, err := s.BeginDay(ctx, testKey, d30, 0)
+			require.NoError(t, err)
+			require.NoError(t, s.PutAsset(ctx, day, store.AssetDaily, bytes.NewReader(storetest.NewProfile(t, 1000))))
+			if tc.manifest != nil {
+				require.NoError(t, s.PutAsset(ctx, day, store.AssetManifest, bytes.NewReader(tc.manifest)))
+			}
+			require.NoError(t, s.Publish(ctx, day))
+
+			res := pub(t, s, "2026-10-31", "100-1", 0.9, 1000, 14, 7, d30.AddDays(1).Time())
+			assert.Equal(t, []string{"2026-10-31"}, res.Manifest.Window.Dates,
+				"the window drops the day whose manifest cannot be read")
+		})
+	}
+}
