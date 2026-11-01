@@ -225,18 +225,24 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
         SERVICE_NAME: ${{ inputs.service-name }}
+        MODE: ${{ inputs.profile-mode }}
+        STORE: ${{ inputs.profile-store }}
+        LEGACY_ARTIFACT: ${{ inputs.legacy-artifact }}
+        PUBLISH_BRANCH: ${{ inputs.publish-branch }}
+        ALLOW_PUBLIC: ${{ inputs.allow-public-profiles }}
+        BRANCH: ${{ github.ref_name }}
       run: |
         pgoctl store resolve \
-          --mode="${{ inputs.profile-mode }}" \
-          --store="${{ inputs.profile-store }}" \
+          --mode="$MODE" \
+          --store="$STORE" \
           --repo="${{ github.repository }}" \
           --tag-prefix="$TAG_PREFIX" \
           --service="$SERVICE_NAME" \
           --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
-          --legacy-artifact="${{ inputs.legacy-artifact }}" \
-          --branch="${{ github.ref_name }}" \
-          --publish-branch="${{ inputs.publish-branch }}" \
-          --allow-public-profiles="${{ inputs.allow-public-profiles }}" \
+          --legacy-artifact="$LEGACY_ARTIFACT" \
+          --branch="$BRANCH" \
+          --publish-branch="$PUBLISH_BRANCH" \
+          --allow-public-profiles="$ALLOW_PUBLIC" \
           >> "$GITHUB_OUTPUT"
 
     # ── expose runtime (artifact store) ──────────────────
