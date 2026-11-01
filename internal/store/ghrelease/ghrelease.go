@@ -24,7 +24,9 @@ func logicalToWire(name string) string {
 func wireToLogical(name string) string {
 	if strings.HasPrefix(name, "runs-") {
 		rest := name[len("runs-"):]
-		if store.ValidRunID(rest[:len(rest)-len(".pprof")]) && strings.HasSuffix(rest, ".pprof") {
+		// Check the suffix before trimming; a name shorter than ".pprof"
+		// would otherwise panic the slice.
+		if strings.HasSuffix(rest, ".pprof") && store.ValidRunID(strings.TrimSuffix(rest, ".pprof")) {
 			return "runs/" + rest
 		}
 	}
