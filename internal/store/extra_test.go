@@ -17,17 +17,20 @@ func TestDate_IsZero(t *testing.T) {
 	assert.False(t, mustDate(t, "2026-10-31").IsZero())
 }
 
-func TestPrune_AppliesWindowDefaults(t *testing.T) {
+func TestPrune_DoesNotDefaultInvalidWindow(t *testing.T) {
 	ctx := context.Background()
 	s := storetest.NewMemory()
-	publishRun(t, s, "2026-10-30", "100-1", 0.9, 1000)
-	publishRun(t, s, "2026-10-31", "101-1", 0.9, 1000)
+	for i, d := range []string{"2026-10-25", "2026-10-29", "2026-10-30", "2026-10-31"} {
+		publishRun(t, s, d, run(i), 0.9, 1000)
+	}
 
-	// Non-positive window parameters fall back to the issue #62 defaults of 14
-	// lookback days and 7 profiles.
-	deleted, err := store.Prune(ctx, s, testKey, mustDate(t, "2026-10-31"), 0, 0)
+	// A non-positive lookback is the caller's input error, which the CLI rejects
+	// with exit 2. The store must not silently rescue it to the 14-day default and
+	// sweep days a 14-day window would; with lookback 0 no date is in the window,
+	// so nothing is pruned.
+	deleted, err := store.Prune(ctx, s, testKey, mustDate(t, "2026-10-31"), 0, 2)
 	require.NoError(t, err)
-	assert.Empty(t, deleted, "with the default window the two recent days are kept")
+	assert.Empty(t, deleted, "an invalid lookback is not defaulted, so prune sweeps nothing")
 }
 
 func TestPublish_ConcurrentUpdateServiceKey(t *testing.T) {
