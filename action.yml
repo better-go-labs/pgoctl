@@ -223,13 +223,15 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
+        SERVICE_NAME: ${{ inputs.service-name }}
       run: |
         pgoctl store resolve \
           --mode="${{ inputs.profile-mode }}" \
           --store="${{ inputs.profile-store }}" \
           --repo="${{ github.repository }}" \
-          --tag-prefix="${{ inputs.profile-tag-prefix }}" \
-          --service="${{ inputs.service-name }}" \
+          --tag-prefix="$TAG_PREFIX" \
+          --service="$SERVICE_NAME" \
           --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
           --legacy-artifact="${{ inputs.legacy-artifact }}" \
           --branch="${{ github.ref_name }}" \
@@ -364,6 +366,8 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
+        SERVICE_NAME: ${{ inputs.service-name }}
       run: |
         mkdir -p previous
         if [[ -n "${{ inputs.previous-profile }}" ]]; then
@@ -375,8 +379,8 @@ runs:
           pgoctl store restore \
             --store="${{ steps.store.outputs.store }}" \
             --repo="${{ github.repository }}" \
-            --tag-prefix="${{ inputs.profile-tag-prefix }}" \
-            --service="${{ inputs.service-name }}" \
+            --tag-prefix="$TAG_PREFIX" \
+            --service="$SERVICE_NAME" \
             --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
             --legacy-artifact="${{ inputs.legacy-artifact }}" \
             --out=previous/default.pgo
@@ -401,12 +405,14 @@ runs:
       env:
         EXCLUDE_RUNS: ${{ inputs.exclude-runs }}
         GH_TOKEN: ${{ inputs.github-token }}
+        TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
+        SERVICE_NAME: ${{ inputs.service-name }}
       run: |
         pgoctl store exclude \
           --store="${{ steps.store.outputs.store }}" \
           --repo="${{ github.repository }}" \
-          --tag-prefix="${{ inputs.profile-tag-prefix }}" \
-          --service="${{ inputs.service-name }}" \
+          --tag-prefix="$TAG_PREFIX" \
+          --service="$SERVICE_NAME" \
           --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
           --pairs="$EXCLUDE_RUNS" \
           --reason="exclude-runs input"
@@ -420,6 +426,8 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         SCORE: ${{ steps.validate.outputs.score }}
         SAMPLES: ${{ steps.validate.outputs.samples }}
+        TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
+        SERVICE_NAME: ${{ inputs.service-name }}
       run: |
         GATE="${{ steps.validate.outputs.gate }}"
         PUBLISH="${{ steps.store.outputs.publish }}"
@@ -443,8 +451,8 @@ runs:
           PUBLISH_JSON=$(pgoctl store publish \
             --store="${{ steps.store.outputs.store }}" \
             --repo="${{ github.repository }}" \
-            --tag-prefix="${{ inputs.profile-tag-prefix }}" \
-            --service="${{ inputs.service-name }}" \
+            --tag-prefix="$TAG_PREFIX" \
+            --service="$SERVICE_NAME" \
             --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
             --profile=cpu.pprof \
             --out=default.pgo \
