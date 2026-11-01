@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -680,4 +681,80 @@ func TestRestore_PublishedArtifactAssets(t *testing.T) {
 	_, err := store.Restore(context.Background(), s, key, &buf)
 	require.NoError(t, err, "Restore must succeed when a published artifact day exists")
 	assert.Equal(t, pgoData, buf.Bytes())
+}
+
+// TestListArtifacts_403_IsErrPermission checks that a 403 from the list endpoint
+// wraps ErrPermission.
+func TestListArtifacts_403_IsErrPermission(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(srv.Close)
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	s := artifact.NewWithHTTPClient(artifact.Config{Key: key, APIURL: srv.URL}, srv.Client())
+	_, err := s.ListDays(context.Background(), key)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, store.ErrPermission), "403 on list must wrap ErrPermission, got: %v", err)
+}
+
+// TestListArtifacts_404_IsErrNotFound checks that a 404 from the list endpoint
+// wraps ErrNotFound.
+func TestListArtifacts_404_IsErrNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	s := artifact.NewWithHTTPClient(artifact.Config{Key: key, APIURL: srv.URL}, srv.Client())
+	_, err := s.ListDays(context.Background(), key)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, store.ErrNotFound), "404 on list must wrap ErrNotFound, got: %v", err)
+}
+
+// TestDownloadArtifact_404_IsErrNotFound checks that a 404 from the zip download
+// endpoint wraps ErrNotFound when ReadAsset is called on a published day.
+func TestDownloadArtifact_404_IsErrNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/actions/artifacts") && r.Method == http.MethodGet && !strings.HasSuffix(r.URL.Path, "/zip") {
+			// List returns one artifact.
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"total_count": 1,
+				"artifacts": []map[string]interface{}{{
+					"id":                   42,
+					"name":                 "profile_2026-01-01.0",
+					"expired":              false,
+					"created_at":           time.Now().Format(time.RFC3339),
+					"archive_download_url": "http://placeholder/42/zip",
+				}},
+			})
+			return
+		}
+		// Zip download returns 404.
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	s := artifact.NewWithHTTPClient(artifact.Config{Key: key, APIURL: srv.URL}, srv.Client())
+	d, _ := store.ParseDate("2026-01-01")
+	day := store.Day{Key: key, Date: d, Seq: 0, ID: "42"}
+	_, err := s.ReadAsset(context.Background(), day, "default.pgo")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, store.ErrNotFound), "404 on zip download must wrap ErrNotFound, got: %v", err)
+}
+
+// TestDeleteDay_404_IsErrNotFound checks that a 404 from the delete endpoint
+// wraps ErrNotFound.
+func TestDeleteDay_404_IsErrNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+	s := artifact.NewWithHTTPClient(artifact.Config{Key: key, APIURL: srv.URL}, srv.Client())
+	d, _ := store.ParseDate("2026-01-01")
+	day := store.Day{Key: key, Date: d, Seq: 0, ID: "99"}
+	err := s.DeleteDay(context.Background(), day)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, store.ErrNotFound), "404 on delete must wrap ErrNotFound, got: %v", err)
 }
