@@ -411,6 +411,19 @@ func checkUnchanged(ctx context.Context, s Store, key Key, d Date, want *Asset) 
 	if err != nil {
 		return fmt.Errorf("listing days: %w", err)
 	}
+	// Two days sharing one tag (date and sequence) mean a competing writer
+	// created a parallel day for this date; reject rather than clobber it. Drafts
+	// count, since two first publishes race before either is published.
+	seen := make(map[int]bool)
+	for _, day := range days {
+		if day.Date != d {
+			continue
+		}
+		if seen[day.Seq] {
+			return conflictError(key, d, day.Seq)
+		}
+		seen[day.Seq] = true
+	}
 	cur, ok := highestPublishedForDate(days, d)
 	var got *Asset
 	seq := 0

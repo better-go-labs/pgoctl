@@ -16,11 +16,11 @@ func (s listOnlyStore) ListDays(context.Context, Key) ([]Day, error) { return s.
 func (listOnlyStore) ReadAsset(context.Context, Day, string) (io.ReadCloser, error) {
 	return nil, ErrNotFound
 }
-func (listOnlyStore) BeginDay(context.Context, Key, Date, int) (Day, error) { return Day{}, nil }
+func (listOnlyStore) BeginDay(context.Context, Key, Date, int) (Day, error)  { return Day{}, nil }
 func (listOnlyStore) PutAsset(context.Context, Day, string, io.Reader) error { return nil }
-func (listOnlyStore) DeleteAsset(context.Context, Day, string) error        { return nil }
-func (listOnlyStore) Publish(context.Context, Day) error                    { return nil }
-func (listOnlyStore) DeleteDay(context.Context, Day) error                  { return nil }
+func (listOnlyStore) DeleteAsset(context.Context, Day, string) error         { return nil }
+func (listOnlyStore) Publish(context.Context, Day) error                     { return nil }
+func (listOnlyStore) DeleteDay(context.Context, Day) error                   { return nil }
 
 func TestCheckUnchanged_DuplicateTagConflicts(t *testing.T) {
 	key := Key{Repo: "o/r", Prefix: "profile"}
