@@ -86,8 +86,54 @@ inputs:
     description: 'Go build target for the leverage probe (default: ./... for all packages)'
     required: false
     default: './...'
+  profile-mode:
+    description: 'Profile storage mode: collect or restore (default: collect)'
+    required: false
+    default: 'collect'
+  profile-store:
+    description: 'Profile store backend: github-release or artifact (default: github-release)'
+    required: false
+    default: 'github-release'
+  publish-branch:
+    description: 'Branch name that publishes profiles (empty = repo default branch)'
+    required: false
+    default: ''
+  allow-public-profiles:
+    description: 'Allow storing profiles in GitHub Releases for public repositories (default: false)'
+    required: false
+    default: 'false'
+  exclude-runs:
+    description: 'Comma-separated date:run-id pairs to exclude from the profile window'
+    required: false
+    default: ''
+  tag-prefix:
+    description: 'Release tag prefix for profile storage (default: profile)'
+    required: false
+    default: 'profile'
+  service:
+    description: 'Profile key service label (optional, default: empty)'
+    required: false
+    default: ''
+  legacy-artifact:
+    description: 'Legacy artifact name for restore fallback (v0.1.x, optional)'
+    required: false
+    default: ''
+  lookback-days:
+    description: 'Profile window lookback in days (default: 14)'
+    required: false
+    default: '14'
+  max-profiles:
+    description: 'Maximum profiles in the window (default: 7)'
+    required: false
+    default: '7'
 
 outputs:
+  has-profile:
+    description: 'Whether a profile was successfully collected or restored'
+    value: ${{ steps.store.outputs.has-profile }}
+  profile-tag:
+    description: 'Release tag or artifact reference for the stored profile'
+    value: ${{ steps.store.outputs.profile-tag }}
   verdict:
     description: 'Gate verdict from pgoctl compare: promote | neutral | rollback (empty if no baseline)'
     value: ${{ steps.compare.outputs.verdict }}
@@ -166,6 +212,35 @@ runs:
             echo /tmp >> "$GITHUB_PATH"
           fi
         fi
+
+    # ── resolve profile store ─────────────────────────────
+    - name: Resolve profile store
+      id: store
+      shell: bash
+      run: |
+        pgoctl store resolve \
+          --mode="${{ inputs.profile-mode }}" \
+          --store="${{ inputs.profile-store }}" \
+          --repo="${{ github.repository }}" \
+          --tag-prefix="${{ inputs.tag-prefix }}" \
+          --service="${{ inputs.service }}" \
+          --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
+          --legacy-artifact="${{ inputs.legacy-artifact }}" \
+          --branch="${{ github.ref_name }}" \
+          --publish-branch="${{ inputs.publish-branch }}" \
+          --allow-public-profiles="${{ inputs.allow-public-profiles }}" \
+          >> "$GITHUB_OUTPUT"
+
+    # ── expose runtime (artifact store) ──────────────────
+    - name: Expose runtime
+      if: steps.store.outputs.store == 'artifact' && steps.store.outputs.publish == 'true'
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+      with:
+        script: |
+          const token = core.getInput('github-token');
+          core.setSecret(token);
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', token);
+          core.exportVariable('ACTIONS_RESULTS_URL', process.env.GITHUB_ACTIONS_RESULTS_URL || 'https://results.github.com');
 
     # ── collect or copy profile ───────────────────────────
     - name: Collect profile
