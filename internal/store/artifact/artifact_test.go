@@ -15,6 +15,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1074,4 +1075,63 @@ func TestPublish_RunsSubdirInZip(t *testing.T) {
 
 	data, _ := io.ReadAll(rc)
 	assert.Equal(t, payload, data, "reads runs subdir file from published artifact")
+}
+
+// TestListDays_FollowsAbsoluteNextLink verifies that pagination works when the
+// Link header contains an absolute next URL. GitHub's API returns absolute URLs
+// in the Link header; the listing loop must use them as-is rather than re-prefixing
+// with APIURL.
+func TestListDays_FollowsAbsoluteNextLink(t *testing.T) {
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+
+	var serverURL string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.RawQuery, "page=2") {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"total_count": 1,
+				"artifacts": []map[string]interface{}{
+					{
+						"id":                   2,
+						"name":                 "profile_2026-11-01.1",
+						"expired":              false,
+						"created_at":           time.Now().Format(time.RFC3339),
+						"archive_download_url": "http://placeholder/2/zip",
+					},
+				},
+			})
+		} else {
+			w.Header().Set("Link", fmt.Sprintf("<%s/repos/o/r/actions/artifacts?per_page=100&page=2>; rel=\"next\"", serverURL))
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"total_count": 1,
+				"artifacts": []map[string]interface{}{
+					{
+						"id":                   1,
+						"name":                 "profile_2026-11-02.0",
+						"expired":              false,
+						"created_at":           time.Now().Format(time.RFC3339),
+						"archive_download_url": "http://placeholder/1/zip",
+					},
+				},
+			})
+		}
+	})
+
+	apiServer := httptest.NewServer(handler)
+	t.Cleanup(apiServer.Close)
+	serverURL = apiServer.URL
+
+	cfg := artifact.Config{Key: key, APIURL: apiServer.URL}
+	s := artifact.NewWithHTTPClient(cfg, apiServer.Client())
+
+	days, err := s.ListDays(context.Background(), key)
+	require.NoError(t, err)
+	require.Len(t, days, 2, "both pages of artifacts must be returned")
+
+	var dates []string
+	for _, day := range days {
+		dates = append(dates, day.Date.String())
+	}
+	sort.Strings(dates)
+	assert.Equal(t, []string{"2026-11-01", "2026-11-02"}, dates, "both artifact dates must be present")
 }
