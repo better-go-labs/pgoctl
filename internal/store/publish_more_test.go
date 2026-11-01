@@ -193,6 +193,21 @@ func TestPublish_ReusesLeftoverDraft(t *testing.T) {
 	})
 }
 
+func TestPublish_CopiesRunsToNewSequence(t *testing.T) {
+	ctx := context.Background()
+	// The backend does not enumerate run files in its day listing, so the flow
+	// must copy runs forward from the manifest when it opens a new sequence.
+	s := storetest.NewMemory(storetest.Immutable(), storetest.HideRunAssets())
+	publishRun(t, s, "2026-10-31", "100-1", 0.9, 1000) // sequence 0, now immutable
+	publishRun(t, s, "2026-10-31", "100-2", 0.5, 1000) // sequence 1, supersedes 0
+
+	day := highestPublishedDay(t, s, "2026-10-31")
+	require.Equal(t, 1, day.Seq)
+	rc, err := s.ReadAsset(ctx, day, store.RunAsset("100-1"))
+	require.NoError(t, err, "the earlier run's profile is copied onto the new sequence")
+	require.NoError(t, rc.Close())
+}
+
 func TestPublish_WindowUsesHighestSequence(t *testing.T) {
 	s := storetest.NewMemory()
 	// Date 2026-10-30 has two published sequences. Only the highest sequence (1)

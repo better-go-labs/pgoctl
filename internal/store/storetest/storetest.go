@@ -27,6 +27,12 @@ type Option func(*memory)
 // mirrors the GitHub Releases and Actions Artifacts backends.
 func Immutable() Option { return func(m *memory) { m.immutable = true } }
 
+// HideRunAssets drops run profile files from the Day.Assets listing while
+// ReadAsset still serves them, modelling the Actions Artifacts backend whose
+// day listing does not enumerate run files. The flows must therefore copy runs
+// forward from the manifest, not from the listed assets.
+func HideRunAssets() Option { return func(m *memory) { m.hideRunAssets = true } }
+
 // FailRead makes the next read of name return ErrNotFound exactly once. It
 // models a transient asset read failure for the publish "asset vanishes" path.
 func FailRead(name string) Option { return func(m *memory) { m.failReads[name]++ } }
@@ -113,6 +119,7 @@ type memory struct {
 	mu            sync.Mutex
 	days          map[string]*memDay
 	immutable     bool
+	hideRunAssets bool
 	failReads     map[string]int
 	failReadErrs  map[string]int
 	failWrites    map[string]int
@@ -142,6 +149,11 @@ func identity(k store.Key, d store.Date, seq int) string {
 func (m *memory) toDay(d *memDay) store.Day {
 	assets := make(map[string]store.Asset, len(d.assets))
 	for name, a := range d.assets {
+		if m.hideRunAssets {
+			if _, ok := store.RunIDFromAsset(name); ok {
+				continue
+			}
+		}
 		assets[name] = store.Asset{ID: a.id, Name: name, Size: int64(len(a.data)), UpdatedAt: a.updatedAt}
 	}
 	return store.Day{
