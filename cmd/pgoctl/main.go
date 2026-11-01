@@ -41,6 +41,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newCollectCmd())
 	root.AddCommand(newExplainCmd())
 	root.AddCommand(newLeverageCheckCmd())
+	root.AddCommand(newStoreCmd())
 	return root
 }
 
