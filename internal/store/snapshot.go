@@ -305,16 +305,16 @@ func normalize(ps []*profile.Profile) {
 	}
 }
 
-// capturedAt returns the capture time of a window day for merge weighting: the
-// selected run's capture time from the manifest, falling back to the date's
-// midnight so a profile without TimeNanos is not treated as ancient.
-func capturedAt(ctx context.Context, s Store, day Day, d Date) time.Time {
-	if m, err := readManifest(ctx, s, day); err == nil && m.DailyRun != "" {
-		if i := findRun(m, m.DailyRun); i >= 0 && !m.Runs[i].CapturedAt.IsZero() {
-			return m.Runs[i].CapturedAt
-		}
+// capturedAt returns the capture time of a window day for merge weighting, from
+// the selected run named in its manifest. It returns the read error rather than
+// falling back silently, so a window day with a corrupt manifest fails the build
+// instead of being mis-weighted to midnight.
+func capturedAt(ctx context.Context, s Store, day Day, d Date) (time.Time, error) {
+	m, err := readManifest(ctx, s, day)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("reading manifest of %s: %w", day.Date, err)
 	}
-	return d.Time()
+	return runCapturedAt(m, d), nil
 }
 
 // runCapturedAt returns the capture time of m's selected daily run, or d's
@@ -360,7 +360,11 @@ func buildDefault(ctx context.Context, s Store, days []Day, at Date, own []byte,
 			}
 			return nil, nil, fmt.Errorf("reading daily of %s: %w", d, err)
 		}
-		cache[d] = windowInput{data: data, capturedAt: capturedAt(ctx, s, day, d)}
+		capAt, err := capturedAt(ctx, s, day, d)
+		if err != nil {
+			return nil, nil, err
+		}
+		cache[d] = windowInput{data: data, capturedAt: capAt}
 		candidates = append(candidates, d)
 	}
 
