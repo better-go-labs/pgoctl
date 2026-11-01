@@ -45,7 +45,9 @@ func Restore(ctx context.Context, s Store, key Key, w io.Writer) (*Manifest, err
 			}
 			return nil, fmt.Errorf("reading default of %s: %w", key.Tag(d, day.Seq), err)
 		}
-		if sum := m.Assets[AssetDefault]; sum != "" && sha256Hex(data) != sum {
+		// A manifest with no recorded sha for default.pgo cannot be verified, so
+		// treat it as unusable rather than trusting the bytes blindly.
+		if sum := m.Assets[AssetDefault]; sum == "" || sha256Hex(data) != sum {
 			continue
 		}
 		if _, err := w.Write(data); err != nil {
