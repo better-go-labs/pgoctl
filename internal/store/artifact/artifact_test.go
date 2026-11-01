@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -632,4 +634,50 @@ func TestPutAsset_RunsSubdirCreated(t *testing.T) {
 
 	err = s.PutAsset(context.Background(), day, "runs/abc123.pprof", strings.NewReader("pprof-data"))
 	require.NoError(t, err, "PutAsset must create the runs/ subdir before writing")
+}
+
+func sha256HexStr(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
+}
+
+// TestRestore_PublishedArtifactAssets verifies that store.Restore can use a
+// published artifact day. Before the fix, ListDays returned an empty Assets
+// map for published days, causing usable() to return false so Restore always
+// returned ErrNoSnapshot.
+func TestRestore_PublishedArtifactAssets(t *testing.T) {
+	key := store.Key{Repo: "o/r", Prefix: "profile"}
+
+	pgoData := []byte("fake-pgo-data")
+	pgoSum := sha256HexStr(pgoData)
+
+	mf := store.Manifest{
+		SchemaVersion: store.SchemaVersion,
+		Date:          "2026-10-01",
+		Tag:           "profile/2026-10-01.0",
+		Assets:        map[string]string{store.AssetDefault: pgoSum},
+	}
+	manifestData, _ := json.Marshal(mf)
+
+	zipData := makeZip(map[string][]byte{
+		store.AssetDefault:  pgoData,
+		store.AssetManifest: manifestData,
+	})
+
+	fakeAPI := newFakeArtifactAPI()
+	id := fakeAPI.alloc()
+	fakeAPI.artifacts = append(fakeAPI.artifacts, &fakeArtifact{
+		id: id, name: "profile_2026-10-01.0", createdAt: time.Now(),
+	})
+	fakeAPI.zips[id] = zipData
+
+	apiSrv := httptest.NewServer(fakeAPI)
+	t.Cleanup(apiSrv.Close)
+	cfg := artifact.Config{Key: key, APIURL: apiSrv.URL}
+	s := artifact.NewWithHTTPClient(cfg, apiSrv.Client())
+
+	var buf bytes.Buffer
+	_, err := store.Restore(context.Background(), s, key, &buf)
+	require.NoError(t, err, "Restore must succeed when a published artifact day exists")
+	assert.Equal(t, pgoData, buf.Bytes())
 }
