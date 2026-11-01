@@ -582,14 +582,19 @@ func (s *Store) RestoreLegacy(ctx context.Context, w io.Writer) error {
 			if err != nil {
 				return fmt.Errorf("opening default.pgo in zip: %w", err)
 			}
-			defer rc.Close() //nolint:errcheck
 			limit := maxZipEntrySize
 			n, copyErr := io.Copy(w, io.LimitReader(rc, limit+1))
 			if copyErr != nil {
+				_ = rc.Close()
 				return fmt.Errorf("copying default.pgo: %w", copyErr)
 			}
 			if n > limit {
+				_ = rc.Close()
 				return fmt.Errorf("default.pgo entry exceeds %d-byte decompression limit", limit)
+			}
+			// zip.ReadCloser.Close flushes no data; error is still checked for correctness.
+			if cerr := rc.Close(); cerr != nil {
+				return fmt.Errorf("closing default.pgo: %w", cerr)
 			}
 			return nil
 		}
