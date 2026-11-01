@@ -258,7 +258,7 @@ func (s *Store) ReadAsset(ctx context.Context, day store.Day, name string) (io.R
 			return nil, fmt.Errorf("draft %s: %w", name, store.ErrNotFound)
 		}
 		path := filepath.Join(dir, name)
-		f, err := os.Open(path) //nolint:gosec
+		f, err := os.Open(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil, fmt.Errorf("asset %q: %w", name, store.ErrNotFound)
@@ -632,7 +632,7 @@ func zipDir(dir string) ([]byte, error) {
 		if e.IsDir() {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name())) //nolint:gosec
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", e.Name(), err)
 		}
