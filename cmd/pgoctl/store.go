@@ -129,6 +129,7 @@ func newStoreResolveCmd(sf *storeFlags) *cobra.Command {
 
 			key, err := sf.key()
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 
@@ -140,6 +141,7 @@ func newStoreResolveCmd(sf *storeFlags) *cobra.Command {
 				if defaultBranch == "" {
 					s, err := ghrelease.New(ghrelease.Config{Key: key, Token: sf.token(), BaseURL: sf.apiURL})
 					if err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 						return &exitError{2, err}
 					}
 					info, err := s.Repo(ctx)
@@ -155,6 +157,7 @@ func newStoreResolveCmd(sf *storeFlags) *cobra.Command {
 			// GitHub Releases backend: check repo visibility.
 			s, err := ghrelease.New(ghrelease.Config{Key: key, Token: sf.token(), BaseURL: sf.apiURL})
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 			info, err := s.Repo(ctx)
@@ -257,6 +260,7 @@ func newStorePublishCmd(sf *storeFlags) *cobra.Command {
 			}
 			key, err := sf.key()
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 			today, err := sf.todayDate()
@@ -281,6 +285,7 @@ func newStorePublishCmd(sf *storeFlags) *cobra.Command {
 
 			s, err := sf.makeStore()
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 
@@ -355,10 +360,12 @@ func newStoreRestoreCmd(sf *storeFlags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			key, err := sf.key()
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 			s, err := sf.makeStore()
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 			ctx := context.Background()
@@ -429,10 +436,12 @@ func newStoreExcludeCmd(sf *storeFlags) *cobra.Command {
 			}
 			key, err := sf.key()
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 			s, err := sf.makeStore()
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 			ctx := context.Background()
@@ -468,6 +477,7 @@ func newStoreExcludeCmd(sf *storeFlags) *cobra.Command {
 				}
 				d, err := store.ParseDate(dateStr)
 				if err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 					return &exitError{2, err}
 				}
 				reqs = append(reqs, pairReq{date: d, runID: runID})
@@ -538,6 +548,7 @@ func newStorePruneCmd(sf *storeFlags) *cobra.Command {
 			}
 			key, err := sf.key()
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 			today, err := sf.todayDate()
@@ -546,6 +557,7 @@ func newStorePruneCmd(sf *storeFlags) *cobra.Command {
 			}
 			s, err := sf.makeStore()
 			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", err)
 				return &exitError{2, err}
 			}
 			ctx := context.Background()

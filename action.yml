@@ -256,6 +256,7 @@ runs:
       if: inputs.profile-mode == 'restore'
       shell: bash
       env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
         GH_TOKEN: ${{ inputs.github-token }}
         TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
         SERVICE_NAME: ${{ inputs.service-name }}
@@ -406,6 +407,7 @@ runs:
       shell: bash
       env:
         EXCLUDE_RUNS: ${{ inputs.exclude-runs }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
         GH_TOKEN: ${{ inputs.github-token }}
         TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
         SERVICE_NAME: ${{ inputs.service-name }}
@@ -425,6 +427,7 @@ runs:
       if: inputs.profile-mode == 'collect'
       shell: bash
       env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
         GH_TOKEN: ${{ inputs.github-token }}
         SCORE: ${{ steps.validate.outputs.score }}
         SAMPLES: ${{ steps.validate.outputs.samples }}
