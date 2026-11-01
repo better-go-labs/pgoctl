@@ -54,6 +54,26 @@ func TestPrune_DeletesSuperseded(t *testing.T) {
 	assert.Equal(t, 1, days[0].Seq, "the highest sequence is kept")
 }
 
+func TestPrune_DeletesSupersededDraft(t *testing.T) {
+	ctx := context.Background()
+	s := storetest.NewMemory()
+	// A published sequence 1 plus a leftover draft at sequence 0 for the same
+	// date. The draft is superseded by the higher published sequence and must be
+	// deleted, not just the lower published sequences.
+	putPublishedDay(t, s, testKey, "2026-10-31", 1, storetest.NewProfile(t, 1000), []byte("default-1"))
+	_, err := s.BeginDay(ctx, testKey, mustDate(t, "2026-10-31"), 0)
+	require.NoError(t, err)
+
+	_, err = store.Prune(ctx, s, testKey, mustDate(t, "2026-10-31"), 14, 7)
+	require.NoError(t, err)
+
+	days, err := s.ListDays(ctx, testKey)
+	require.NoError(t, err)
+	require.Len(t, days, 1, "the superseded draft is deleted")
+	assert.Equal(t, 1, days[0].Seq)
+	assert.False(t, days[0].Draft)
+}
+
 func TestPrune_ShortWindowKeepsOlder(t *testing.T) {
 	ctx := context.Background()
 	s := storetest.NewMemory()
