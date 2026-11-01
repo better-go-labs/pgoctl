@@ -426,6 +426,23 @@ func TestListDays_NameMapping(t *testing.T) {
 			wantDate: "2026-10-26",
 			wantSeq:  0,
 		},
+		{
+			// A prefix with slashes (as the e2e workflow uses) becomes
+			// underscores in the artifact name; tagFromName must match the
+			// converted prefix, not the raw slash form.
+			name:     "multi-segment prefix with slashes",
+			key:      store.Key{Repo: "o/r", Prefix: "profile/e2e-art-123"},
+			artName:  "profile_e2e-art-123_2026-10-26.0",
+			wantDate: "2026-10-26",
+			wantSeq:  0,
+		},
+		{
+			name:     "multi-segment prefix with a service",
+			key:      store.Key{Repo: "o/r", Prefix: "profile/e2e-art-123", Service: "api"},
+			artName:  "profile_e2e-art-123_api_2026-10-26.0",
+			wantDate: "2026-10-26",
+			wantSeq:  0,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -81,15 +81,16 @@ func artifactName(tag string) string { return strings.ReplaceAll(tag, "/", "_") 
 // tagFromName converts an artifact name back to a tag (underscores in the right
 // positions become slashes). It tries to match using ParseTag for the key.
 func tagFromName(key store.Key, name string) (date store.Date, seq int, ok bool) {
-	// Try replacing underscores with slashes to recover the tag.
-	// The prefix is key.Prefix + "/" + optional service + "/".
-	prefix := key.Prefix + "_"
+	// Artifact names are the tag with every "/" replaced by "_" (see
+	// artifactName). A prefix or service can itself contain "/", so match against
+	// the converted forms rather than the raw slash text.
+	prefix := artifactName(key.Prefix) + "_"
 	if !strings.HasPrefix(name, prefix) {
 		return store.Date{}, 0, false
 	}
 	rest := name[len(prefix):]
 	if key.Service != "" {
-		svcPrefix := key.Service + "_"
+		svcPrefix := artifactName(key.Service) + "_"
 		if !strings.HasPrefix(rest, svcPrefix) {
 			return store.Date{}, 0, false
 		}
