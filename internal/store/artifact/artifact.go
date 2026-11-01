@@ -197,8 +197,6 @@ func (s *Store) ListDays(ctx context.Context, key store.Key) ([]store.Day, error
 func (s *Store) listArtifacts(ctx context.Context, key store.Key) ([]apiArtifact, error) {
 	owner, repo, _ := strings.Cut(key.Repo, "/")
 	var all []apiArtifact
-	// The first URL is relative to APIURL; the Link header's "next" is absolute,
-	// so once set it is used as-is rather than re-prefixed with APIURL.
 	url := fmt.Sprintf("%s/repos/%s/%s/actions/artifacts?per_page=100", s.cfg.APIURL, owner, repo)
 	for url != "" {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
