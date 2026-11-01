@@ -278,6 +278,12 @@ func TestKey_ParseTagAndRunAssetEdges(t *testing.T) {
 	_, _, ok = key.ParseTag("profile/2026-10-31.-1")
 	assert.False(t, ok, "a negative sequence is rejected")
 
+	_, _, ok = key.ParseTag("profile/2026-10-31.01")
+	assert.False(t, ok, "a leading-zero sequence is rejected")
+
+	_, _, ok = key.ParseTag("profile/2026-10-31.+1")
+	assert.False(t, ok, "a signed sequence is rejected")
+
 	_, ok = store.RunIDFromAsset("runs/bad.pprof")
 	assert.False(t, ok, "an asset whose id is not a valid run id is rejected")
 }
