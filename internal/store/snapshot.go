@@ -149,7 +149,6 @@ func manifestAssetForDate(days []Day, d Date) *Asset {
 		return nil
 	}
 	if a, has := cur.Assets[AssetManifest]; has {
-		a := a
 		return &a
 	}
 	return nil
@@ -334,8 +333,7 @@ func runCapturedAt(m *Manifest, d Date) time.Time {
 // contributes own directly, weighted by ownCapturedAt; the other window dates
 // are read from the store. It returns nil, nil when own is nil (no selected run
 // for at).
-func buildDefault(ctx context.Context, s Store, key Key, days []Day, at Date, own []byte, ownCapturedAt time.Time, lookbackDays, maxProfiles int) ([]byte, []Date, error) {
-	_ = key
+func buildDefault(ctx context.Context, s Store, days []Day, at Date, own []byte, ownCapturedAt time.Time, lookbackDays, maxProfiles int) ([]byte, []Date, error) {
 	if own == nil {
 		return nil, nil, nil
 	}
@@ -431,7 +429,6 @@ func checkUnchanged(ctx context.Context, s Store, key Key, d Date, want *Asset) 
 	if ok {
 		seq = cur.Seq
 		if a, has := cur.Assets[AssetManifest]; has {
-			a := a
 			got = &a
 		}
 	}

@@ -115,7 +115,7 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 		})
 
 		lb, mp := m.Window.LookbackDays, m.Window.MaxProfiles
-		def, wd, err := buildDefault(ctx, s, req.Key, cur, d, own, runCapturedAt(m, d), lb, mp)
+		def, wd, err := buildDefault(ctx, s, cur, d, own, runCapturedAt(m, d), lb, mp)
 		if err != nil {
 			return nil, err
 		}
