@@ -3,6 +3,7 @@ package ghrelease
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -128,13 +129,11 @@ func (s *Store) ListDays(ctx context.Context, key store.Key) ([]store.Day, error
 func (s *Store) ReadAsset(ctx context.Context, day store.Day, name string) (io.ReadCloser, error) {
 	a, ok := day.Assets[name]
 	if !ok {
-		// Fallback: fetch the release's current assets in case the asset was
-		// uploaded after the Day value was read, but the Assets map wasn't refreshed.
+		// Fallback: publish uploads into the Day from BeginDay, so its asset map is stale here.
 		rel, err := s.client.getRelease(ctx, s.owner, s.repo, day.ID)
 		if err != nil {
-			return nil, &assetErr{name: name, err: store.ErrNotFound}
+			return nil, &assetErr{name: name, err: err}
 		}
-		// Look for the asset in the release's current assets.
 		for _, asset := range rel.Assets {
 			if wireToLogical(asset.Name) == name {
 				return s.client.readAsset(ctx, s.owner, s.repo, fmt.Sprintf("%d", asset.ID))
@@ -159,13 +158,14 @@ func (s *Store) PutAsset(ctx context.Context, day store.Day, name string, r io.R
 func (s *Store) DeleteAsset(ctx context.Context, day store.Day, name string) error {
 	a, ok := day.Assets[name]
 	if !ok {
-		// Fallback: fetch the release's current assets in case the asset was
-		// uploaded after the Day value was read, but the Assets map wasn't refreshed.
+		// Fallback: publish uploads into the Day from BeginDay, so its asset map is stale here.
 		rel, err := s.client.getRelease(ctx, s.owner, s.repo, day.ID)
 		if err != nil {
-			return nil // idempotent: if we can't fetch the release, treat as deleted
+			if errors.Is(err, store.ErrNotFound) {
+				return nil
+			}
+			return err
 		}
-		// Look for the asset in the release's current assets.
 		for _, asset := range rel.Assets {
 			if wireToLogical(asset.Name) == name {
 				return s.client.deleteAsset(ctx, s.owner, s.repo, fmt.Sprintf("%d", asset.ID))
