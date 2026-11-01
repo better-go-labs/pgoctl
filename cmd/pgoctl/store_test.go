@@ -411,10 +411,7 @@ func TestStoreExclude_Pairs(t *testing.T) {
 // day (.0 then .1), restores and checks content byte-for-byte, and exercises
 // the exclude path.
 func TestStoreArtifact_PublishRestore(t *testing.T) {
-	// RED: without the wired adapter, published artifacts are not visible in
-	// ListDays, so the second publish cannot see .0 as immutable and restore
-	// returns ErrNoSnapshot.
-	s := newArtifactFakeStore(t, false /* not wired */)
+	s := newArtifactFakeStore(t, true /* wired: published artifacts appear in ListDays */)
 	withStore(t, s)
 
 	profile0 := storetest.NewProfile(t, 100)
@@ -467,12 +464,13 @@ func TestStoreArtifact_PublishRestore(t *testing.T) {
 	assert.Equal(t, wantDefault, got, "restored bytes must match the published default.pgo")
 
 	// Exclude exercises the exclude CLI path against the artifact backend.
+	// Run 111-1 is present in the published manifest.
 	_, _, err = executeCmd(t,
 		"store", "exclude",
 		"--store", "artifact",
 		"--repo", "o/r",
 		"--date", "2026-10-01",
-		"--run", "999-1",
+		"--run", "111-1",
 	)
 	require.NoError(t, err, "exclude must succeed")
 }
