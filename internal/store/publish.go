@@ -96,7 +96,7 @@ func Publish(ctx context.Context, s Store, req PublishRequest) (*PublishResult, 
 	m.DailyRun = dailyRun
 
 	// 6. Build default.pgo from the window.
-	def, windowDates, err := buildDefault(ctx, s, req.Key, days, req.Today, daily, req.LookbackDays, req.MaxProfiles)
+	def, windowDates, err := buildDefault(ctx, s, req.Key, days, req.Today, daily, runCapturedAt(m, req.Today), req.LookbackDays, req.MaxProfiles)
 	if err != nil {
 		return nil, err
 	}

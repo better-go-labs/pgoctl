@@ -324,10 +324,23 @@ func capturedAt(ctx context.Context, s Store, day Day, d Date) time.Time {
 	return d.Time()
 }
 
+// runCapturedAt returns the capture time of m's selected daily run, or d's
+// midnight when the manifest names no usable run, so a run without a capture
+// time is not weighted as ancient.
+func runCapturedAt(m *Manifest, d Date) time.Time {
+	if m.DailyRun != "" {
+		if i := findRun(m, m.DailyRun); i >= 0 && !m.Runs[i].CapturedAt.IsZero() {
+			return m.Runs[i].CapturedAt
+		}
+	}
+	return d.Time()
+}
+
 // buildDefault merges the window dailies into default.pgo. The day at date at
-// contributes own directly; the other window dates are read from the store.
-// It returns nil, nil when own is nil (no selected run for at).
-func buildDefault(ctx context.Context, s Store, key Key, days []Day, at Date, own []byte, lookbackDays, maxProfiles int) ([]byte, []Date, error) {
+// contributes own directly, weighted by ownCapturedAt; the other window dates
+// are read from the store. It returns nil, nil when own is nil (no selected run
+// for at).
+func buildDefault(ctx context.Context, s Store, key Key, days []Day, at Date, own []byte, ownCapturedAt time.Time, lookbackDays, maxProfiles int) ([]byte, []Date, error) {
 	_ = key
 	if own == nil {
 		return nil, nil, nil
@@ -345,7 +358,7 @@ func buildDefault(ctx context.Context, s Store, key Key, days []Day, at Date, ow
 	)
 	for _, d := range window {
 		if d == at {
-			inputs = append(inputs, merge.Input{Data: own, CapturedAt: at.Time()})
+			inputs = append(inputs, merge.Input{Data: own, CapturedAt: ownCapturedAt})
 			used = append(used, d)
 			continue
 		}
