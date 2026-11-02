@@ -212,3 +212,94 @@ jobs:
       - name: Clean up this run's releases
         if: always()
         run: "${{ github.workspace }}/pgoctl-src/hack/store-e2e/cleanup-releases.sh \"$PREFIX\""
+
+  # ── Job 5: publish denied without contents: write ─────────────────────────
+  # A github-release publish from a job that only has contents: read must fail
+  # with exit 1 and name the missing permission, so a misconfigured caller gets
+  # a clear error instead of a silent no-op.
+  denied:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      PREFIX: profile/e2e-denied-${{ github.run_id }}
+    steps:
+      - name: Build pgoctl at the ref under test
+        uses: actions/checkout@v7
+        with:
+          repository: better-go-labs/pgoctl
+          ref: ${{ inputs.pgoctl-ref }}
+          path: pgoctl-src
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+      - name: Publish must be denied without contents write
+        run: |
+          go build -C pgoctl-src -o /tmp/pgoctl ./cmd/pgoctl
+          "${{ github.workspace }}/pgoctl-src/hack/store-e2e/collect.sh" /tmp/pgoctl cpu.pprof
+          set +e
+          /tmp/pgoctl store publish \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --profile=cpu.pprof --out=default.pgo --json 2>err.txt
+          code=$?
+          set -e
+          cat err.txt
+          [ "$code" -eq 1 ] || { echo "expected exit 1 without contents: write, got $code"; exit 1; }
+          grep -q "contents: write" err.txt || { echo "expected the error to name contents: write"; exit 1; }
+          echo "publish correctly denied without contents: write"
+
+  # ── Job 6: the Action restores a stored profile ───────────────────────────
+  # Seeds a profile under a per-run service key, then runs the composite Action
+  # in restore mode and checks it reports has-profile=true and writes a non-empty
+  # default.pgo. Uses SERVICE=e2e-${{ github.run_id }} so each run has its own key.
+  action-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      PREFIX: profile/e2e-action-${{ github.run_id }}
+      SERVICE: e2e-${{ github.run_id }}
+    steps:
+      - name: Build pgoctl at the ref under test
+        uses: actions/checkout@v7
+        with:
+          repository: better-go-labs/pgoctl
+          ref: ${{ inputs.pgoctl-ref }}
+          path: pgoctl-src
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+      - name: Seed a stored profile under the run's service key
+        run: |
+          go build -C pgoctl-src -o /tmp/pgoctl ./cmd/pgoctl
+          "${{ github.workspace }}/pgoctl-src/hack/store-e2e/collect.sh" /tmp/pgoctl cpu.pprof
+          /tmp/pgoctl store publish \
+            --store=github-release --repo="$GITHUB_REPOSITORY" \
+            --tag-prefix="$PREFIX" --service="$SERVICE" \
+            --profile=cpu.pprof --out=default.pgo --json
+          rm -f default.pgo
+      - name: Restore through the Action
+        id: pgo
+        uses: ./pgoctl-src
+        with:
+          profile-mode: restore
+          profile-store: github-release
+          profile-tag-prefix: ${{ env.PREFIX }}
+          service-name: ${{ env.SERVICE }}
+          github-token: ${{ github.token }}
+      - name: Check the Action restored a profile
+        run: |
+          [ "${{ steps.pgo.outputs.has-profile }}" = "true" ] || { echo "expected has-profile=true"; exit 1; }
+          test -s default.pgo || { echo "restored default.pgo is empty"; exit 1; }
+          echo "Action restore ok (tag ${{ steps.pgo.outputs.profile-tag }})"
+      - name: Clean up this run's releases
+        if: always()
+        run: "${{ github.workspace }}/pgoctl-src/hack/store-e2e/cleanup-releases.sh \"$PREFIX\""
