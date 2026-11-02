@@ -460,7 +460,7 @@ runs:
           if [[ -f cpu.pprof ]]; then
             echo "::warning::Gate failed; using collected profile without publishing."
             if [[ -f previous/default.pgo ]]; then
-              pgoctl merge cpu.pprof previous/default.pgo --out=default.pgo
+              cp previous/default.pgo default.pgo
             else
               pgoctl merge cpu.pprof --out=default.pgo
             fi
