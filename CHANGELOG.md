@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Action: `restore` mode fetches the latest stored `default.pgo` and exposes the `has-profile` and `profile-tag` outputs; a build with no stored profile reports `has-profile: false` and runs without PGO (#62)
 - `hack/store-e2e/`: an end-to-end workflow that exercises both store backends against a scratch repository (#62)
 
+### Changed (breaking)
+
+- The default profile store is now `github-release`, which requires `permissions: contents: write` on the publishing job (#62)
+- The `artifact` store is now a full profile store with a rolling window, which requires `permissions: actions: write` (#62)
+- A failed quality gate no longer uploads the profile artifact (#62)
+
 ### Changed
 
 - Action: `restore-previous-artifact` is deprecated in favour of `profile-store: artifact` with `profile-mode: collect`, which accumulates profiles with the same cross-run behaviour and more control over the window (#62)
