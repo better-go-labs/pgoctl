@@ -440,6 +440,22 @@ func RunContract(t *testing.T, newStore func() store.Store) {
 		err = s.PutAsset(ctx, days[0], "x", bytes.NewReader([]byte("y")))
 		require.ErrorIs(t, err, store.ErrImmutable)
 	})
+
+	t.Run("PutThenReadSameDayValue", func(t *testing.T) {
+		s := newStore()
+		date := mustDate("2026-08-01")
+		day, err := s.BeginDay(ctx, key, date, 0)
+		require.NoError(t, err)
+		payload := []byte("test-asset-payload")
+		require.NoError(t, s.PutAsset(ctx, day, "runs/1-1.pprof", bytes.NewReader(payload)))
+
+		rc, err := s.ReadAsset(ctx, day, "runs/1-1.pprof")
+		require.NoError(t, err)
+		defer func() { _ = rc.Close() }()
+		got, err := io.ReadAll(rc)
+		require.NoError(t, err)
+		assert.Equal(t, payload, got)
+	})
 }
 
 // NewProfile builds a minimal synthetic CPU pprof whose cpu/nanoseconds total is
@@ -447,6 +463,13 @@ func RunContract(t *testing.T, newStore func() store.Store) {
 // profile. The profile carries no TimeNanos, so merge weighting uses the
 // caller-provided capture time.
 func NewProfile(t *testing.T, cpuSamples int64) []byte {
+	t.Helper()
+	return NewProfileAt(t, cpuSamples, time.Time{})
+}
+
+// NewProfileAt is like NewProfile but stamps the profile's TimeNanos from at
+// when at is non-zero, so tests can exercise CapturedAt derivation.
+func NewProfileAt(t *testing.T, cpuSamples int64, at time.Time) []byte {
 	t.Helper()
 	fn := &profile.Function{ID: 1, Name: "test.work", Filename: "work.go"}
 	loc := &profile.Location{ID: 1, Line: []profile.Line{{Function: fn, Line: 1}}}
@@ -460,6 +483,9 @@ func NewProfile(t *testing.T, cpuSamples int64) []byte {
 		},
 		Function: []*profile.Function{fn},
 		Location: []*profile.Location{loc},
+	}
+	if !at.IsZero() {
+		p.TimeNanos = at.UnixNano()
 	}
 	var buf bytes.Buffer
 	require.NoError(t, p.Write(&buf))

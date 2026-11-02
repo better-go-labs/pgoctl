@@ -355,3 +355,48 @@ func TestPublish_SkipsWindowDayWithUnreadableManifest(t *testing.T) {
 		})
 	}
 }
+
+func TestPublish_SecondRunSameDayNotMissing(t *testing.T) {
+	s := storetest.NewMemory(storetest.Immutable())
+	res1 := publishRun(t, s, "2026-10-31", "901-1", 0.9, 1000)
+	require.Equal(t, 0, res1.Manifest.Sequence)
+	require.Len(t, res1.Manifest.Runs, 1)
+
+	res2 := publishRun(t, s, "2026-10-31", "901-2", 0.9, 1000)
+	require.Equal(t, 1, res2.Manifest.Sequence)
+	require.Len(t, res2.Manifest.Runs, 2, "both runs should be in sequence 1")
+
+	for _, r := range res2.Manifest.Runs {
+		assert.False(t, r.Missing, "run %s must not be marked missing after copying to new sequence", r.ID)
+	}
+}
+
+func TestPublish_SecondRunSameDayNotMissingWhenCopying(t *testing.T) {
+	// RED TEST: A second publish on the same day with an immutable backend opens
+	// a new sequence and copies runs from the old sequence. If a run file is in
+	// a subdirectory (runs/...), it might not be included in the published zip,
+	// causing copyRuns to mark it as missing.
+	ctx := context.Background()
+	s := storetest.NewMemory(storetest.Immutable(), storetest.HideRunAssets())
+	res1 := publishRun(t, s, "2026-10-31", "901-1", 0.9, 1000)
+	require.Equal(t, 0, res1.Manifest.Sequence)
+	require.Len(t, res1.Manifest.Runs, 1, "first publish has the run")
+
+	// After publishing and making the backend immutable, a second publish should
+	// open sequence 1 and copy run 901-1 from sequence 0.
+	res2 := publishRun(t, s, "2026-10-31", "901-2", 0.9, 1000)
+	require.Equal(t, 1, res2.Manifest.Sequence, "second publish on immutable opens sequence 1")
+	require.Len(t, res2.Manifest.Runs, 2, "both runs should be in sequence 1")
+
+	// Both runs should be readable from sequence 1 and NOT marked as missing.
+	for _, r := range res2.Manifest.Runs {
+		assert.False(t, r.Missing, "run %s must not be marked missing in sequence 1", r.ID)
+	}
+
+	// Verify that the run file can actually be read from sequence 1.
+	day := highestPublishedDay(t, s, "2026-10-31")
+	require.Equal(t, 1, day.Seq)
+	rc, err := s.ReadAsset(ctx, day, store.RunAsset("901-1"))
+	require.NoError(t, err, "run 901-1 should be readable from sequence 1 after copying")
+	require.NoError(t, rc.Close())
+}
