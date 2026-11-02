@@ -344,3 +344,30 @@ jobs:
 
       - name: assert validate-score is populated
         run: test -n "${{ steps.run.outputs.validate-score }}" || { echo "empty validate-score"; exit 1; }
+
+  # ── Job 7: missing-source-fails-hard ─────────────────────────────────────────
+  # Covers: plan Task 10 step 3. Collect mode with no source (no pprof-url, no
+  # parca-url, no profile-file) must fail the action hard, not continue as a soft
+  # gate failure. continue-on-error lets us read the step outcome and assert failure.
+  missing-source-fails-hard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          check-latest: true
+
+      - id: run
+        uses: ./
+        continue-on-error: true
+        with:
+          profile-store: artifact
+          upload-artifact: 'false'
+          comment-on-pr: 'false'
+
+      - name: assert the action step failed
+        run: test "${{ steps.run.outcome }}" = "failure" || { echo "expected the action to fail hard on missing source"; exit 1; }
