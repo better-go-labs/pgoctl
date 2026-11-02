@@ -485,10 +485,10 @@ runs:
             --branch="${{ github.ref_name }}" \
             --quality-score="$SCORE" \
             --samples="$SAMPLES" \
-            --go-version="$(go version | awk '{print $3}')" \
+            --go-version="$(go env GOVERSION 2>/dev/null || true)" \
             --lookback-days="${{ inputs.lookback-days }}" \
             --max-profiles="${{ inputs.max-profiles }}" \
-            --json 2>&1)
+            --json)
           PROFILE_TAG=$(echo "$PUBLISH_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tag',''))" 2>/dev/null || echo "")
           echo "has-profile=true" >> "$GITHUB_OUTPUT"
           echo "artifact=default.pgo" >> "$GITHUB_OUTPUT"
