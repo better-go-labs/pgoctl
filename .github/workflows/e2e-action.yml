@@ -312,3 +312,35 @@ jobs:
             exit 1
           fi
           echo "leverage-verdict=NONE confirmed (pgoctl has 0 module devirts / 0 module extra inlines)"
+
+  # ── Job 6: profile-file-in-workspace ─────────────────────────────────────────
+  # Covers: a profile-file already named cpu.pprof in the workspace root must be
+  # accepted. Regression test for the Collect step copying the profile onto itself.
+  profile-file-in-workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          check-latest: true
+
+      - name: Put the profile at cpu.pprof in the workspace root
+        run: cp testdata/pgoctl_cpu.pprof ./cpu.pprof
+
+      - id: run
+        uses: ./
+        with:
+          profile-file: cpu.pprof
+          profile-store: artifact
+          upload-artifact: 'false'
+          comment-on-pr: 'false'
+          on-gate-failure: warn
+
+      - name: assert validate-score is populated
+        run: test -n "${{ steps.run.outputs.validate-score }}" || { echo "empty validate-score"; exit 1; }
