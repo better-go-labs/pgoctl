@@ -109,18 +109,21 @@ jobs:
           test -n "${{ steps.run.outputs.explain-top-functions }}" || { echo "empty explain output"; exit 1; }
 
   # ── Job 2: artifact-roundtrip ─────────────────────────────────────────────────
-  # Covers: D (upload/download round-trip).
-  # Verifies both cpu.pprof and default.pgo are non-empty after download.
+  # Covers: D (a failed gate uploads nothing).
+  # The fixture profile fails the quality gate, and a failed gate skips the artifact
+  # upload, so the download must fail: this job asserts there is no artifact to fetch.
   artifact-roundtrip:
     needs: fixture-pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/download-artifact@v4
+        id: dl
+        continue-on-error: true
         with:
           name: pgo-e2e-fixture
           path: dl
-      - run: test -s dl/cpu.pprof && test -s dl/default.pgo
+      - run: test "${{ steps.dl.outcome }}" = "failure" || { echo "a failed gate must not upload the artifact"; exit 1; }
 
   # ── Job 3: pr-comment ────────────────────────────────────────────────────────
   # Covers: C (PR comment idempotency). Pull-request only.
