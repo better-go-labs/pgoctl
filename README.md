@@ -332,6 +332,94 @@ accept only the two positive values, so a failed check does not pass:
 binary package the profile came from. The check runs in the workspace root, so the module's `go.mod` must be
 there.
 
+### Profile storage
+
+The Action can accumulate profiles across runs in a rolling window and restore the latest `default.pgo` on demand,
+through the `pgoctl store` command family. Two backends are available, selected with `profile-store`:
+
+- `github-release` (default) keeps each day's profile as a GitHub Release asset under a tag built from
+  `profile-tag-prefix` and the optional `service-name`. Each store has a limit of about 1000 releases.
+  Publishing to the GitHub Releases store requires `permissions: contents: write`; a fork PR or a token without it
+  will get a 403 error.
+- `artifact` keeps profiles in GitHub Actions artifacts, which stay private to the repository and expire after 90 days.
+  This backend needs `permissions: actions: write`. Note that artifacts on public repositories are publicly downloadable;
+  for public repositories, set `allow-public-profiles: true` to opt in, otherwise the store defaults to private artifacts.
+- A public repository that does not set `allow-public-profiles: true` is switched from `github-release` to
+  `artifact` automatically, so profiles are never published where anyone could read them.
+- `collect` mode (the default `profile-mode`) stores a new profile and merges the rolling window, but only on the
+  publishing branch: `publish-branch` if set, otherwise the repository default branch. Runs on other branches build
+  with the merged window without publishing.
+- The window is bounded by `lookback-days` (default 14) and `max-profiles` (default 7); the store prunes by the rolling
+  window, not by `retention-days`. Use `pgoctl store exclude` with `date:run-id` pairs to drop a bad run from the window,
+  and `legacy-artifact` to fall back to a v0.1.x artifact name when no window profile exists yet.
+- `restore` mode fetches the most recent stored `default.pgo` without collecting, setting the `has-profile` and
+  `profile-tag` outputs; when nothing is stored yet it exits cleanly with `has-profile: false`.
+
+#### Profile job (collect and publish)
+
+```yaml
+jobs:
+  profile:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: pgo-profile-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+      
+      # Run a benchmark to produce cpu.pprof
+      - run: go test -bench=. -benchtime=10s -cpuprofile=cpu.pprof ./...
+      
+      - uses: better-go-labs/pgoctl@v0.2.0
+        with:
+          profile-file: cpu.pprof
+          profile-store: artifact
+          profile-mode: collect
+          lookback-days: '14'
+          max-profiles: '7'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+#### Build job (restore and build with PGO)
+
+```yaml
+jobs:
+  build:
+    needs: profile
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+      
+      - id: pgo
+        uses: better-go-labs/pgoctl@v0.2.0
+        with:
+          profile-mode: restore
+          profile-store: artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - run: go build -pgo=${{ steps.pgo.outputs.has-profile == 'true' && 'default.pgo' || 'off' }} ./...
+```
+
+Use `pgoctl store exclude` to drop a bad run from the window:
+
+```bash
+pgoctl store exclude --date=2026-11-02 --run-id=abc123def
+```
+
+See [`hack/store-e2e/`](hack/store-e2e/) for an end-to-end workflow that exercises both backends against a scratch
+repository.
+
 ### Inputs
 
 | Input | Description |
@@ -348,10 +436,21 @@ there.
 | `upload-artifact` | Whether to upload the artifact (default: `true`) |
 | `comment-on-pr` | Whether to post a verdict comment (default: `true`) |
 | `github-token` | Token used to post the PR comment |
-| `restore-previous-artifact` | Auto-download the most recent successful artifact for steady-state profile accumulation (requires `permissions: actions: read`; default: `false`) |
+| `restore-previous-artifact` | Auto-download the most recent successful artifact for steady-state accumulation (superseded by `profile-store: artifact` with `profile-mode: collect`; requires `permissions: actions: read`; default: `false`) |
 | `previous-profile` | Path to a previous `default.pgo` to merge with; overrides `restore-previous-artifact` if set |
 | `run-leverage-probe` | Run the [leverage check](#leverage-check) on the merged `default.pgo` (two builds under `-gcflags=all=-m=2`) right after merge and before compare, ahead of any benchmark cycle. Emits `leverage-verdict`. Default: `true`; set `false` to skip |
 | `leverage-probe-target` | Go build target for the leverage probe. Default: `./...` (all packages); point at the binary the profile came from to avoid double-building test helpers under `-m=2` |
+| `profile-store` | Profile store backend: `github-release` (default) or `artifact`. See [Profile storage](#profile-storage) |
+| `profile-mode` | Profile workflow mode: `collect` (default) stores and merges, `restore` fetches the latest profile |
+| `profile-tag-prefix` | Release tag prefix for stored profiles (default: `profile`) |
+| `service-name` | Profile key service label, to keep multiple services' profiles apart (optional) |
+| `publish-branch` | Branch that publishes profiles; empty uses the repository default branch |
+| `allow-public-profiles` | Allow `github-release` storage on public repositories instead of switching to `artifact` (default: `false`) |
+| `lookback-days` | Rolling window lookback in days (default: `14`) |
+| `max-profiles` | Maximum profiles kept in the window (default: `7`) |
+| `exclude-runs` | Comma-separated `date:run-id` pairs to drop from the window |
+| `legacy-artifact` | v0.1.x artifact name to restore from when no window profile exists yet |
+| `on-gate-failure` | Job result when the quality gate fails: `warn` (default, continue) or `fail` |
 
 > **Note:** To enable progressive profile accumulation across runs, set `restore-previous-artifact: true` in your workflow.
 > The calling workflow must have `permissions: actions: read` for cross-run artifact download.
@@ -365,6 +464,8 @@ there.
 | `artifact-path` | Path to the produced artifact |
 | `validate-score` | Quality score from `pgoctl validate` |
 | `leverage-verdict` | PGO leverage check verdict: `NONE`, `LOW`, `HIGH`, or `INCOMPLETE` (empty only if `run-leverage-probe` is `false`) |
+| `has-profile` | Whether a profile was collected (collect mode) or restored (restore mode) |
+| `profile-tag` | Release tag or artifact reference for the stored profile |
 
 ## Docker
 

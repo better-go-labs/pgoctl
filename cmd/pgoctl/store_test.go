@@ -580,5 +580,29 @@ func TestStorePublish_PermissionHint(t *testing.T) {
 		"stderr must include the permissions hint when publish returns ErrPermission")
 }
 
+// TestStoreResolve_MissingToken checks that resolve reports an error to stderr
+// and exits with code 2 when both GITHUB_TOKEN and GH_TOKEN are unset.
+func TestStoreResolve_MissingToken(t *testing.T) {
+	root := newRootCmd()
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
+
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+
+	root.SetArgs([]string{
+		"store", "resolve",
+		"--repo", "o/r",
+		"--branch", "main",
+	})
+	err := root.Execute()
+	require.Error(t, err)
+	code, ok := isExitError(err)
+	require.True(t, ok, "expected exitError, got %T: %v", err, err)
+	assert.Equal(t, 2, code, "exit code must be 2 for missing token")
+	assert.Contains(t, stderr.String(), "token",
+		"stderr must report missing token")
+}
+
 // Ensure unused imports are consumed.
 var _ = io.Discard
