@@ -281,15 +281,17 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
         SERVICE_NAME: ${{ inputs.service-name }}
+        STORE: ${{ steps.store.outputs.store }}
+        LEGACY_ARTIFACT: ${{ inputs.legacy-artifact }}
       run: |
         set +e
         RESTORE_JSON=$(pgoctl store restore \
-          --store="${{ steps.store.outputs.store }}" \
+          --store="$STORE" \
           --repo="${{ github.repository }}" \
           --tag-prefix="$TAG_PREFIX" \
           --service="$SERVICE_NAME" \
           --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
-          --legacy-artifact="${{ inputs.legacy-artifact }}" \
+          --legacy-artifact="$LEGACY_ARTIFACT" \
           --out=default.pgo \
           --json)
         RESTORE_EXIT=$?
@@ -391,21 +393,24 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
         SERVICE_NAME: ${{ inputs.service-name }}
+        STORE: ${{ steps.store.outputs.store }}
+        PREVIOUS_PROFILE: ${{ inputs.previous-profile }}
+        LEGACY_ARTIFACT: ${{ inputs.legacy-artifact }}
       run: |
         mkdir -p previous
-        if [[ -n "${{ inputs.previous-profile }}" ]]; then
-          cp "${{ inputs.previous-profile }}" previous/default.pgo
+        if [[ -n "$PREVIOUS_PROFILE" ]]; then
+          cp "$PREVIOUS_PROFILE" previous/default.pgo
           echo "has-previous=true" >> "$GITHUB_OUTPUT"
           echo "prev-path=previous/default.pgo" >> "$GITHUB_OUTPUT"
         else
           set +e
           pgoctl store restore \
-            --store="${{ steps.store.outputs.store }}" \
+            --store="$STORE" \
             --repo="${{ github.repository }}" \
             --tag-prefix="$TAG_PREFIX" \
             --service="$SERVICE_NAME" \
             --api-url="${{ env.GITHUB_API_URL || 'https://api.github.com' }}" \
-            --legacy-artifact="${{ inputs.legacy-artifact }}" \
+            --legacy-artifact="$LEGACY_ARTIFACT" \
             --out=previous/default.pgo
           RESTORE_EXIT=$?
           set -e
@@ -431,9 +436,10 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
         SERVICE_NAME: ${{ inputs.service-name }}
+        STORE: ${{ steps.store.outputs.store }}
       run: |
         pgoctl store exclude \
-          --store="${{ steps.store.outputs.store }}" \
+          --store="$STORE" \
           --repo="${{ github.repository }}" \
           --tag-prefix="$TAG_PREFIX" \
           --service="$SERVICE_NAME" \
@@ -453,10 +459,12 @@ runs:
         SAMPLES: ${{ steps.validate.outputs.samples }}
         TAG_PREFIX: ${{ inputs.profile-tag-prefix }}
         SERVICE_NAME: ${{ inputs.service-name }}
+        GATE: ${{ steps.validate.outputs.gate }}
+        PUBLISH: ${{ steps.store.outputs.publish }}
+        STORE: ${{ steps.store.outputs.store }}
+        LOOKBACK_DAYS: ${{ inputs.lookback-days }}
+        MAX_PROFILES: ${{ inputs.max-profiles }}
       run: |
-        GATE="${{ steps.validate.outputs.gate }}"
-        PUBLISH="${{ steps.store.outputs.publish }}"
-
         if [[ "$GATE" != "pass" ]]; then
           if [[ -f cpu.pprof ]]; then
             echo "::warning::Gate failed; using collected profile without publishing."
@@ -474,7 +482,7 @@ runs:
           echo "profile-tag=" >> "$GITHUB_OUTPUT"
         elif [[ "$PUBLISH" == "true" ]]; then
           PUBLISH_JSON=$(pgoctl store publish \
-            --store="${{ steps.store.outputs.store }}" \
+            --store="$STORE" \
             --repo="${{ github.repository }}" \
             --tag-prefix="$TAG_PREFIX" \
             --service="$SERVICE_NAME" \
@@ -487,8 +495,8 @@ runs:
             --quality-score="$SCORE" \
             --samples="$SAMPLES" \
             --go-version="$(go env GOVERSION 2>/dev/null || true)" \
-            --lookback-days="${{ inputs.lookback-days }}" \
-            --max-profiles="${{ inputs.max-profiles }}" \
+            --lookback-days="$LOOKBACK_DAYS" \
+            --max-profiles="$MAX_PROFILES" \
             --json)
           PROFILE_TAG=$(echo "$PUBLISH_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tag',''))" 2>/dev/null || echo "")
           echo "has-profile=true" >> "$GITHUB_OUTPUT"
@@ -654,6 +662,8 @@ runs:
     - name: Comment on PR
       if: inputs.profile-mode == 'collect' && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
       uses: actions/github-script@v7
+      env:
+        PROFILE_TAG: ${{ steps.merge.outputs.profile-tag }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -671,7 +681,7 @@ runs:
           const packagesRaw   = `${{ steps.explain.outputs.packages }}`;
           const verdictReason = '${{ steps.explain.outputs.verdict-reason }}';
           const durationSec   = '${{ steps.explain.outputs.duration-sec }}';
-          const profileTag    = '${{ steps.merge.outputs.profile-tag }}';
+          const profileTag    = process.env.PROFILE_TAG || '';
           const storeTagLine  = profileTag ? `\nProfile stored: \`${profileTag}\`` : '';
 
           // Verdict badge
