@@ -267,6 +267,7 @@ runs:
             core.setFailed('ACTIONS_RUNTIME_TOKEN is not available; the artifact profile store cannot upload.');
             return;
           }
+          core.setSecret(runtimeToken);
           core.exportVariable('ACTIONS_RUNTIME_TOKEN', runtimeToken);
           core.exportVariable('ACTIONS_RESULTS_URL', resultsURL);
 
