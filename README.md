@@ -396,7 +396,7 @@ repository.
 | `max-profiles` | Maximum profiles kept in the window (default: `7`) |
 | `exclude-runs` | Comma-separated `date:run-id` pairs to drop from the window |
 | `legacy-artifact` | v0.1.x artifact name to restore from when no window profile exists yet |
-| `on-gate-failure` | Job result when the quality gate fails: `warn` (continue) or `fail` (default) |
+| `on-gate-failure` | Job result when the quality gate fails: `warn` (default, continue) or `fail` |
 
 > **Note:** To enable progressive profile accumulation across runs, set `restore-previous-artifact: true` in your workflow.
 > The calling workflow must have `permissions: actions: read` for cross-run artifact download.

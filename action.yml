@@ -115,9 +115,9 @@ inputs:
     required: false
     default: ''
   on-gate-failure:
-    description: 'Behavior when the quality gate fails: warn (continue) or fail (exit 1) (default: fail)'
+    description: 'Behavior when the quality gate fails: warn (continue) or fail (exit 1) (default: warn)'
     required: false
-    default: 'fail'
+    default: 'warn'
   legacy-artifact:
     description: 'Legacy artifact name for restore fallback (v0.1.x, optional)'
     required: false
