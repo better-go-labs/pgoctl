@@ -231,7 +231,14 @@ runs:
         PUBLISH_BRANCH: ${{ inputs.publish-branch }}
         ALLOW_PUBLIC: ${{ inputs.allow-public-profiles }}
         BRANCH: ${{ github.ref_name }}
+        PROFILE_FILE: ${{ inputs.profile-file }}
+        PARCA_URL: ${{ inputs.parca-url }}
+        PPROF_URL: ${{ inputs.pprof-url }}
       run: |
+        if [[ "$MODE" == "collect" && -z "$PROFILE_FILE" && -z "$PARCA_URL" && -z "$PPROF_URL" ]]; then
+          echo "Error: one of profile-file, parca-url, or pprof-url must be provided in collect mode" >&2
+          exit 2
+        fi
         pgoctl store resolve \
           --mode="$MODE" \
           --store="$STORE" \
@@ -335,9 +342,6 @@ runs:
             ${TIMEOUT_FLAG} \
             ${TIMEOUT_BUFFER_FLAG} \
             --out=cpu.pprof
-        else
-          echo "Error: one of profile-file, parca-url, or pprof-url must be provided" >&2
-          exit 2
         fi
         echo "profile=cpu.pprof" >> "$GITHUB_OUTPUT"
 
