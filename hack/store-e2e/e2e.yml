@@ -292,6 +292,7 @@ jobs:
         with:
           profile-mode: restore
           profile-store: github-release
+          allow-public-profiles: true
           profile-tag-prefix: ${{ env.PREFIX }}
           service-name: ${{ env.SERVICE }}
           github-token: ${{ github.token }}
