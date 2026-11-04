@@ -508,6 +508,7 @@ min-unique-stacks: 100
 target-unique-stacks: 10000
 min-duration: 10
 target-duration: 600
+min-stack-depth: 2
 target-stack-depth: 20
 min-score: 0
 min-package-share:
