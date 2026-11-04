@@ -515,3 +515,54 @@ func TestCompare_TopN(t *testing.T) {
 	_, _, err := executeCmd(t, "compare", "--top=5", p1, p1)
 	assert.NoError(t, err)
 }
+
+// TestValidate_LogScore_InvalidBounds checks min > target exits 2.
+func TestValidate_LogScore_InvalidBounds(t *testing.T) {
+	p := generateProfile(t)
+	_, _, err := executeCmd(t, "validate",
+		"--min-samples=10000", "--target-samples=5000",
+		"--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		p,
+	)
+	var ee *exitError
+	require.ErrorAs(t, err, &ee)
+	assert.Equal(t, 2, ee.code)
+}
+
+// TestValidate_LogScore_NegativeDuration checks negative min exits 2.
+func TestValidate_LogScore_NegativeDuration(t *testing.T) {
+	p := generateProfile(t)
+	_, _, err := executeCmd(t, "validate",
+		"--min-samples=1", "--min-duration=-1",
+		"--min-score=0", "--min-stack-depth=0",
+		p,
+	)
+	var ee *exitError
+	require.ErrorAs(t, err, &ee)
+	assert.Equal(t, 2, ee.code)
+}
+
+// TestValidate_LogScore_RichnessFactor_Warning checks the deprecation warning is printed.
+func TestValidate_LogScore_RichnessFactor_Warning(t *testing.T) {
+	p := generateProfile(t)
+	_, stderr, err := executeCmd(t, "validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		"--richness-factor=0.5",
+		p,
+	)
+	assert.NoError(t, err)
+	assert.Contains(t, stderr, "richness-factor")
+	assert.Contains(t, stderr, "deprecated")
+}
+
+// TestValidate_ConfigEnv_TargetUniqueStacks covers PGOCTL_TARGET_UNIQUE_STACKS env var.
+func TestValidate_ConfigEnv_TargetUniqueStacks(t *testing.T) {
+	t.Setenv("PGOCTL_TARGET_UNIQUE_STACKS", "10000")
+	p := generateProfile(t)
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
+		p,
+	)
+	assert.NoError(t, err)
+}

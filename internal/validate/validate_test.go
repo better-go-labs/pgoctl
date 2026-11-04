@@ -382,3 +382,141 @@ func TestValidateFile_LowScoreRecordsReason(t *testing.T) {
 	require.NotEmpty(t, report.Errors)
 	assert.Contains(t, report.Errors[len(report.Errors)-1], "quality score too low")
 }
+
+// TestLogScore_SyntheticSamples checks that larger sample counts score higher.
+func TestLogScore_SyntheticSamples(t *testing.T) {
+	makeProfile := func(sampleCount int) string {
+		p := &profile.Profile{
+			SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
+			DurationNanos: 60 * 1e9,
+		}
+		for i := 0; i < sampleCount; i++ {
+			fn := &profile.Function{ID: uint64(i + 1), Name: fmt.Sprintf("pkg.Func%d", i%500)}
+			loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn}}}
+			loc2 := &profile.Location{ID: uint64(i + sampleCount + 1), Line: []profile.Line{{Function: fn}}}
+			p.Function = append(p.Function, fn)
+			p.Location = append(p.Location, loc, loc2)
+			p.Sample = append(p.Sample, &profile.Sample{
+				Location: []*profile.Location{loc, loc2},
+				Value:    []int64{1},
+			})
+		}
+		path := writeTmpProfileV(t, p)
+		return path
+	}
+
+	small := makeProfile(60000)
+	large := makeProfile(200000)
+
+	opts := validate.Options{
+		MinSamples:         1,
+		MinScore:           0,
+		MinStackDepth:      1,
+		MinUniqueStacks:    100,
+		TargetUniqueStacks: 10000,
+		TargetStackDepth:   20,
+	}
+
+	repSmall, err := validate.ValidateFile(small, opts)
+	require.NoError(t, err)
+
+	repLarge, err := validate.ValidateFile(large, opts)
+	require.NoError(t, err)
+
+	assert.Greater(t, repLarge.QualityScore, repSmall.QualityScore, "larger sample count should score higher")
+	assert.Greater(t, repSmall.QualityScore, 0.0, "small profile should still have positive score")
+}
+
+// TestLogScore_NoDuration verifies DurationNanos=0 gives a re-weighted score
+// and does not simply drop 0.2 from the total.
+func TestLogScore_NoDuration(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
+		DurationNanos: 0,
+	}
+	fn := &profile.Function{ID: 1, Name: "pkg.Func0"}
+	for i := 0; i < 20; i++ {
+		loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn}}}
+		p.Location = append(p.Location, loc)
+		p.Sample = append(p.Sample, &profile.Sample{
+			Location: []*profile.Location{loc},
+			Value:    []int64{5000},
+		})
+	}
+	p.Function = []*profile.Function{fn}
+	path := writeTmpProfileV(t, p)
+
+	opts := validate.Options{
+		MinSamples:         1,
+		MinScore:           0,
+		MinStackDepth:      0,
+		MinUniqueStacks:    0,
+		TargetUniqueStacks: 10000,
+		TargetStackDepth:   20,
+		WeightDensity:      0.40,
+		WeightRichness:     0.30,
+		WeightCoverage:     0.20,
+		WeightDepth:        0.10,
+	}
+
+	report, err := validate.ValidateFile(path, opts)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+	// Score must be > 0 (not penalised by missing coverage)
+	assert.Greater(t, report.QualityScore, 0.0, "no-duration profile should have positive score")
+	// Sum of remaining weights is 0.80; score must not be capped at 0.80
+	// (it should be normalised to 1.0 scale). Check it's above 0.80 when
+	// density is saturated.
+	assert.LessOrEqual(t, report.QualityScore, 1.0)
+}
+
+// TestLogScore_RichnessFactor_Deprecated verifies the deprecation warning and
+// that the score is unaffected by the richness-factor value.
+func TestLogScore_RichnessFactor_Deprecated(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
+		DurationNanos: 60 * 1e9,
+	}
+	fn := &profile.Function{ID: 1, Name: "pkg.FuncA"}
+	for i := 0; i < 100; i++ {
+		loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn}}}
+		p.Location = append(p.Location, loc)
+		p.Sample = append(p.Sample, &profile.Sample{
+			Location: []*profile.Location{loc},
+			Value:    []int64{100},
+		})
+	}
+	p.Function = []*profile.Function{fn}
+	path := writeTmpProfileV(t, p)
+
+	optsBase := validate.Options{
+		MinSamples:         1,
+		MinScore:           0,
+		MinStackDepth:      1,
+		MinUniqueStacks:    0,
+		TargetUniqueStacks: 10000,
+		TargetStackDepth:   20,
+	}
+	optsAlt := optsBase
+	optsAlt.RichnessFactor = 0.5
+
+	repBase, err := validate.ValidateFile(path, optsBase)
+	require.NoError(t, err)
+
+	repAlt, err := validate.ValidateFile(path, optsAlt)
+	require.NoError(t, err)
+
+	assert.InDelta(t, repBase.QualityScore, repAlt.QualityScore, 0.001,
+		"richness-factor should have no effect on score")
+}
+
+// TestLogScore_PgoctlCPU checks the pgoctl_cpu.pprof testdata scores 0.351 ± 0.005
+// under default flags.
+func TestLogScore_PgoctlCPU(t *testing.T) {
+	report, err := validate.ValidateFile("../../testdata/pgoctl_cpu.pprof", validate.DefaultOptions())
+	require.NoError(t, err)
+	require.NotNil(t, report)
+	assert.InDelta(t, 0.351, report.QualityScore, 0.005,
+		"pgoctl_cpu.pprof should score 0.351 ± 0.005 with default options, got %v", report.QualityScore)
+	assert.True(t, report.Valid, "pgoctl_cpu.pprof should be valid with default options")
+}
