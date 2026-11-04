@@ -483,6 +483,66 @@ func TestLogScore_NoDuration(t *testing.T) {
 	assert.LessOrEqual(t, report.QualityScore, 1.0)
 }
 
+// TestNoDuration_NoPollutionToReport verifies that a profile with DurationNanos==0
+// emits no message to stderr and that its warning appears in report.Warnings.
+// RED: currently the warning goes to os.Stderr, not report.Warnings.
+func TestNoDuration_NoPollutionToReport(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
+		DurationNanos: 0,
+	}
+	fn := &profile.Function{ID: 1, Name: "pkg.FuncND"}
+	for i := 0; i < 5; i++ {
+		loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn}}}
+		p.Location = append(p.Location, loc)
+		p.Sample = append(p.Sample, &profile.Sample{
+			Location: []*profile.Location{loc},
+			Value:    []int64{100},
+		})
+	}
+	p.Function = []*profile.Function{fn}
+	path := writeTmpProfileV(t, p)
+
+	opts := validate.Options{
+		MinSamples:         1,
+		MinScore:           0,
+		MinStackDepth:      0,
+		MinUniqueStacks:    0,
+		TargetUniqueStacks: 10000,
+		TargetStackDepth:   20,
+		WeightDensity:      0.40,
+		WeightRichness:     0.30,
+		WeightCoverage:     0.20,
+		WeightDepth:        0.10,
+	}
+
+	// Capture stderr to verify nothing is written there.
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	report, validateErr := validate.ValidateFile(path, opts)
+
+	_ = w.Close()
+	os.Stderr = oldStderr
+	buf := make([]byte, 4096)
+	n, _ := r.Read(buf)
+	stderrOut := string(buf[:n])
+
+	require.NoError(t, validateErr)
+	require.NotNil(t, report)
+	assert.Empty(t, stderrOut, "no-duration warning must not go to stderr")
+	assert.True(t, func() bool {
+		for _, w := range report.Warnings {
+			if strings.Contains(w, "duration") {
+				return true
+			}
+		}
+		return false
+	}(), "no-duration warning should appear in report.Warnings")
+}
+
 // TestLogScore_RichnessFactor_Deprecated verifies the deprecation warning and
 // that the score is unaffected by the richness-factor value.
 func TestLogScore_RichnessFactor_Deprecated(t *testing.T) {

@@ -296,7 +296,7 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 
 	var score float64
 	if p.DurationNanos == 0 {
-		fmt.Fprintf(os.Stderr, "profile has no duration; coverage not scored\n")
+		report.Warnings = append(report.Warnings, "profile has no duration; coverage not scored")
 		totalW := opts.WeightDensity + opts.WeightRichness + opts.WeightDepth
 		if totalW > 0 {
 			score = (opts.WeightDensity*density + opts.WeightRichness*richness + opts.WeightDepth*depth) / totalW
