@@ -153,8 +153,7 @@ func DefaultOptions() Options {
 }
 
 // grade returns a log-scale value in [0,1] measuring how close x is to hi
-// given lo as the lower bound. Returns 0 when x<=lo, 1 when x>=hi.
-// When lo<=0 the caller should substitute 1.0 as lo before calling.
+// given lo as the lower bound. Returns 0 when x<=0, lo<=0, x<=lo; 1 when x>=hi.
 func grade(x, lo, hi float64) float64 {
 	if x <= 0 || lo <= 0 {
 		return 0
