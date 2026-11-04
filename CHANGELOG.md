@@ -9,10 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `validate`: `--min-unique-stacks`, `--target-unique-stacks`, `--target-stack-depth` scoring parameters; all configurable via env/config file (#61)
+- Action: `min-samples`, `target-samples`, `min-unique-stacks`, `target-unique-stacks`, `min-duration`, `target-duration`, `min-stack-depth`, `target-stack-depth` inputs (#61)
 - `pgoctl store` command family for steady-state PGO profile accumulation: `resolve`, `publish`, `restore`, `exclude`, and `prune`, over a GitHub Releases backend or a private GitHub Actions Artifacts backend with a rolling window (#62)
 - Action: `profile-store` (`github-release` default, or `artifact`) and `profile-mode` (`collect` default, or `restore`) inputs, plus `profile-tag-prefix`, `service-name`, `publish-branch`, `allow-public-profiles`, `lookback-days`, `max-profiles`, `exclude-runs`, and `legacy-artifact` to configure the store; public repositories default to the private artifact backend unless `allow-public-profiles` is set (#62)
 - Action: `restore` mode fetches the latest stored `default.pgo` and exposes the `has-profile` and `profile-tag` outputs; a build with no stored profile reports `has-profile: false` and runs without PGO (#62)
 - `hack/store-e2e/`: an end-to-end workflow that exercises both store backends against a scratch repository (#62)
+
+### Changed
+
+- `validate`: quality score components now use a log scale (`grade(x, lo, hi) = ln(x/lo) / ln(hi/lo)`): early gains count more, diminishing returns at the top; existing scores will be lower (#61)
+- `validate`: default `--target-samples` raised from 50 000 to 500 000; default `--target-duration` raised from 30 s to 600 s; default `--min-score` lowered from 0.6 to 0 (#61)
+- `validate`: `--richness-factor` is deprecated and ignored; pass it to get a deprecation warning; it will be removed in the next release (#61)
+- `validate`: profiles with no duration data (`DurationNanos==0`) exclude coverage from scoring and renormalise the remaining weights to [0, 1] (#61)
 
 ### Changed (breaking)
 

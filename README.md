@@ -194,11 +194,19 @@ pgoctl validate [flags] <path>
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--min-samples` | `10000` | Minimum sample count |
+| `--min-samples` | `10000` | Minimum sample count (hard gate) |
+| `--target-samples` | `500000` | Target sample count for density scoring |
 | `--min-duration` | `10.0` | Minimum profile duration in seconds |
-| `--min-score` | `0.6` | Minimum quality score (0-1) |
+| `--target-duration` | `600` | Target duration in seconds for coverage scoring |
+| `--min-stack-depth` | `2.0` | Minimum average stack depth (hard gate) |
+| `--target-stack-depth` | `20` | Target average stack depth for depth scoring |
+| `--min-unique-stacks` | `100` | Minimum unique stack count (lower bound for richness scoring; 0 = off) |
+| `--target-unique-stacks` | `10000` | Target unique stack count for richness scoring |
+| `--min-score` | `0` | Minimum quality score (0-1); 0 disables the gate |
 | `--min-package-share` | _(none)_ | Minimum combined flat CPU % for a package prefix (e.g. `tsdb:5`) |
 | `--json` | `false` | JSON output |
+
+Scoring uses a log scale: each component grade = ln(x/lo) / ln(hi/lo), clamped to [0,1]. When `--min-*` is 0, that gate is off and the lower bound for scoring uses 1. When a profile has no duration, coverage is excluded and the remaining weights are renormalised.
 
 Exit codes: **0** = valid, **1** = below quality gate, **2** = input error.
 
@@ -495,7 +503,14 @@ Config file is discovered as `pgoctl.conf` in `./`, `~/.config/pgoctl/`, then `/
 ```yaml
 # pgoctl.conf (example)
 min-samples: 1000
-min-score: 0.3
+target-samples: 500000
+min-unique-stacks: 100
+target-unique-stacks: 10000
+min-duration: 10
+target-duration: 600
+min-stack-depth: 2
+target-stack-depth: 20
+min-score: 0
 min-package-share:
   - github.com/prometheus/prometheus/tsdb:5.0
   - github.com/prometheus/prometheus/promql:1.5

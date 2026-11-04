@@ -46,6 +46,38 @@ inputs:
     description: 'Extra flags to pass to pgoctl validate (e.g. --min-package-share tsdb:5)'
     required: false
     default: ''
+  min-samples:
+    description: 'Minimum sample count (passed as PGOCTL_MIN_SAMPLES)'
+    required: false
+    default: ''
+  target-samples:
+    description: 'Target sample count for quality scoring (passed as PGOCTL_TARGET_SAMPLES)'
+    required: false
+    default: ''
+  min-unique-stacks:
+    description: 'Minimum unique stack count (passed as PGOCTL_MIN_UNIQUE_STACKS)'
+    required: false
+    default: ''
+  target-unique-stacks:
+    description: 'Target unique stack count for quality scoring (passed as PGOCTL_TARGET_UNIQUE_STACKS)'
+    required: false
+    default: ''
+  min-duration:
+    description: 'Minimum profile duration in seconds (passed as PGOCTL_MIN_DURATION)'
+    required: false
+    default: ''
+  target-duration:
+    description: 'Target profile duration in seconds for quality scoring (passed as PGOCTL_TARGET_DURATION)'
+    required: false
+    default: ''
+  min-stack-depth:
+    description: 'Minimum average stack depth (passed as PGOCTL_MIN_STACK_DEPTH)'
+    required: false
+    default: ''
+  target-stack-depth:
+    description: 'Target average stack depth for quality scoring (passed as PGOCTL_TARGET_STACK_DEPTH)'
+    required: false
+    default: ''
   artifact-name:
     description: 'Name for the uploaded GitHub artifact'
     required: false
@@ -353,16 +385,34 @@ runs:
       id: validate
       if: inputs.profile-mode == 'collect'
       shell: bash
+      env:
+        _MIN_SAMPLES: ${{ inputs.min-samples }}
+        _TARGET_SAMPLES: ${{ inputs.target-samples }}
+        _MIN_UNIQUE_STACKS: ${{ inputs.min-unique-stacks }}
+        _TARGET_UNIQUE_STACKS: ${{ inputs.target-unique-stacks }}
+        _MIN_DURATION: ${{ inputs.min-duration }}
+        _TARGET_DURATION: ${{ inputs.target-duration }}
+        _MIN_STACK_DEPTH: ${{ inputs.min-stack-depth }}
+        _TARGET_STACK_DEPTH: ${{ inputs.target-stack-depth }}
       run: |
         if [[ "${{ steps.collect.outcome }}" != "success" ]]; then
           echo "gate=fail" >> "$GITHUB_OUTPUT"
           echo "::warning::Profile collection failed; skipping validate. Treating as gate=fail."
           exit 0
         fi
+        [[ -n "$_MIN_SAMPLES" ]] && export PGOCTL_MIN_SAMPLES="$_MIN_SAMPLES"
+        [[ -n "$_TARGET_SAMPLES" ]] && export PGOCTL_TARGET_SAMPLES="$_TARGET_SAMPLES"
+        [[ -n "$_MIN_UNIQUE_STACKS" ]] && export PGOCTL_MIN_UNIQUE_STACKS="$_MIN_UNIQUE_STACKS"
+        [[ -n "$_TARGET_UNIQUE_STACKS" ]] && export PGOCTL_TARGET_UNIQUE_STACKS="$_TARGET_UNIQUE_STACKS"
+        [[ -n "$_MIN_DURATION" ]] && export PGOCTL_MIN_DURATION="$_MIN_DURATION"
+        [[ -n "$_TARGET_DURATION" ]] && export PGOCTL_TARGET_DURATION="$_TARGET_DURATION"
+        [[ -n "$_MIN_STACK_DEPTH" ]] && export PGOCTL_MIN_STACK_DEPTH="$_MIN_STACK_DEPTH"
+        [[ -n "$_TARGET_STACK_DEPTH" ]] && export PGOCTL_TARGET_STACK_DEPTH="$_TARGET_STACK_DEPTH"
         set +e
-        out=$(pgoctl validate ${{ inputs.validate-flags }} --json cpu.pprof 2>&1)
+        out=$(pgoctl validate ${{ inputs.validate-flags }} --json cpu.pprof 2>validate.err)
         exit_code=$?
         echo "$out"
+        [[ -s validate.err ]] && echo "=== validate stderr ===" && cat validate.err
         score=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('quality_score',0))" 2>/dev/null || echo "0")
         valid=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('valid',False))" 2>/dev/null || echo "False")
         samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('samples',0))" 2>/dev/null || echo "0")

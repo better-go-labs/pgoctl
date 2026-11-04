@@ -75,6 +75,9 @@ func newValidateCmd() *cobra.Command {
 	var minStackDepth float64
 	var weightDensity, weightRichness, weightCoverage, weightDepth, richnessFactor float64
 	var minPackageShare []string
+	var minUniqueStacks int64
+	var targetUniqueStacks int64
+	var targetStackDepth float64
 
 	// validateConfigFlags are the flags resolved from env/config (precedence:
 	// CLI > env > config file > default). json is the root persistent flag.
@@ -83,6 +86,7 @@ func newValidateCmd() *cobra.Command {
 		"target-samples", "target-duration", "min-stack-depth",
 		"weight-density", "weight-richness", "weight-coverage", "weight-depth",
 		"richness-factor", "min-package-share", "json",
+		"min-unique-stacks", "target-unique-stacks", "target-stack-depth",
 	}
 
 	cmd := &cobra.Command{
@@ -115,15 +119,20 @@ func newValidateCmd() *cobra.Command {
 						// valueFrom joins YAML lists with commas; the existing
 						// parser already handles comma-separated entries.
 						minPackageShare = []string{val}
-					case "min-samples", "target-samples":
+					case "min-samples", "target-samples", "min-unique-stacks", "target-unique-stacks":
 						n, err := strconv.ParseInt(val, 10, 64)
 						if err != nil {
 							return err
 						}
-						if name == "min-samples" {
+						switch name {
+						case "min-samples":
 							minSamples = n
-						} else {
+						case "target-samples":
 							targetSamples = n
+						case "min-unique-stacks":
+							minUniqueStacks = n
+						case "target-unique-stacks":
+							targetUniqueStacks = n
 						}
 					default: // float64 flags
 						f, err := strconv.ParseFloat(val, 64)
@@ -139,6 +148,8 @@ func newValidateCmd() *cobra.Command {
 							targetDuration = f
 						case "min-stack-depth":
 							minStackDepth = f
+						case "target-stack-depth":
+							targetStackDepth = f
 						case "weight-density":
 							weightDensity = f
 						case "weight-richness":
@@ -163,6 +174,39 @@ func newValidateCmd() *cobra.Command {
 				return &exitError{code: 2}
 			}
 
+			// Validate bounds on the fully resolved values (CLI + env + config).
+			// Each pair fails when its min is negative, or its target is not
+			// above max(min, 1) (the effective lower bound used by grading).
+			var boundsErrs []string
+			checkPair := func(minName string, minVal float64, targetName string, targetVal float64) {
+				if minVal < 0 {
+					boundsErrs = append(boundsErrs, fmt.Sprintf("--%s must be >= 0", minName))
+				}
+				lower := minVal
+				if lower < 1 {
+					lower = 1
+				}
+				if targetVal <= lower {
+					boundsErrs = append(boundsErrs, fmt.Sprintf(
+						"--%s (%g) must be > max(--%s, 1) (%g)", targetName, targetVal, minName, lower))
+				}
+			}
+			checkPair("min-samples", float64(minSamples), "target-samples", float64(targetSamples))
+			checkPair("min-unique-stacks", float64(minUniqueStacks), "target-unique-stacks", float64(targetUniqueStacks))
+			checkPair("min-duration", minDuration, "target-duration", targetDuration)
+			checkPair("min-stack-depth", minStackDepth, "target-stack-depth", targetStackDepth)
+			if len(boundsErrs) > 0 {
+				for _, e := range boundsErrs {
+					fmt.Fprintf(os.Stderr, "error: %s\n", e)
+				}
+				return &exitError{code: 2}
+			}
+
+			_, richnessFromConfig := cfg["richness-factor"]
+			if cmd.Flags().Changed("richness-factor") || richnessFromConfig {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: --richness-factor is deprecated and ignored; it will be removed in the next release\n")
+			}
+
 			gates, err := validate.ParsePackageShareGates(minPackageShare)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %s\n", err)
@@ -180,6 +224,9 @@ func newValidateCmd() *cobra.Command {
 				WeightCoverage:     weightCoverage,
 				WeightDepth:        weightDepth,
 				RichnessFactor:     richnessFactor,
+				MinUniqueStacks:    minUniqueStacks,
+				TargetUniqueStacks: targetUniqueStacks,
+				TargetStackDepth:   targetStackDepth,
 				PackageShareGates:  gates,
 			}
 			report, err := validate.ValidateFile(args[0], opts) //nolint:gosec
@@ -202,15 +249,18 @@ func newValidateCmd() *cobra.Command {
 	}
 	cmd.Flags().Int64Var(&minSamples, "min-samples", 10000, "minimum sample count")
 	cmd.Flags().Float64Var(&minDuration, "min-duration", 10.0, "minimum duration in seconds")
-	cmd.Flags().Float64Var(&minScore, "min-score", 0.6, "minimum quality score (0.0-1.0)")
-	cmd.Flags().Int64Var(&targetSamples, "target-samples", 50000, "target sample count for quality scoring")
-	cmd.Flags().Float64Var(&targetDuration, "target-duration", 30.0, "target duration in seconds for quality scoring")
+	cmd.Flags().Float64Var(&minScore, "min-score", 0, "minimum quality score (0.0-1.0)")
+	cmd.Flags().Int64Var(&targetSamples, "target-samples", 500000, "target sample count for quality scoring")
+	cmd.Flags().Float64Var(&targetDuration, "target-duration", 600, "target duration in seconds for quality scoring")
 	cmd.Flags().Float64Var(&minStackDepth, "min-stack-depth", 2.0, "minimum average stack depth")
 	cmd.Flags().Float64Var(&weightDensity, "weight-density", 0.40, "density score weight")
 	cmd.Flags().Float64Var(&weightRichness, "weight-richness", 0.30, "richness score weight")
 	cmd.Flags().Float64Var(&weightCoverage, "weight-coverage", 0.20, "coverage score weight")
 	cmd.Flags().Float64Var(&weightDepth, "weight-depth", 0.10, "depth score weight")
-	cmd.Flags().Float64Var(&richnessFactor, "richness-factor", 0.02, "richness scaling factor")
+	cmd.Flags().Float64Var(&richnessFactor, "richness-factor", 0, "richness scaling factor (deprecated, ignored)")
+	cmd.Flags().Int64Var(&minUniqueStacks, "min-unique-stacks", 100, "minimum unique stack count")
+	cmd.Flags().Int64Var(&targetUniqueStacks, "target-unique-stacks", 10000, "target unique stack count for quality scoring")
+	cmd.Flags().Float64Var(&targetStackDepth, "target-stack-depth", 20, "target average stack depth for quality scoring")
 	cmd.Flags().StringArrayVar(&minPackageShare, "min-package-share", nil, "min combined flat CPU %% for a package prefix, e.g. github.com/prometheus/prometheus/tsdb:5 (repeatable or comma-separated; subpackages included)")
 	return cmd
 }
