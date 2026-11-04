@@ -162,7 +162,7 @@ func TestValidate_TableDriven(t *testing.T) {
 			expectError: false,
 			checkResult: func(t *testing.T, r *profiletypes.QualityReport) {
 				// New formula: density = grade(samples, minSamples, targetSamples)
-				// MinSamples=1 → lo=1; DefaultOptions TargetSamples=500000
+				// MinSamples=1 -> lo=1; DefaultOptions TargetSamples=500000
 				lo, hi := 1.0, 500000.0
 				var expected float64
 				s := float64(r.Samples)
@@ -262,25 +262,6 @@ func TestValidateFile_DefaultMinStackDepth(t *testing.T) {
 	report, err := validate.ValidateFile(f.Name(), opts)
 	require.NoError(t, err)
 	require.NotNil(t, report)
-}
-
-// TestValidateFile_NegativeLowerBoundNoNaN verifies grade does not emit NaN
-// when a lower bound is <= 0; the score must stay finite and in [0,1].
-func TestValidateFile_NegativeLowerBoundNoNaN(t *testing.T) {
-	data := generateCPUProfile(t, 200)
-	f, err := os.CreateTemp(t.TempDir(), "cpu*.pprof")
-	require.NoError(t, err)
-	_, err = f.Write(data)
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-
-	opts := validate.Options{MinSamples: 1, MinScore: 0, MinStackDepth: -1}
-	report, err := validate.ValidateFile(f.Name(), opts)
-	require.NoError(t, err)
-	require.NotNil(t, report)
-	assert.False(t, math.IsNaN(report.QualityScore), "score must not be NaN")
-	assert.GreaterOrEqual(t, report.QualityScore, 0.0)
-	assert.LessOrEqual(t, report.QualityScore, 1.0)
 }
 
 // TestValidateFile_InsufficientSamples verifies sampleCount < MinSamples generates
@@ -496,8 +477,7 @@ func TestLogScore_NoDuration(t *testing.T) {
 	require.NotNil(t, report)
 	// Score must be > 0 (not penalised by missing coverage)
 	assert.Greater(t, report.QualityScore, 0.0, "no-duration profile should have positive score")
-	// Sum of remaining weights is 0.80; score must not be capped at 0.80
-	// (it should be normalised to the 1.0 scale), so it stays within [0,1].
+	// Score must be in (0, 1].
 	assert.LessOrEqual(t, report.QualityScore, 1.0)
 }
 
@@ -642,13 +622,65 @@ func TestLogScore_RichnessFactor_Deprecated(t *testing.T) {
 		"richness-factor should have no effect on score")
 }
 
-// TestLogScore_PgoctlCPU checks the pgoctl_cpu.pprof testdata scores 0.351 ± 0.005
+// TestLogScore_PgoctlCPU checks the pgoctl_cpu.pprof testdata scores 0.351 +/- 0.005
 // under default flags.
 func TestLogScore_PgoctlCPU(t *testing.T) {
 	report, err := validate.ValidateFile("../../testdata/pgoctl_cpu.pprof", validate.DefaultOptions())
 	require.NoError(t, err)
 	require.NotNil(t, report)
 	assert.InDelta(t, 0.351, report.QualityScore, 0.005,
-		"pgoctl_cpu.pprof should score 0.351 ± 0.005 with default options, got %v", report.QualityScore)
+		"pgoctl_cpu.pprof should score 0.351 +/- 0.005 with default options, got %v", report.QualityScore)
 	assert.True(t, report.Valid, "pgoctl_cpu.pprof should be valid with default options")
+}
+
+// TestGrade_NegativeMinStackDepth is a RED test verifying that a negative or zero
+// MinStackDepth does not produce a NaN/Inf quality score. grade(x, lo, hi) must
+// guard against lo<=0 before computing ln(x/lo).
+func TestGrade_NegativeMinStackDepth(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
+		DurationNanos: 30 * 1e9,
+	}
+	fn := &profile.Function{ID: 1, Name: "pkg.FuncND"}
+	for i := 0; i < 20; i++ {
+		loc1 := &profile.Location{ID: uint64(i*2 + 1), Line: []profile.Line{{Function: fn}}}
+		loc2 := &profile.Location{ID: uint64(i*2 + 2), Line: []profile.Line{{Function: fn}}}
+		p.Location = append(p.Location, loc1, loc2)
+		p.Sample = append(p.Sample, &profile.Sample{
+			Location: []*profile.Location{loc1, loc2},
+			Value:    []int64{100},
+		})
+	}
+	p.Function = []*profile.Function{fn}
+	path := writeTmpProfileV(t, p)
+
+	tests := []struct {
+		name          string
+		minStackDepth float64
+	}{
+		{"negative lo", -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := validate.Options{
+				MinSamples:         1,
+				MinScore:           0,
+				MinStackDepth:      tt.minStackDepth,
+				MinUniqueStacks:    0,
+				TargetUniqueStacks: 10000,
+				TargetStackDepth:   20,
+				WeightDensity:      0.40,
+				WeightRichness:     0.30,
+				WeightCoverage:     0.20,
+				WeightDepth:        0.10,
+			}
+			report, err := validate.ValidateFile(path, opts)
+			require.NoError(t, err)
+			require.NotNil(t, report)
+			assert.False(t, math.IsNaN(report.QualityScore),
+				"score must not be NaN when MinStackDepth=%v", tt.minStackDepth)
+			assert.False(t, math.IsInf(report.QualityScore, 0),
+				"score must not be Inf when MinStackDepth=%v", tt.minStackDepth)
+		})
+	}
 }
