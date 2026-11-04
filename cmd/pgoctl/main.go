@@ -77,7 +77,7 @@ func newValidateCmd() *cobra.Command {
 	var minPackageShare []string
 	var minUniqueStacks int64
 	var targetUniqueStacks int64
-	var targetStackDepth int64
+	var targetStackDepth float64
 
 	// validateConfigFlags are the flags resolved from env/config (precedence:
 	// CLI > env > config file > default). json is the root persistent flag.
@@ -119,7 +119,7 @@ func newValidateCmd() *cobra.Command {
 						// valueFrom joins YAML lists with commas; the existing
 						// parser already handles comma-separated entries.
 						minPackageShare = []string{val}
-					case "min-samples", "target-samples", "min-unique-stacks", "target-unique-stacks", "target-stack-depth":
+					case "min-samples", "target-samples", "min-unique-stacks", "target-unique-stacks":
 						n, err := strconv.ParseInt(val, 10, 64)
 						if err != nil {
 							return err
@@ -133,8 +133,6 @@ func newValidateCmd() *cobra.Command {
 							minUniqueStacks = n
 						case "target-unique-stacks":
 							targetUniqueStacks = n
-						case "target-stack-depth":
-							targetStackDepth = n
 						}
 					default: // float64 flags
 						f, err := strconv.ParseFloat(val, 64)
@@ -150,6 +148,8 @@ func newValidateCmd() *cobra.Command {
 							targetDuration = f
 						case "min-stack-depth":
 							minStackDepth = f
+						case "target-stack-depth":
+							targetStackDepth = f
 						case "weight-density":
 							weightDensity = f
 						case "weight-richness":
@@ -174,20 +174,27 @@ func newValidateCmd() *cobra.Command {
 				return &exitError{code: 2}
 			}
 
-			// Validate bounds: any min < 0, or target explicitly set to <= its lower bound.
+			// Validate bounds on the fully resolved values (CLI + env + config).
+			// Each pair fails when its min is negative, or its target is not
+			// above max(min, 1) (the effective lower bound used by grading).
 			var boundsErrs []string
-			if minSamples < 0 {
-				boundsErrs = append(boundsErrs, "--min-samples must be >= 0")
+			checkPair := func(minName string, minVal float64, targetName string, targetVal float64) {
+				if minVal < 0 {
+					boundsErrs = append(boundsErrs, fmt.Sprintf("--%s must be >= 0", minName))
+				}
+				lower := minVal
+				if lower < 1 {
+					lower = 1
+				}
+				if targetVal <= lower {
+					boundsErrs = append(boundsErrs, fmt.Sprintf(
+						"--%s (%g) must be > max(--%s, 1) (%g)", targetName, targetVal, minName, lower))
+				}
 			}
-			if minDuration < 0 {
-				boundsErrs = append(boundsErrs, "--min-duration must be >= 0")
-			}
-			if cmd.Flags().Changed("target-samples") && targetSamples > 0 && minSamples > 0 && targetSamples <= minSamples {
-				boundsErrs = append(boundsErrs, fmt.Sprintf("--target-samples (%d) must be > --min-samples (%d)", targetSamples, minSamples))
-			}
-			if cmd.Flags().Changed("target-duration") && targetDuration > 0 && minDuration > 0 && targetDuration <= minDuration {
-				boundsErrs = append(boundsErrs, fmt.Sprintf("--target-duration (%.0f) must be > --min-duration (%.0f)", targetDuration, minDuration))
-			}
+			checkPair("min-samples", float64(minSamples), "target-samples", float64(targetSamples))
+			checkPair("min-unique-stacks", float64(minUniqueStacks), "target-unique-stacks", float64(targetUniqueStacks))
+			checkPair("min-duration", minDuration, "target-duration", targetDuration)
+			checkPair("min-stack-depth", minStackDepth, "target-stack-depth", targetStackDepth)
 			if len(boundsErrs) > 0 {
 				for _, e := range boundsErrs {
 					fmt.Fprintf(os.Stderr, "error: %s\n", e)
@@ -195,7 +202,8 @@ func newValidateCmd() *cobra.Command {
 				return &exitError{code: 2}
 			}
 
-			if richnessFactor != 0 {
+			_, richnessFromConfig := cfg["richness-factor"]
+			if cmd.Flags().Changed("richness-factor") || richnessFromConfig {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: --richness-factor is deprecated and ignored; it will be removed in the next release\n")
 			}
 
@@ -252,7 +260,7 @@ func newValidateCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&richnessFactor, "richness-factor", 0, "richness scaling factor (deprecated, ignored)")
 	cmd.Flags().Int64Var(&minUniqueStacks, "min-unique-stacks", 100, "minimum unique stack count")
 	cmd.Flags().Int64Var(&targetUniqueStacks, "target-unique-stacks", 10000, "target unique stack count for quality scoring")
-	cmd.Flags().Int64Var(&targetStackDepth, "target-stack-depth", 20, "target average stack depth for quality scoring")
+	cmd.Flags().Float64Var(&targetStackDepth, "target-stack-depth", 20, "target average stack depth for quality scoring")
 	cmd.Flags().StringArrayVar(&minPackageShare, "min-package-share", nil, "min combined flat CPU %% for a package prefix, e.g. github.com/prometheus/prometheus/tsdb:5 (repeatable or comma-separated; subpackages included)")
 	return cmd
 }
