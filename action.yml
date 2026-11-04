@@ -409,9 +409,10 @@ runs:
         [[ -n "$_MIN_STACK_DEPTH" ]] && export PGOCTL_MIN_STACK_DEPTH="$_MIN_STACK_DEPTH"
         [[ -n "$_TARGET_STACK_DEPTH" ]] && export PGOCTL_TARGET_STACK_DEPTH="$_TARGET_STACK_DEPTH"
         set +e
-        out=$(pgoctl validate ${{ inputs.validate-flags }} --json cpu.pprof 2>&1)
+        out=$(pgoctl validate ${{ inputs.validate-flags }} --json cpu.pprof 2>validate.err)
         exit_code=$?
         echo "$out"
+        [[ -s validate.err ]] && echo "=== validate stderr ===" && cat validate.err
         score=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('quality_score',0))" 2>/dev/null || echo "0")
         valid=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('valid',False))" 2>/dev/null || echo "False")
         samples=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('samples',0))" 2>/dev/null || echo "0")
