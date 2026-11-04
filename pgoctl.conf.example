@@ -18,17 +18,22 @@
 # --- validate command ---
 min-samples: 1000
 min-duration: 10.0
-min-score: 0.3
-target-samples: 50000
-target-duration: 30.0
+min-score: 0
+target-samples: 500000
+target-duration: 600
 min-stack-depth: 2.0
+target-stack-depth: 20
+min-unique-stacks: 100
+target-unique-stacks: 10000
 
 # scoring weights (must sum to 1.0 for the score to be comparable)
 weight-density: 0.40
 weight-richness: 0.30
 weight-coverage: 0.20
 weight-depth: 0.10
-richness-factor: 0.02
+
+# richness-factor: deprecated and ignored; will be removed in the next release
+# richness-factor: 0.02
 
 # min combined flat CPU % per package prefix (subpackages included).
 # Equivalent to repeating --min-package-share <prefix>:<percent>.

@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	targetSamples         = 50000
-	targetDurationSeconds = 30.0 // seconds
+	targetSamples         = 500000
+	targetDurationSeconds = 600.0 // seconds
 )
 
 // PackageShareGate requires the combined flat CPU share of all functions
@@ -127,6 +127,9 @@ type Options struct {
 	WeightCoverage     float64
 	WeightDepth        float64
 	RichnessFactor     float64
+	MinUniqueStacks    int64
+	TargetUniqueStacks int64
+	TargetStackDepth   int64
 	PackageShareGates  []PackageShareGate
 }
 
@@ -135,7 +138,7 @@ func DefaultOptions() Options {
 	return Options{
 		MinSamples:         10000,
 		MinDurationSeconds: 10.0,
-		MinScore:           0.6,
+		MinScore:           0,
 		TargetSamples:      targetSamples,
 		TargetDuration:     targetDurationSeconds,
 		MinStackDepth:      2.0,
@@ -144,11 +147,23 @@ func DefaultOptions() Options {
 		WeightCoverage:     0.20,
 		WeightDepth:        0.10,
 		RichnessFactor:     0.02,
+		MinUniqueStacks:    100,
+		TargetUniqueStacks: 10000,
+		TargetStackDepth:   20,
 	}
 }
 
-func clamp(v float64) float64 {
-	return math.Max(0, math.Min(1, v))
+// grade returns a log-scale value in [0,1] measuring how close x is to hi
+// given lo as the lower bound. Returns 0 when x<=lo, 1 when x>=hi.
+// When lo<=0 the caller should substitute 1.0 as lo before calling.
+func grade(x, lo, hi float64) float64 {
+	if x <= lo {
+		return 0
+	}
+	if x >= hi {
+		return 1
+	}
+	return math.Log(x/lo) / math.Log(hi/lo)
 }
 
 // ValidateFile parses path and returns a QualityReport.
@@ -164,6 +179,12 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 	if opts.MinStackDepth == 0 {
 		opts.MinStackDepth = 2.0
 	}
+	if opts.TargetUniqueStacks == 0 {
+		opts.TargetUniqueStacks = 10000
+	}
+	if opts.TargetStackDepth == 0 {
+		opts.TargetStackDepth = 20
+	}
 	defaults := DefaultOptions()
 	if opts.WeightDensity == 0 && opts.WeightRichness == 0 && opts.WeightCoverage == 0 && opts.WeightDepth == 0 {
 		opts.WeightDensity = defaults.WeightDensity
@@ -171,9 +192,7 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 		opts.WeightCoverage = defaults.WeightCoverage
 		opts.WeightDepth = defaults.WeightDepth
 	}
-	if opts.RichnessFactor == 0 {
-		opts.RichnessFactor = defaults.RichnessFactor
-	}
+	// richnessFactor is deprecated; callers should warn before this call.
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -227,7 +246,7 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 		avgStackDepth = float64(totalDepth) / float64(rowCount)
 	}
 
-	durationSec := p.DurationNanos / 1e9
+	durationSec := float64(p.DurationNanos) / 1e9
 
 	report.Samples = sampleCount
 	report.UniqueStacks = uniqueStacks
@@ -235,8 +254,8 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 	if sampleCount < opts.MinSamples {
 		report.Errors = append(report.Errors, fmt.Sprintf("insufficient samples: %d < %d", sampleCount, opts.MinSamples))
 	}
-	if durationSec < int64(opts.MinDurationSeconds) {
-		report.Warnings = append(report.Warnings, fmt.Sprintf("profile too short: %ds < %.0fs", durationSec, opts.MinDurationSeconds))
+	if durationSec < opts.MinDurationSeconds {
+		report.Warnings = append(report.Warnings, fmt.Sprintf("profile too short: %.0fs < %.0fs", durationSec, opts.MinDurationSeconds))
 	}
 	if avgStackDepth < opts.MinStackDepth {
 		report.Errors = append(report.Errors, fmt.Sprintf(errors.ErrFlatProfile, opts.MinStackDepth))
@@ -261,22 +280,43 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 		}
 	}
 
-	density := clamp(float64(sampleCount) / float64(opts.TargetSamples))
-	richness := clamp(float64(uniqueStacks) / (opts.RichnessFactor*float64(sampleCount) + 1))
-	coverage := clamp(float64(durationSec) / opts.TargetDuration)
-	var depthOK float64
-	if avgStackDepth >= opts.MinStackDepth {
-		depthOK = 1.0
+	// grade lower bounds: when min==0, that hard gate is off and we use 1.0 as lo.
+	densityLo := float64(opts.MinSamples)
+	if densityLo <= 0 {
+		densityLo = 1
 	}
-	score := opts.WeightDensity*density + opts.WeightRichness*richness + opts.WeightCoverage*coverage + opts.WeightDepth*depthOK
+	richnessLo := float64(opts.MinUniqueStacks)
+	if richnessLo <= 0 {
+		richnessLo = 1
+	}
+
+	density := grade(float64(sampleCount), densityLo, float64(opts.TargetSamples))
+	richness := grade(float64(uniqueStacks), richnessLo, float64(opts.TargetUniqueStacks))
+	depth := grade(avgStackDepth, opts.MinStackDepth, float64(opts.TargetStackDepth))
+
+	var score float64
+	if p.DurationNanos == 0 {
+		fmt.Fprintf(os.Stderr, "profile has no duration; coverage not scored\n")
+		totalW := opts.WeightDensity + opts.WeightRichness + opts.WeightDepth
+		if totalW > 0 {
+			score = (opts.WeightDensity*density + opts.WeightRichness*richness + opts.WeightDepth*depth) / totalW
+		}
+	} else {
+		coverageLo := opts.MinDurationSeconds
+		if coverageLo <= 0 {
+			coverageLo = 1
+		}
+		coverage := grade(durationSec, coverageLo, opts.TargetDuration)
+		score = opts.WeightDensity*density + opts.WeightRichness*richness + opts.WeightCoverage*coverage + opts.WeightDepth*depth
+	}
 
 	report.QualityScore = math.Round(score*1000) / 1000
 	// Every other gate records why it failed; without this a low score
 	// showed as "valid false" with no reason.
-	if score < opts.MinScore {
+	if report.QualityScore < opts.MinScore {
 		report.Errors = append(report.Errors, fmt.Sprintf("quality score too low: %.3f < %.3f", report.QualityScore, opts.MinScore))
 	}
-	report.Valid = score >= opts.MinScore && avgStackDepth >= opts.MinStackDepth && sampleCount >= opts.MinSamples && len(report.Errors) == 0
+	report.Valid = report.QualityScore >= opts.MinScore && avgStackDepth >= opts.MinStackDepth && sampleCount >= opts.MinSamples && len(report.Errors) == 0
 
 	return report, nil
 }

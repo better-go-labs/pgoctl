@@ -2,6 +2,7 @@ package validate_test
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"runtime/pprof"
 	"strings"
@@ -160,8 +161,20 @@ func TestValidate_TableDriven(t *testing.T) {
 			expectValid: false,
 			expectError: false,
 			checkResult: func(t *testing.T, r *profiletypes.QualityReport) {
-				expected := float64(r.Samples) / 50000
-				assert.InDelta(t, expected, r.QualityScore, 0.001, "score should equal density term")
+				// New formula: density = grade(samples, minSamples, targetSamples)
+				// MinSamples=1 → lo=1; DefaultOptions TargetSamples=500000
+				lo, hi := 1.0, 500000.0
+				var expected float64
+				s := float64(r.Samples)
+				if s <= lo {
+					expected = 0
+				} else if s >= hi {
+					expected = 1
+				} else {
+					expected = math.Log(s/lo) / math.Log(hi/lo)
+				}
+				expected = math.Round(expected*1000) / 1000
+				assert.InDelta(t, expected, r.QualityScore, 0.001, "score should equal density term (log-scale)")
 			},
 		},
 	}
@@ -393,7 +406,7 @@ func TestLogScore_SyntheticSamples(t *testing.T) {
 		for i := 0; i < sampleCount; i++ {
 			fn := &profile.Function{ID: uint64(i + 1), Name: fmt.Sprintf("pkg.Func%d", i%500)}
 			loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn}}}
-			loc2 := &profile.Location{ID: uint64(i + sampleCount + 1), Line: []profile.Line{{Function: fn}}}
+			loc2 := &profile.Location{ID: uint64(i) + uint64(sampleCount) + 1, Line: []profile.Line{{Function: fn}}} //nolint:gosec
 			p.Function = append(p.Function, fn)
 			p.Location = append(p.Location, loc, loc2)
 			p.Sample = append(p.Sample, &profile.Sample{
