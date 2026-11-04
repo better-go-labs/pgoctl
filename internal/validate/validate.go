@@ -129,7 +129,7 @@ type Options struct {
 	RichnessFactor     float64
 	MinUniqueStacks    int64
 	TargetUniqueStacks int64
-	TargetStackDepth   int64
+	TargetStackDepth   float64
 	PackageShareGates  []PackageShareGate
 }
 
@@ -146,7 +146,6 @@ func DefaultOptions() Options {
 		WeightRichness:     0.30,
 		WeightCoverage:     0.20,
 		WeightDepth:        0.10,
-		RichnessFactor:     0.02,
 		MinUniqueStacks:    100,
 		TargetUniqueStacks: 10000,
 		TargetStackDepth:   20,
@@ -157,6 +156,9 @@ func DefaultOptions() Options {
 // given lo as the lower bound. Returns 0 when x<=lo, 1 when x>=hi.
 // When lo<=0 the caller should substitute 1.0 as lo before calling.
 func grade(x, lo, hi float64) float64 {
+	if x <= 0 || lo <= 0 {
+		return 0
+	}
 	if x <= lo {
 		return 0
 	}
@@ -175,9 +177,6 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 	}
 	if opts.TargetDuration == 0 {
 		opts.TargetDuration = targetDurationSeconds
-	}
-	if opts.MinStackDepth == 0 {
-		opts.MinStackDepth = 2.0
 	}
 	if opts.TargetUniqueStacks == 0 {
 		opts.TargetUniqueStacks = 10000
@@ -289,10 +288,14 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 	if richnessLo <= 0 {
 		richnessLo = 1
 	}
+	depthLo := opts.MinStackDepth
+	if depthLo <= 0 {
+		depthLo = 1
+	}
 
 	density := grade(float64(sampleCount), densityLo, float64(opts.TargetSamples))
 	richness := grade(float64(uniqueStacks), richnessLo, float64(opts.TargetUniqueStacks))
-	depth := grade(avgStackDepth, opts.MinStackDepth, float64(opts.TargetStackDepth))
+	depth := grade(avgStackDepth, depthLo, opts.TargetStackDepth)
 
 	var score float64
 	if p.DurationNanos == 0 {
