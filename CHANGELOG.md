@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `validate`: quality score components now use a log scale — `grade(x, lo, hi) = ln(x/lo) / ln(hi/lo)` — so smaller gains at the top of the range don't dominate; existing scores will be lower (#61)
+- `validate`: quality score components now use a log scale (`grade(x, lo, hi) = ln(x/lo) / ln(hi/lo)`): early gains count more, diminishing returns at the top; existing scores will be lower (#61)
 - `validate`: default `--target-samples` raised from 50 000 to 500 000; default `--target-duration` raised from 30 s to 600 s; default `--min-score` lowered from 0.6 to 0 (#61)
 - `validate`: `--richness-factor` is deprecated and ignored; pass it to get a deprecation warning; it will be removed in the next release (#61)
 - `validate`: profiles with no duration data (`DurationNanos==0`) exclude coverage from scoring and renormalise the remaining weights to [0, 1] (#61)
