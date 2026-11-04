@@ -483,6 +483,49 @@ func TestLogScore_NoDuration(t *testing.T) {
 	assert.LessOrEqual(t, report.QualityScore, 1.0)
 }
 
+// TestNoDuration_NoProfileTooShortError verifies that when DurationNanos==0 and
+// MinDurationSeconds > 0, the "profile too short" error is NOT returned.
+// RED: currently the check at validate.go:258 fires even when duration is missing.
+func TestNoDuration_NoProfileTooShortError(t *testing.T) {
+	p := &profile.Profile{
+		SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
+		DurationNanos: 0,
+	}
+	fn := &profile.Function{ID: 1, Name: "pkg.FuncPTS"}
+	for i := 0; i < 5; i++ {
+		loc := &profile.Location{ID: uint64(i + 1), Line: []profile.Line{{Function: fn}}}
+		p.Location = append(p.Location, loc)
+		p.Sample = append(p.Sample, &profile.Sample{
+			Location: []*profile.Location{loc},
+			Value:    []int64{100},
+		})
+	}
+	p.Function = []*profile.Function{fn}
+	path := writeTmpProfileV(t, p)
+
+	opts := validate.Options{
+		MinSamples:         1,
+		MinDurationSeconds: 10, // non-zero — should be skipped when DurationNanos==0
+		MinScore:           0,
+		MinStackDepth:      0,
+		MinUniqueStacks:    0,
+		TargetUniqueStacks: 10000,
+		TargetStackDepth:   20,
+		WeightDensity:      0.40,
+		WeightRichness:     0.30,
+		WeightCoverage:     0.20,
+		WeightDepth:        0.10,
+	}
+
+	report, err := validate.ValidateFile(path, opts)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+	for _, w := range report.Warnings {
+		assert.NotContains(t, w, "profile too short",
+			"profile too short must not appear when DurationNanos==0")
+	}
+}
+
 // TestNoDuration_NoPollutionToReport verifies that a profile with DurationNanos==0
 // emits no message to stderr and that its warning appears in report.Warnings.
 // RED: currently the warning goes to os.Stderr, not report.Warnings.
