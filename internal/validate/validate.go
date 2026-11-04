@@ -254,7 +254,7 @@ func ValidateFile(path string, opts Options) (*profiletypes.QualityReport, error
 	if sampleCount < opts.MinSamples {
 		report.Errors = append(report.Errors, fmt.Sprintf("insufficient samples: %d < %d", sampleCount, opts.MinSamples))
 	}
-	if durationSec < opts.MinDurationSeconds {
+	if p.DurationNanos != 0 && durationSec < opts.MinDurationSeconds {
 		report.Warnings = append(report.Warnings, fmt.Sprintf("profile too short: %.0fs < %.0fs", durationSec, opts.MinDurationSeconds))
 	}
 	if avgStackDepth < opts.MinStackDepth {
