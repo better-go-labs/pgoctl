@@ -2,13 +2,16 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
 	"testing"
 	"time"
 
+	profiletypes "github.com/Better-Go-Labs/pgoctl/internal/profile"
 	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,6 +75,7 @@ func TestValidate_GateFailViaEnv(t *testing.T) {
 	p := generateProfile(t)
 	_, _, err := executeCmd(t,
 		"validate",
+		"--target-samples=2000000",
 		"--min-duration=0", "--min-score=0", "--min-stack-depth=0",
 		p,
 	)
@@ -159,7 +163,8 @@ func TestValidate_WarningRow(t *testing.T) {
 	p := generateProfile(t)
 	_, _, err := executeCmd(t,
 		"validate",
-		"--min-samples=1", "--min-duration=9999", "--min-score=0", "--min-stack-depth=0",
+		"--min-samples=1", "--min-duration=9999", "--target-duration=20000",
+		"--min-score=0", "--min-stack-depth=0",
 		p,
 	)
 	assert.NoError(t, err)
@@ -542,6 +547,70 @@ func TestValidate_LogScore_NegativeDuration(t *testing.T) {
 	assert.Equal(t, 2, ee.code)
 }
 
+// TestValidate_Bounds_AllPairs exercises the bounds check for every
+// (min, target) pair, including a value supplied via the environment, each of
+// which must exit 2.
+func TestValidate_Bounds_AllPairs(t *testing.T) {
+	p := filepath.Join("..", "..", "testdata", "cpu_happy.pprof")
+	tests := []struct {
+		name string
+		env  map[string]string
+		args []string
+	}{
+		{name: "samples", args: []string{"--min-samples=10000", "--target-samples=5000"}},
+		{name: "unique-stacks", args: []string{"--min-unique-stacks=100", "--target-unique-stacks=50"}},
+		{name: "duration", args: []string{"--min-duration=10", "--target-duration=5"}},
+		{name: "stack-depth", args: []string{"--min-stack-depth=2", "--target-stack-depth=1"}},
+		{name: "stack-depth-zero", args: []string{"--target-stack-depth=0"}},
+		{name: "env-target-samples", env: map[string]string{"PGOCTL_TARGET_SAMPLES": "5000"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			args := append([]string{"validate"}, tc.args...)
+			args = append(args, p)
+			var err error
+			out := captureStderr(t, func() {
+				_, _, err = executeCmd(t, args...)
+			})
+			var ee *exitError
+			require.ErrorAs(t, err, &ee)
+			assert.Equal(t, 2, ee.code)
+			assert.NotEmpty(t, out, "bounds failure must print a message")
+		})
+	}
+}
+
+// TestValidate_FractionalTargetStackDepth confirms target-stack-depth accepts a
+// fractional value now that it is a float64.
+func TestValidate_FractionalTargetStackDepth(t *testing.T) {
+	p := filepath.Join("..", "..", "testdata", "cpu_happy.pprof")
+	_, _, err := executeCmd(t,
+		"validate",
+		"--min-samples=1", "--min-duration=0", "--min-score=0",
+		"--min-stack-depth=0", "--target-stack-depth=15.5",
+		p,
+	)
+	assert.NoError(t, err)
+}
+
+// TestValidate_MinStackDepthNegative ensures a negative min-stack-depth exits 2
+// with a message rather than exiting 1 with empty output (grade would have
+// produced NaN and failed JSON encoding).
+func TestValidate_MinStackDepthNegative(t *testing.T) {
+	p := filepath.Join("..", "..", "testdata", "cpu_happy.pprof")
+	var err error
+	out := captureStderr(t, func() {
+		_, _, err = executeCmd(t, "--json", "validate", "--min-stack-depth=-1", p)
+	})
+	var ee *exitError
+	require.ErrorAs(t, err, &ee)
+	assert.Equal(t, 2, ee.code)
+	assert.Contains(t, out, "min-stack-depth")
+}
+
 // TestValidate_LogScore_RichnessFactor_Warning checks the deprecation warning is printed.
 func TestValidate_LogScore_RichnessFactor_Warning(t *testing.T) {
 	p := generateProfile(t)
@@ -555,14 +624,46 @@ func TestValidate_LogScore_RichnessFactor_Warning(t *testing.T) {
 	assert.Contains(t, stderr, "deprecated")
 }
 
-// TestValidate_ConfigEnv_TargetUniqueStacks covers PGOCTL_TARGET_UNIQUE_STACKS env var.
+// captureStdout redirects os.Stdout for the duration of fn and returns what
+// fn wrote. printQualityReport writes to os.Stdout directly, so this is how
+// tests read the JSON report.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	fn()
+	require.NoError(t, w.Close())
+	os.Stdout = orig
+	data, readErr := io.ReadAll(r)
+	require.NoError(t, readErr)
+	return string(data)
+}
+
+// TestValidate_ConfigEnv_TargetUniqueStacks covers PGOCTL_TARGET_UNIQUE_STACKS:
+// lowering the target below the default must raise the richness grade and so
+// change the overall score, proving the env var reaches the scorer.
 func TestValidate_ConfigEnv_TargetUniqueStacks(t *testing.T) {
-	t.Setenv("PGOCTL_TARGET_UNIQUE_STACKS", "10000")
-	p := generateProfile(t)
-	_, _, err := executeCmd(t,
-		"validate",
-		"--min-samples=1", "--min-duration=0", "--min-score=0", "--min-stack-depth=0",
-		p,
-	)
-	assert.NoError(t, err)
+	p := filepath.Join("..", "..", "testdata", "cpu_happy.pprof")
+	score := func() float64 {
+		var rep profiletypes.QualityReport
+		out := captureStdout(t, func() {
+			_, _, err := executeCmd(t,
+				"--json", "validate",
+				"--min-samples=1", "--min-duration=0", "--min-score=0",
+				"--min-stack-depth=0", "--min-unique-stacks=1",
+				p,
+			)
+			require.NoError(t, err)
+		})
+		require.NoError(t, json.Unmarshal([]byte(out), &rep))
+		return rep.QualityScore
+	}
+
+	baseline := score()
+	t.Setenv("PGOCTL_TARGET_UNIQUE_STACKS", "1000")
+	lowered := score()
+	assert.NotEqual(t, baseline, lowered,
+		"lowering target-unique-stacks via env must change the score")
 }

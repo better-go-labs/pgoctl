@@ -264,6 +264,25 @@ func TestValidateFile_DefaultMinStackDepth(t *testing.T) {
 	require.NotNil(t, report)
 }
 
+// TestValidateFile_NegativeLowerBoundNoNaN verifies grade does not emit NaN
+// when a lower bound is <= 0; the score must stay finite and in [0,1].
+func TestValidateFile_NegativeLowerBoundNoNaN(t *testing.T) {
+	data := generateCPUProfile(t, 200)
+	f, err := os.CreateTemp(t.TempDir(), "cpu*.pprof")
+	require.NoError(t, err)
+	_, err = f.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	opts := validate.Options{MinSamples: 1, MinScore: 0, MinStackDepth: -1}
+	report, err := validate.ValidateFile(f.Name(), opts)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+	assert.False(t, math.IsNaN(report.QualityScore), "score must not be NaN")
+	assert.GreaterOrEqual(t, report.QualityScore, 0.0)
+	assert.LessOrEqual(t, report.QualityScore, 1.0)
+}
+
 // TestValidateFile_InsufficientSamples verifies sampleCount < MinSamples generates
 // the "insufficient samples" error entry.
 func TestValidateFile_InsufficientSamples(t *testing.T) {
@@ -478,14 +497,12 @@ func TestLogScore_NoDuration(t *testing.T) {
 	// Score must be > 0 (not penalised by missing coverage)
 	assert.Greater(t, report.QualityScore, 0.0, "no-duration profile should have positive score")
 	// Sum of remaining weights is 0.80; score must not be capped at 0.80
-	// (it should be normalised to 1.0 scale). Check it's above 0.80 when
-	// density is saturated.
+	// (it should be normalised to the 1.0 scale), so it stays within [0,1].
 	assert.LessOrEqual(t, report.QualityScore, 1.0)
 }
 
 // TestNoDuration_NoProfileTooShortError verifies that when DurationNanos==0 and
 // MinDurationSeconds > 0, the "profile too short" error is NOT returned.
-// RED: currently the check at validate.go:258 fires even when duration is missing.
 func TestNoDuration_NoProfileTooShortError(t *testing.T) {
 	p := &profile.Profile{
 		SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
@@ -505,7 +522,7 @@ func TestNoDuration_NoProfileTooShortError(t *testing.T) {
 
 	opts := validate.Options{
 		MinSamples:         1,
-		MinDurationSeconds: 10, // non-zero — should be skipped when DurationNanos==0
+		MinDurationSeconds: 10, // non-zero, so the gate must be skipped when DurationNanos == 0
 		MinScore:           0,
 		MinStackDepth:      0,
 		MinUniqueStacks:    0,
@@ -528,7 +545,6 @@ func TestNoDuration_NoProfileTooShortError(t *testing.T) {
 
 // TestNoDuration_NoPollutionToReport verifies that a profile with DurationNanos==0
 // emits no message to stderr and that its warning appears in report.Warnings.
-// RED: currently the warning goes to os.Stderr, not report.Warnings.
 func TestNoDuration_NoPollutionToReport(t *testing.T) {
 	p := &profile.Profile{
 		SampleType:    []*profile.ValueType{{Type: "samples", Unit: "count"}},
