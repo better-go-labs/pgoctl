@@ -134,7 +134,7 @@ func newValidateCmd() *cobra.Command {
 						case "target-unique-stacks":
 							targetUniqueStacks = n
 						}
-					default: // float64 flags (includes target-stack-depth)
+					default: // float64 flags
 						f, err := strconv.ParseFloat(val, 64)
 						if err != nil {
 							return err
@@ -148,6 +148,8 @@ func newValidateCmd() *cobra.Command {
 							targetDuration = f
 						case "min-stack-depth":
 							minStackDepth = f
+						case "target-stack-depth":
+							targetStackDepth = f
 						case "weight-density":
 							weightDensity = f
 						case "weight-richness":
@@ -158,8 +160,6 @@ func newValidateCmd() *cobra.Command {
 							weightDepth = f
 						case "richness-factor":
 							richnessFactor = f
-						case "target-stack-depth":
-							targetStackDepth = f
 						}
 					}
 					return nil
@@ -174,33 +174,27 @@ func newValidateCmd() *cobra.Command {
 				return &exitError{code: 2}
 			}
 
-			// Validate bounds: min < 0 is always invalid; target <= min is
-			// invalid regardless of whether the value came from a flag or env.
+			// Validate bounds on the fully resolved values (CLI + env + config).
+			// Each pair fails when its min is negative, or its target is not
+			// above max(min, 1) (the effective lower bound used by grading).
 			var boundsErrs []string
-			if minSamples < 0 {
-				boundsErrs = append(boundsErrs, "--min-samples must be >= 0")
+			checkPair := func(minName string, minVal float64, targetName string, targetVal float64) {
+				if minVal < 0 {
+					boundsErrs = append(boundsErrs, fmt.Sprintf("--%s must be >= 0", minName))
+				}
+				lower := minVal
+				if lower < 1 {
+					lower = 1
+				}
+				if targetVal <= lower {
+					boundsErrs = append(boundsErrs, fmt.Sprintf(
+						"--%s (%g) must be > max(--%s, 1) (%g)", targetName, targetVal, minName, lower))
+				}
 			}
-			if minDuration < 0 {
-				boundsErrs = append(boundsErrs, "--min-duration must be >= 0")
-			}
-			if minStackDepth < 0 {
-				boundsErrs = append(boundsErrs, "--min-stack-depth must be >= 0")
-			}
-			if cmd.Flags().Changed("target-stack-depth") && targetStackDepth <= 0 {
-				boundsErrs = append(boundsErrs, "--target-stack-depth must be > 0")
-			}
-			if targetSamples > 0 && minSamples > 0 && targetSamples <= minSamples {
-				boundsErrs = append(boundsErrs, fmt.Sprintf("--target-samples (%d) must be > --min-samples (%d)", targetSamples, minSamples))
-			}
-			if targetDuration > 0 && minDuration > 0 && targetDuration <= minDuration {
-				boundsErrs = append(boundsErrs, fmt.Sprintf("--target-duration (%.0f) must be > --min-duration (%.0f)", targetDuration, minDuration))
-			}
-			if targetUniqueStacks > 0 && minUniqueStacks > 0 && targetUniqueStacks <= minUniqueStacks {
-				boundsErrs = append(boundsErrs, fmt.Sprintf("--target-unique-stacks (%d) must be > --min-unique-stacks (%d)", targetUniqueStacks, minUniqueStacks))
-			}
-			if targetStackDepth > 0 && minStackDepth > 0 && targetStackDepth <= minStackDepth {
-				boundsErrs = append(boundsErrs, fmt.Sprintf("--target-stack-depth (%.0f) must be > --min-stack-depth (%.0f)", targetStackDepth, minStackDepth))
-			}
+			checkPair("min-samples", float64(minSamples), "target-samples", float64(targetSamples))
+			checkPair("min-unique-stacks", float64(minUniqueStacks), "target-unique-stacks", float64(targetUniqueStacks))
+			checkPair("min-duration", minDuration, "target-duration", targetDuration)
+			checkPair("min-stack-depth", minStackDepth, "target-stack-depth", targetStackDepth)
 			if len(boundsErrs) > 0 {
 				for _, e := range boundsErrs {
 					fmt.Fprintf(os.Stderr, "error: %s\n", e)
@@ -208,7 +202,8 @@ func newValidateCmd() *cobra.Command {
 				return &exitError{code: 2}
 			}
 
-			if cmd.Flags().Changed("richness-factor") || os.Getenv("PGOCTL_RICHNESS_FACTOR") != "" {
+			_, richnessFromConfig := cfg["richness-factor"]
+			if cmd.Flags().Changed("richness-factor") || richnessFromConfig {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: --richness-factor is deprecated and ignored; it will be removed in the next release\n")
 			}
 
@@ -330,7 +325,7 @@ func newMergeCmd() *cobra.Command {
 				return &exitError{2, err}
 			}
 			if out != "-" {
-				fmt.Fprintf(os.Stderr, "merged %d profile(s) -> %s (%d bytes)\n",
+				fmt.Fprintf(os.Stderr, "merged %d profile(s) → %s (%d bytes)\n",
 					len(args), out, buf.Len())
 			}
 			return nil
@@ -358,7 +353,7 @@ func newCompareCmd() *cobra.Command {
 		Long: `Compare two pprof files by CPU function attribution.
 
 delta_pct (per function) = (cand - base) / base * 100   [relative %% change]
-  base = 0 -> delta_pct = 0  (new function in candidate, no reference)
+  base = 0 → delta_pct = 0  (new function in candidate, no reference)
   negative = candidate uses less CPU (improvement)
 
 SummaryCPUDelta = weighted average of relative delta_pct over functions
@@ -367,9 +362,9 @@ functions are excluded because percentages sum to 100 on both sides, so a
 baseline-share-weighted sum of percentage-point diffs cancels to ~0.
 
 Verdict:
-  promote  - SummaryCPUDelta >= --min-improvement
-  rollback - SummaryCPUDelta <= -(--min-regression)  (independent threshold)
-  neutral  - within both thresholds
+  promote  — SummaryCPUDelta >= --min-improvement
+  rollback — SummaryCPUDelta <= -(--min-regression)  (independent threshold)
+  neutral  — within both thresholds
 
 --min-cpu-percent drops functions whose CPU share is below the given %% in
 BOTH profiles before comparing (default 1; 0 disables filtering). The top

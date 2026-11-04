@@ -69,7 +69,7 @@ func TestValidate_JSONFlag(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestValidate_GateFailViaEnv sets PGOCTL_MIN_SAMPLES=999999 to force gate failure -> exitError{1}.
+// TestValidate_GateFailViaEnv sets PGOCTL_MIN_SAMPLES=999999 to force gate failure → exitError{1}.
 func TestValidate_GateFailViaEnv(t *testing.T) {
 	t.Setenv("PGOCTL_MIN_SAMPLES", "999999")
 	p := generateProfile(t)
@@ -109,11 +109,11 @@ func TestMerge_MalformedInput(t *testing.T) {
 	assert.Equal(t, 2, ee.code)
 }
 
-// TestCompare_SameProfile compares a profile to itself -- expects nil error (neutral verdict).
+// TestCompare_SameProfile compares a profile to itself — expects nil error (neutral verdict).
 func TestCompare_SameProfile(t *testing.T) {
 	p := generateProfile(t)
 	_, _, err := executeCmd(t, "compare", p, p)
-	// Comparing a profile to itself gives neutral -> no exitError
+	// Comparing a profile to itself gives neutral → no exitError
 	assert.NoError(t, err)
 }
 
@@ -437,9 +437,9 @@ func makeTimePackageSyntheticProfile(t *testing.T) string {
 		Function:   []*profile.Function{timeNow, mainFn, callerFn},
 		Location:   []*profile.Location{locTime, locMain, locCaller},
 		Sample: []*profile.Sample{
-			// time.Now called from main.run -- depth 2, leaf = time package
+			// time.Now called from main.run — depth 2, leaf = time package
 			{Location: []*profile.Location{locTime, locCaller}, Value: []int64{50_000_000}},
-			// main.main called from main.run -- depth 2, leaf = main package
+			// main.main called from main.run — depth 2, leaf = main package
 			{Location: []*profile.Location{locMain, locCaller}, Value: []int64{50_000_000}},
 		},
 	}
@@ -636,22 +636,6 @@ func captureStdout(t *testing.T, fn func()) string {
 	fn()
 	require.NoError(t, w.Close())
 	os.Stdout = orig
-	data, readErr := io.ReadAll(r)
-	require.NoError(t, readErr)
-	return string(data)
-}
-
-// captureStderr redirects os.Stderr for the duration of fn and returns what
-// fn wrote. Bounds-error messages are written directly to os.Stderr.
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	orig := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-	fn()
-	require.NoError(t, w.Close())
-	os.Stderr = orig
 	data, readErr := io.ReadAll(r)
 	require.NoError(t, readErr)
 	return string(data)
