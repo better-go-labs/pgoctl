@@ -43,18 +43,18 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 	if !ok {
 		return &ExcludeResult{Skipped: true}, nil
 	}
-	tm, err := readManifest(ctx, s, target)
+	targetManifest, err := readManifest(ctx, s, target)
 	if err != nil {
 		return nil, fmt.Errorf("reading manifest of %s: %w", req.Key.Tag(req.Date, target.Seq), err)
 	}
-	if tm.Window.LookbackDays < 1 || tm.Window.MaxProfiles < 1 {
-		return nil, fmt.Errorf("window of %s needs lookbackDays >= 1 and maxProfiles >= 1, got %d and %d: %w", req.Key.Tag(req.Date, target.Seq), tm.Window.LookbackDays, tm.Window.MaxProfiles, ErrInvalidInput)
+	if targetManifest.Window.LookbackDays < 1 || targetManifest.Window.MaxProfiles < 1 {
+		return nil, fmt.Errorf("window of %s needs lookbackDays >= 1 and maxProfiles >= 1, got %d and %d: %w", req.Key.Tag(req.Date, target.Seq), targetManifest.Window.LookbackDays, targetManifest.Window.MaxProfiles, ErrInvalidInput)
 	}
-	ri := findRun(tm, req.RunID)
-	if ri < 0 {
+	runIndex := findRun(targetManifest, req.RunID)
+	if runIndex < 0 {
 		return nil, fmt.Errorf("run %s not in %s: %w", req.RunID, req.Key.Tag(req.Date, target.Seq), ErrNotFound)
 	}
-	if tm.Runs[ri].Excluded {
+	if targetManifest.Runs[runIndex].Excluded {
 		return &ExcludeResult{AlreadyExcluded: true}, nil
 	}
 
@@ -75,7 +75,7 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 	}
 	sort.Slice(order, func(i, j int) bool { return order[i].Before(order[j]) })
 
-	lookback, maxProfiles := tm.Window.LookbackDays, tm.Window.MaxProfiles
+	lookback, maxProfiles := targetManifest.Window.LookbackDays, targetManifest.Window.MaxProfiles
 	res := &ExcludeResult{}
 	for _, d := range order {
 		cur, err := s.ListDays(ctx, req.Key)
@@ -121,17 +121,17 @@ func Exclude(ctx context.Context, s Store, req ExcludeRequest) (*ExcludeResult, 
 			Date: req.Date.String(), Run: req.RunID, Reason: req.Reason, By: req.Actor, At: req.Now,
 		})
 
-		lb, mp := m.Window.LookbackDays, m.Window.MaxProfiles
-		def, wd, err := buildDefault(ctx, s, cur, d, own, runCapturedAt(m, d), lb, mp)
+		dayLookback, dayMaxProfiles := m.Window.LookbackDays, m.Window.MaxProfiles
+		defaultProfile, windowDates, err := buildDefault(ctx, s, cur, d, own, runCapturedAt(m, d), dayLookback, dayMaxProfiles)
 		if err != nil {
 			return nil, err
 		}
-		m.Window = Window{LookbackDays: lb, MaxProfiles: mp, Dates: datesToStrings(wd)}
+		m.Window = Window{LookbackDays: dayLookback, MaxProfiles: dayMaxProfiles, Dates: datesToStrings(windowDates)}
 
 		if err := checkUnchanged(ctx, s, req.Key, d, want); err != nil {
 			return nil, err
 		}
-		if err := writeSnapshot(ctx, s, day, m, own, def); err != nil {
+		if err := writeSnapshot(ctx, s, day, m, own, defaultProfile); err != nil {
 			return nil, err
 		}
 		if day.Draft {
