@@ -134,3 +134,55 @@ func TestResolver_LongestOfTwoDottedCandidates(t *testing.T) {
 		t.Errorf("PackageOf = %q, want example.com/x/go.uuid (longest known prefix)", got)
 	}
 }
+
+func TestCPUSampleIndex(t *testing.T) {
+	tests := []struct {
+		name    string
+		types   []*profile.ValueType
+		wantIdx int
+		wantOk  bool
+	}{
+		{
+			name:    "prefers cpu/nanoseconds",
+			types:   []*profile.ValueType{{Type: "samples", Unit: "count"}, {Type: "cpu", Unit: "nanoseconds"}},
+			wantIdx: 1,
+			wantOk:  true,
+		},
+		{
+			name:    "falls back to samples/count when no cpu/nanoseconds",
+			types:   []*profile.ValueType{{Type: "samples", Unit: "count"}},
+			wantIdx: 0,
+			wantOk:  true,
+		},
+		{
+			name:    "returns false when neither type present",
+			types:   []*profile.ValueType{{Type: "wall", Unit: "nanoseconds"}},
+			wantIdx: -1,
+			wantOk:  false,
+		},
+		{
+			name:    "cpu/nanoseconds wins even when it appears before samples/count",
+			types:   []*profile.ValueType{{Type: "cpu", Unit: "nanoseconds"}, {Type: "samples", Unit: "count"}},
+			wantIdx: 0,
+			wantOk:  true,
+		},
+		{
+			name:    "empty SampleType returns false",
+			types:   nil,
+			wantIdx: -1,
+			wantOk:  false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &profile.Profile{SampleType: tt.types}
+			idx, ok := CPUSampleIndex(p)
+			if ok != tt.wantOk {
+				t.Errorf("CPUSampleIndex() ok = %v, want %v", ok, tt.wantOk)
+			}
+			if idx != tt.wantIdx {
+				t.Errorf("CPUSampleIndex() idx = %d, want %d", idx, tt.wantIdx)
+			}
+		})
+	}
+}

@@ -62,7 +62,7 @@ func AnalyzeFile(path string, topN int) (*Report, error) {
 }
 
 func analyze(path string, p *profile.Profile, topN int) *Report {
-	idx, ok := cpuSampleIndex(p)
+	idx, ok := pprofutil.CPUSampleIndex(p)
 	total := 0.0
 	counts := make(map[string]float64)
 
@@ -171,25 +171,4 @@ func pgoVerdict(p *profile.Profile, _ int64, uniqueFunctions int) (Verdict, stri
 			"%d samples across %d functions; profile is a good PGO baseline",
 			samples, uniqueFunctions)
 	}
-}
-
-// cpuSampleIndex returns the index of the CPU value in s.Value (cpu/nanoseconds
-// preferred, samples/count as fallback).
-func cpuSampleIndex(p *profile.Profile) (int, bool) {
-	preferred, fallback := -1, -1
-	for i, st := range p.SampleType {
-		switch {
-		case st.Type == "cpu" && st.Unit == "nanoseconds":
-			preferred = i
-		case st.Type == "samples" && st.Unit == "count":
-			fallback = i
-		}
-	}
-	if preferred >= 0 {
-		return preferred, true
-	}
-	if fallback >= 0 {
-		return fallback, true
-	}
-	return -1, false
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Better-Go-Labs/pgoctl/internal/pprofutil"
 	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,8 +205,8 @@ func TestPprofDataVsExplain(t *testing.T) {
 		t.Logf("  id=%d  name=%s", fn.ID, fn.Name)
 	}
 
-	// Manually compute flat% from the raw pprof samples — this is the ground truth.
-	idx, ok := cpuSampleIndex(parsed)
+	// Manually compute flat% from the raw pprof samples -- this is the ground truth.
+	idx, ok := pprofutil.CPUSampleIndex(parsed)
 	require.True(t, ok, "pprof profile must contain a cpu or samples value column")
 
 	totalCPU := 0.0
@@ -277,14 +278,14 @@ func TestAnalyzeFile_ParseError(t *testing.T) {
 }
 
 // TestCPUSampleIndex_FallbackPath covers the samples/count fallback branch
-// (fallback=i and return fallback,true) in cpuSampleIndex.
+// (fallback=i and return fallback,true) in pprofutil.CPUSampleIndex.
 func TestCPUSampleIndex_FallbackPath(t *testing.T) {
 	p := &profile.Profile{
 		SampleType: []*profile.ValueType{
 			{Type: "samples", Unit: "count"},
 		},
 	}
-	idx, ok := cpuSampleIndex(p)
+	idx, ok := pprofutil.CPUSampleIndex(p)
 	assert.True(t, ok)
 	assert.Equal(t, 0, idx)
 }
@@ -297,7 +298,7 @@ func TestCPUSampleIndex_NotFound(t *testing.T) {
 			{Type: "alloc_space", Unit: "bytes"},
 		},
 	}
-	idx, ok := cpuSampleIndex(p)
+	idx, ok := pprofutil.CPUSampleIndex(p)
 	assert.False(t, ok)
 	assert.Equal(t, -1, idx)
 }
